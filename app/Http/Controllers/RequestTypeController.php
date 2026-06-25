@@ -1,0 +1,127 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\RequestType;
+use Illuminate\Http\Request;
+
+class RequestTypeController extends Controller
+{
+    /* ── Helper redirect avec tab ──────────────────────── */
+    private function backToTab(string $tab = null): \Illuminate\Http\RedirectResponse
+    {
+        $tab = $tab ?? request('tab', 'depot');
+        return redirect()->route('admin.request-types.index', ['tab' => $tab]);
+    }
+
+    /* ── Index ─────────────────────────────────────────── */
+
+    public function index()
+    {
+        $types = RequestType::orderBy('category')->orderBy('order')->orderBy('id')
+            ->get()->groupBy('category');
+        $categories = RequestType::$categories;
+
+        return view('admin.request_types.index', compact('types', 'categories'));
+    }
+
+    /* ── Store ─────────────────────────────────────────── */
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'label' => 'required|string|max:200',
+            'category' => 'required|in:depot,attestation,diplome,releve,duplicat',
+            'type_etudiant' => 'required|in:nouveau,ancien,both',
+            'description' => 'nullable|string|max:500',
+            'is_required' => 'nullable|boolean',
+            'has_stamp' => 'nullable|boolean',
+            'order' => 'nullable|integer|min:0',
+        ]);
+
+        if ($data['category'] !== 'depot') {
+            $data['type_etudiant'] = 'ancien';
+        }
+
+        RequestType::create([
+            'label' => $data['label'],
+            'category' => $data['category'],
+            'type_etudiant' => $data['type_etudiant'],
+            'description' => $data['description'] ?? null,
+            'is_required' => $request->boolean('is_required', true),
+            'has_stamp' => $request->boolean('has_stamp', false),
+            'is_active' => true,
+            'order' => $data['order'] ?? 99,
+        ]);
+
+        return $this->backToTab($data['category'])
+            ->with('success', "« {$data['label']} » ajouté avec succès.");
+    }
+
+    /* ── Update ─────────────────────────────────────────── */
+
+    public function update(Request $request, RequestType $requestType)
+    {
+        $data = $request->validate([
+            'label' => 'required|string|max:200',
+            'category' => 'required|in:depot,attestation,diplome,releve,duplicat',
+            'type_etudiant' => 'required|in:nouveau,ancien,both',
+            'description' => 'nullable|string|max:500',
+            'is_required' => 'nullable|boolean',
+            'has_stamp' => 'nullable|boolean',
+            'is_active' => 'nullable|boolean',
+            'order' => 'nullable|integer|min:0',
+        ]);
+
+        if ($data['category'] !== 'depot') {
+            $data['type_etudiant'] = 'ancien';
+        }
+
+        $requestType->update([
+            'label' => $data['label'],
+            'category' => $data['category'],
+            'type_etudiant' => $data['type_etudiant'],
+            'description' => $data['description'] ?? null,
+            'is_required' => $request->boolean('is_required', true),
+            'has_stamp' => $request->boolean('has_stamp', false),
+            'is_active' => $request->boolean('is_active', true),
+            'order' => $data['order'] ?? $requestType->order,
+        ]);
+
+        return $this->backToTab($requestType->category)
+            ->with('success', "« {$requestType->label} » mis à jour.");
+    }
+
+    /* ── Destroy ────────────────────────────────────────── */
+
+    public function destroy(RequestType $requestType)
+    {
+        $cat = $requestType->category;
+
+        if ($requestType->requestFiles()->count() > 0) {
+            return $this->backToTab($cat)->withErrors(
+                "Impossible de supprimer « {$requestType->label} » : " .
+                $requestType->requestFiles()->count() . " fichier(s) y sont associés. Désactivez-le plutôt."
+            );
+        }
+
+        $label = $requestType->label;
+        $requestType->delete();
+
+        return $this->backToTab($cat)->with('success', "« {$label} » supprimé.");
+    }
+
+    /* ── Toggle actif ───────────────────────────────────── */
+
+    public function toggleActive(RequestType $requestType)
+    {
+        $requestType->update(['is_active' => !$requestType->is_active]);
+        $cat = $requestType->category;
+
+        $msg = $requestType->is_active
+            ? "« {$requestType->label} » activé."
+            : "« {$requestType->label} » désactivé.";
+
+        return $this->backToTab($cat)->with('success', $msg);
+    }
+}
