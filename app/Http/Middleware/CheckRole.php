@@ -15,7 +15,7 @@ class CheckRole
     {
         // Vérifier que l'utilisateur est authentifié
         if (!auth()->check()) {
-            return redirect()->route('verify')->withErrors(['error' => 'Vous devez être connecté.']);
+            return redirect()->route('login')->withErrors(['error' => 'Vous devez être connecté.']);
         }
 
         // Vérifier le rôle

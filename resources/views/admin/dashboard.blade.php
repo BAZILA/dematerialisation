@@ -155,11 +155,11 @@
         const catData = @json($chartData['by_category']);
         const statusData = @json($chartData['by_status']);
         const catBg = {
-            depot: 'rgba(59,130,246,.7)',
-            attestation: 'rgba(16,185,129,.7)',
-            diplome: 'rgba(245,158,11,.7)',
-            releve: 'rgba(14,165,233,.7)',
-            duplicat: 'rgba(239,68,68,.7)'
+            depot: 'rgba(27,58,107,.85)',
+            attestation: 'rgba(21,136,90,.82)',
+            diplome: 'rgba(182,121,28,.85)',
+            releve: 'rgba(37,99,235,.78)',
+            duplicat: 'rgba(210,59,78,.82)'
         };
 
         new Chart(document.getElementById('chartCat'), {
@@ -186,10 +186,10 @@
                         beginAtZero: true,
                         ticks: {
                             stepSize: 1,
-                            color: '#5C657A'
+                            color: '#51607A'
                         },
                         grid: {
-                            color: 'rgba(255,255,255,.04)'
+                            color: 'rgba(16,32,64,.07)'
                         }
                     },
                     x: {
@@ -197,7 +197,7 @@
                             display: false
                         },
                         ticks: {
-                            color: '#5C657A'
+                            color: '#51607A'
                         }
                     }
                 }
@@ -210,8 +210,9 @@
                 labels: statusData.map(d => d.label),
                 datasets: [{
                     data: statusData.map(d => d.count),
-                    backgroundColor: ['#5C657A', '#F59E0B', '#3B82F6', '#10C97A', '#F43F5E'],
-                    borderWidth: 0
+                    backgroundColor: ['#8A95A8', '#B6791C', '#2563EB', '#15885A', '#D23B4E'],
+                    borderWidth: 2,
+                    borderColor: '#FFFFFF'
                 }]
             },
             options: {
@@ -225,8 +226,9 @@
                             font: {
                                 size: 11
                             },
-                            color: '#9BA3B5',
-                            boxWidth: 12
+                            color: '#51607A',
+                            boxWidth: 12,
+                            padding: 12
                         }
                     }
                 }

@@ -41,11 +41,11 @@ class AdminRequestController extends Controller
                 $q->whereHas(
                     'student',
                     fn($sq) =>
-                    $sq->where('nom', 'ILIKE', "%{$s}%")->orWhere('prenom', 'ILIKE', "%{$s}%")
+                    $sq->where('nom', 'LIKE', "%{$s}%")->orWhere('prenom', 'LIKE', "%{$s}%")
                 )->orWhereHas(
                         'student.user',
                         fn($sq) =>
-                        $sq->where('numero_identifiant', 'ILIKE', "%{$s}%")
+                        $sq->where('numero_identifiant', 'LIKE', "%{$s}%")
                     );
             });
         }
@@ -220,7 +220,10 @@ class AdminRequestController extends Controller
             $isValid = isset($request->file_valid[$file->id]);
             $comment = $request->file_comments[$file->id] ?? null;
             $file->update([
-                'is_valid' => $isValid ?: null,
+                // true = validé (verrouillé) ; false = à corriger (déverrouillé,
+                // l'étudiant peut recharger le fichier). On n'utilise plus null ici
+                // pour que la vue étudiant affiche bien le bouton « Remplacer ».
+                'is_valid' => $isValid,
                 'is_locked' => $isValid,
                 'admin_comment' => $comment,
             ]);

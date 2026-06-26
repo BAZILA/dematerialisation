@@ -113,7 +113,8 @@
                                             action="{{ route('student.requests.create') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="category" value="depot">
-                                            <button type="submit" class="btn btn-primary btn-lg">
+                                            <button type="submit" class="btn btn-primary btn-lg"
+                                                data-loading-text="Création…">
                                                 <i class="fas fa-folder-plus"></i> Créer mon dossier
                                             </button>
                                         </form>
@@ -355,7 +356,7 @@
                                                     </div>
 
                                                     {{-- Bouton upload --}}
-                                                    @if ($canUpload && (!$file || $isInvalid))
+                                                    @if ($canUpload)
                                                         <div class="flex-shrink-0">
                                                             <button type="button" class="btn btn-sm btn-primary"
                                                                 data-bs-toggle="modal"
@@ -391,7 +392,8 @@
                                             action="{{ route('student.requests.create') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="category" value="{{ $key }}">
-                                            <button type="submit" class="btn btn-{{ $catColors[$key] }} btn-lg">
+                                            <button type="submit" class="btn btn-{{ $catColors[$key] }} btn-lg"
+                                                data-loading-text="Création…">
                                                 <i class="fas fa-plus"></i> Créer une demande
                                             </button>
                                         </form>
@@ -520,7 +522,7 @@
                                                             </div>
                                                         @endif
                                                     </div>
-                                                    @if ($canUpload && (!$file || $isInvalid))
+                                                    @if ($canUpload)
                                                         <button type="button"
                                                             class="btn btn-sm btn-{{ $catColors[$key] }}"
                                                             data-bs-toggle="modal"
@@ -578,15 +580,22 @@
                                                             <i class="fas fa-upload"></i>
                                                         </button>
                                                     @elseif($canUpload && $file)
-                                                        <form method="POST"
-                                                            action="{{ route('student.requests.file.delete', $file) }}?tab={{ $key }}"
-                                                            class="d-inline">
-                                                            @csrf @method('DELETE')
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                                onclick="return confirm('Supprimer ?')">
-                                                                <i class="fas fa-trash"></i>
+                                                        <div class="d-flex gap-2 flex-shrink-0">
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#up-{{ $key }}-{{ $type->id }}">
+                                                                <i class="fas fa-arrows-rotate"></i> Remplacer
                                                             </button>
-                                                        </form>
+                                                            <form method="POST"
+                                                                action="{{ route('student.requests.file.delete', $file) }}?tab={{ $key }}"
+                                                                class="d-inline">
+                                                                @csrf @method('DELETE')
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                                    onclick="return confirm('Supprimer ?')">
+                                                                    <i class="fas fa-trash"></i>
+                                                                </button>
+                                                            </form>
+                                                        </div>
                                                     @endif
                                                 </div>
                                             </div>
@@ -637,7 +646,8 @@
                                             @csrf
                                             <input type="hidden" name="student_request_id" value="{{ $req->id }}">
                                             <button type="submit" class="btn btn-{{ $catColors[$key] }} w-100"
-                                                onclick="return confirm('Confirmer la soumission ?')">
+                                                onclick="return confirm('Confirmer la soumission ?')"
+                                                data-loading-text="Soumission…">
                                                 <i class="fas fa-check"></i> Soumettre
                                             </button>
                                         </form>
@@ -683,7 +693,7 @@
         @if ($ar)
             @foreach ($types as $type)
                 @php $f = $ar->fileForType($type); @endphp
-                @if (!$f || ($f->is_valid === false && !$f->is_locked))
+                @if (!$f || !$f->is_locked)
                     <div class="modal fade" id="up-{{ $key }}-{{ $type->id }}" tabindex="-1">
                         <div class="modal-dialog">
                             <div class="modal-content">
@@ -731,7 +741,8 @@
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-outline-secondary btn-sm"
                                             data-bs-dismiss="modal">Annuler</button>
-                                        <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-sm">
+                                        <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-sm"
+                                            data-loading-text="Téléversement…">
                                             <i class="fas fa-cloud-upload-alt"></i> Uploader
                                         </button>
                                     </div>

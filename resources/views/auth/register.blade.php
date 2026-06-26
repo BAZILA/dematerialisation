@@ -12,7 +12,7 @@
                 <div class="text-center mb-4">
                     <div class="icon-box mx-auto mb-3"
                         style="width:72px;height:72px;font-size:1.8rem;
-                            background:var(--em-dim);border:1px solid rgba(16,201,122,.25);">
+                            background:var(--em-dim);border:1px solid rgba(27,58,107,.22);">
                         <i class="fas fa-user-check" style="color:var(--em);"></i>
                     </div>
                     <h2 style="font-family:var(--font-head);font-size:22px;color:var(--t1);margin-bottom:4px;">
@@ -147,7 +147,8 @@
                         @enderror
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100" style="height:44px;font-size:15px;">
+                    <button type="submit" class="btn btn-primary w-100" style="height:44px;font-size:15px;"
+                        data-loading-text="Vérification…">
                         <i class="fas fa-search"></i> Vérifier mon Identité
                     </button>
                 </form>

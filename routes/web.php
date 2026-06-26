@@ -34,68 +34,26 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:student')->prefix('student')->name('student.')->group(function () {
         Route::get('/dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
 
-        // Demandes (nouveau flux)
+        // Demandes
         Route::post('/requests/create', [StudentRequestController::class, 'create'])->name('requests.create');
         Route::post('/requests/submit', [StudentRequestController::class, 'submit'])->name('requests.submit');
         Route::post('/requests/file/upload', [StudentRequestController::class, 'uploadFile'])->name('requests.file.upload');
         Route::delete('/requests/file/{file}', [StudentRequestController::class, 'deleteFile'])->name('requests.file.delete');
         Route::get('/requests/file/{file}/download', [StudentRequestController::class, 'downloadFile'])->name('requests.file.download');
-
-        // Ancien flux Submission (conservé)
-        Route::post('/submission/create', [StudentController::class, 'createSubmission'])->name('submission.create');
-        Route::post('/submission/{submission}/submit', [StudentController::class, 'submitSubmission'])->name('submission.submit');
-        Route::post('/file/upload', [StudentController::class, 'uploadFile'])->name('file.upload');
-        Route::delete('/file/{file}/delete', [StudentController::class, 'deleteFile'])->name('file.delete');
-        Route::get('/file/{file}/download', [StudentController::class, 'downloadFile'])->name('file.download');
-        Route::post('/academic-history/save', [StudentController::class, 'saveAcademicHistory'])->name('academic.save');
-        Route::delete('/academic-history/{id}/delete', [StudentController::class, 'deleteAcademicHistory'])->name('academic.delete');
     });
 
     /* ─── ADMINISTRATEUR ─────────────────────────────── */
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
 
-        // CRUD types de fichiers
+        // CRUD types de documents
         Route::get('/request-types', [RequestTypeController::class, 'index'])->name('request-types.index');
         Route::post('/request-types', [RequestTypeController::class, 'store'])->name('request-types.store');
         Route::put('/request-types/{requestType}', [RequestTypeController::class, 'update'])->name('request-types.update');
         Route::delete('/request-types/{requestType}', [RequestTypeController::class, 'destroy'])->name('request-types.destroy');
         Route::patch('/request-types/{requestType}/toggle', [RequestTypeController::class, 'toggleActive'])->name('request-types.toggle');
 
-
-        // CRUD types de fichiers
-        Route::get(
-            '/request-types',
-            [RequestTypeController::class, 'index']
-        )->name('request-types.index');
-
-        Route::post(
-            '/request-types',
-            [RequestTypeController::class, 'store']
-        )->name('request-types.store');
-
-        Route::put(
-            '/request-types/{requestType}',
-            [RequestTypeController::class, 'update']
-        )->name('request-types.update');
-
-        Route::delete(
-            '/request-types/{requestType}',
-            [RequestTypeController::class, 'destroy']
-        )->name('request-types.destroy');
-
-        Route::patch(
-            '/request-types/{requestType}/toggle',
-            [RequestTypeController::class, 'toggleActive']
-        )->name('request-types.toggle');
-
-        // Optionnel : réordonner via drag-and-drop
-        Route::post(
-            '/request-types/reorder',
-            [RequestTypeController::class, 'reorder']
-        )->name('request-types.reorder');
-
-        // Demandes (nouveau flux)
+        // Demandes & dépôts
         Route::get('/requests/{category?}', [AdminRequestController::class, 'index'])->name('requests.index');
         Route::get('/requests/detail/{studentRequest}', [AdminRequestController::class, 'show'])->name('requests.show');
         Route::post('/requests/{studentRequest}/validate', [AdminRequestController::class, 'validate'])->name('requests.validate');
@@ -103,12 +61,5 @@ Route::middleware('auth')->group(function () {
         Route::post('/requests/{studentRequest}/reject-final', [AdminRequestController::class, 'rejectFinal'])->name('requests.reject-final');
         Route::get('/requests/file/{file}/preview', [AdminRequestController::class, 'previewFile'])->name('requests.file.preview');
         Route::get('/requests/file/{file}/download', [AdminRequestController::class, 'downloadFile'])->name('requests.file.download');
-
-        // Ancien flux Submission (conservé)
-        Route::get('/submission/{submission}', [AdminController::class, 'show'])->name('submission.show');
-        Route::post('/submission/{submission}/validate', [AdminController::class, 'validate'])->name('submission.validate');
-        Route::post('/submission/{submission}/reject', [AdminController::class, 'reject'])->name('submission.reject');
-        Route::get('/file/{file}/preview', [AdminController::class, 'previewFile'])->name('file.preview');
-        Route::get('/file/{file}/download', [AdminController::class, 'downloadFile'])->name('file.download');
     });
 });

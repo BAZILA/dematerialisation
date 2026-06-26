@@ -4,30 +4,30 @@
 
 @section('content')
 
-    <div style="width:100%;max-width:510px;">
-        <div class="card" style="border-radius:16px!important;">
-            <div class="card-body" style="padding:40px!important;">
+    <div style="width:100%;max-width:430px;position:relative;z-index:1;">
 
-                <div class="text-center mb-4">
+        {{-- Marque --}}
+        <div class="text-center mb-4">
+            <div class="icon-box mx-auto mb-3"
+                style="width:64px;height:64px;font-size:1.6rem;
+                    background:linear-gradient(135deg,var(--brand) 0%,#2C5494 100%);
+                    color:#fff;box-shadow:0 10px 26px var(--em-glow);">
+                <i class="fas fa-graduation-cap"></i>
+            </div>
+            <h1 style="font-family:var(--font-head);font-size:21px;font-weight:700;color:var(--t1);letter-spacing:-.02em;">
+                Portail de Dématérialisation
+            </h1>
+            <p style="font-size:13px;color:var(--t2);margin-top:2px;">
+                Gestion en ligne des dossiers &amp; demandes universitaires
+            </p>
+        </div>
 
-                    {{-- Logo --}}
-                    <img src="{{ asset('images/uk_logo.png') }}" alt="Université de Kara"
-                        style="width:160px; margin-bottom:15px;">
+        <div class="card" style="border-radius:18px!important;box-shadow:var(--shadow-lg)!important;">
+            <div class="card-body" style="padding:34px!important;">
 
-                    <div class="icon-box mx-auto mb-3"
-                        style="width:80px;height:80px;font-size:1.8rem;
-        background:var(--em-dim);border:1px solid rgba(16,201,122,.25);">
-                        <i class="fas fa-lock" style="color:var(--em);"></i>
-                    </div>
-
-                    <h2 style="font-family:var(--font-head);font-size:22px;color:var(--t1);margin-bottom:4px;">
-                        Connexion
-                    </h2>
-
-                    <p class="text-muted" style="font-size:13px;">
-                        Plateforme de gestion de dossiers universitaires
-                    </p>
-                </div>
+                <h2 style="font-family:var(--font-head);font-size:18px;font-weight:700;color:var(--t1);margin-bottom:20px;">
+                    Connexion
+                </h2>
 
                 {{-- Formulaire --}}
                 <form method="POST" action="{{ route('login.post') }}">
@@ -39,7 +39,7 @@
                         </label>
                         <input type="text" class="form-control @error('numero_identifiant') is-invalid @enderror"
                             name="numero_identifiant" placeholder="Ex : ADMIN001" value="{{ old('numero_identifiant') }}"
-                            required>
+                            autofocus required>
                         @error('numero_identifiant')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -47,7 +47,7 @@
 
                     <div class="mb-4">
                         <label class="form-label">
-                            <i class="fas fa-key"></i> Mot de Passe
+                            <i class="fas fa-key"></i> Mot de passe
                         </label>
                         <div class="input-group">
                             <input type="password" class="form-control @error('password') is-invalid @enderror"
@@ -61,30 +61,38 @@
                         @enderror
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100" style="height:44px;font-size:15px;">
-                        <i class="fas fa-sign-in-alt"></i> Se Connecter
+                    <button type="submit" class="btn btn-primary w-100" style="height:46px;font-size:15px;"
+                        data-loading-text="Connexion…">
+                        <i class="fas fa-right-to-bracket"></i> Se connecter
                     </button>
                 </form>
 
-                <hr style="margin:28px 0;">
+                <hr style="margin:24px 0;">
 
                 <div class="text-center">
-                    <p class="text-muted  mb-0" style="font-size:13.5px;">
-                        Pas encore inscrit ?
-                        <a href="{{ route('register') }}" style="color:var(--em);font-weight:600;text-decoration:none;">
+                    <p class="mb-0" style="font-size:13.5px;color:var(--t2);">
+                        Pas encore de compte ?
+                        <a href="{{ route('register') }}"
+                            style="color:var(--brand);font-weight:600;text-decoration:none;">
                             <i class="fas fa-user-plus"></i> S'inscrire
                         </a>
                     </p>
                 </div>
 
-                <div class="alert alert-info mt-4" style="font-size:12px;">
-                    <strong><i class="fas fa-lightbulb"></i> Identifiants de test :</strong>
-                    <div class="mt-1"><code> Administrateur : ADMIN001 / admin123456</code></div>
-                    <div><code> Etuiant :ATETTEH / ATETTEH2025</code></div>
+                <div class="alert alert-info mt-4 mb-0" style="font-size:12px;">
+                    <strong><i class="fas fa-circle-info"></i> Démonstration</strong>
+                    <div class="mt-1">Administrateur : <code>ADMIN001</code> / <code>admin123456</code></div>
+                    <div class="mt-1" style="color:var(--t2);">
+                        Les étudiants créent leur compte via « S'inscrire ».
+                    </div>
                 </div>
 
             </div>
         </div>
+
+        <p class="text-center mt-3" style="font-size:11.5px;color:var(--t3);">
+            © {{ date('Y') }} Université — Portail de dématérialisation
+        </p>
     </div>
 
 @endsection

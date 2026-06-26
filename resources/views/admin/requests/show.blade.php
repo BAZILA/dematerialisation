@@ -393,6 +393,7 @@
                     return;
                 }
                 if (confirm('Valider cette demande ?')) {
+                    window.btnLoading(document.getElementById('btnVal'), 'Validation…');
                     document.getElementById('valForm').submit();
                 }
             });
@@ -406,6 +407,7 @@
                 msg.classList.remove('is-invalid');
                 if (confirm('Renvoyer pour correction ?')) {
                     collectFiles(document.getElementById('hiddenFileData'));
+                    window.btnLoading(document.getElementById('btnCorr'), 'Envoi…');
                     document.getElementById('corrForm').submit();
                 }
             });
@@ -417,6 +419,7 @@
                     return;
                 }
                 if (confirm('Rejeter définitivement cette demande ?')) {
+                    window.btnLoading(document.getElementById('btnRej'), 'Rejet…');
                     document.getElementById('rejForm').submit();
                 }
             });

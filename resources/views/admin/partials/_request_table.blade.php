@@ -21,7 +21,7 @@
             <thead>
                 <tr>
                     <th>Étudiant</th>
-                    <th>Année</th>
+                    <th>Profil</th>
                     <th>Fichiers</th>
                     <th>Soumis le</th>
                     <th>Statut</th>
@@ -35,7 +35,11 @@
                             <strong>{{ $req->student->full_name }}</strong><br>
                             <code class="small">{{ $req->student->user->numero_identifiant }}</code>
                         </td>
-                        <td><small>{{ $req->academic_year }}</small></td>
+                        <td>
+                            <span class="badge bg-{{ $req->student->user->type_etudiant === 'nouveau' ? 'primary' : 'secondary' }}">
+                                {{ $req->student->user->type_etudiant === 'nouveau' ? 'Nouveau' : 'Ancien' }}
+                            </span>
+                        </td>
                         <td><span class="badge bg-secondary"><i class="fas fa-paperclip"></i>
                                 {{ $req->files->count() }}</span></td>
                         <td>

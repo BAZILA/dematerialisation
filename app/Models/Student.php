@@ -34,9 +34,9 @@ class Student extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function submissions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function requests(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(Submission::class);
+        return $this->hasMany(StudentRequest::class);
     }
 
     public function bachelier(): \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -51,11 +51,6 @@ class Student extends Model
 
     /* ── Helpers ────────────────────────────────────────────────────────── */
 
-    public function currentSubmission(): ?Submission
-    {
-        return $this->submissions()->latest()->first();
-    }
-
     public function getFullNameAttribute(): string
     {
         return $this->prenom . ' ' . $this->nom;
@@ -65,11 +60,5 @@ class Student extends Model
     public function getTypeEtudiantAttribute(): string
     {
         return $this->user->type_etudiant ?? 'nouveau';
-    }
-
-    /** Types de documents requis selon le profil. */
-    public function documentTypes(): \Illuminate\Database\Eloquent\Collection
-    {
-        return DocumentType::forStudentType($this->type_etudiant);
     }
 }

@@ -11,9 +11,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             BachelierSeeder::class,
             AncienEtudiantSeeder::class,
-            DocumentTypeSeeder::class,   // pour l'ancien flux
-            RequestTypeSeeder::class,    // pour le nouveau flux
-            UserSeeder::class,
+            RequestTypeSeeder::class,    // types de documents par catégorie
+            UserSeeder::class,           // compte administrateur
         ]);
     }
 }

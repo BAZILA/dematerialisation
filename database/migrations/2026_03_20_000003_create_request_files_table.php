@@ -10,7 +10,8 @@ return new class extends Migration {
         Schema::create('request_files', function (Blueprint $table) {
             $table->id();
             $table->foreignId('student_request_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('request_type_id')->constrained()->nullOnDelete();
+            // nullable requis pour ON DELETE SET NULL sous MySQL/InnoDB
+            $table->foreignId('request_type_id')->nullable()->constrained()->nullOnDelete();
             $table->string('original_filename');
             $table->string('stored_filename');
             $table->string('file_path');
