@@ -17,8 +17,10 @@ return new class extends Migration {
             $table->string('annee_debut', 4)->nullable();
             $table->string('annee_fin', 4)->nullable();
             $table->string('universite')->nullable();
-            $table->string('parcours')->nullable();
-            $table->integer('credits')->nullable();
+            $table->string('domaine')->nullable();
+            $table->string('etablissement')->nullable();
+            $table->string('parcours')->nullable();       // Grade - Mention - Spécialité
+            $table->integer('credits')->nullable();        // crédits capitalisés
             $table->timestamps();
         });
     }

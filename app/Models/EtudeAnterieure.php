@@ -13,6 +13,8 @@ class EtudeAnterieure extends Model
         'annee_debut',
         'annee_fin',
         'universite',
+        'domaine',
+        'etablissement',
         'parcours',
         'credits',
     ];
