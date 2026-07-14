@@ -121,6 +121,12 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
         }
         .sb-logo img { width: 100%; height: 100%; object-fit: contain; }
+        .sb-brand-link { display: flex; align-items: center; text-decoration: none; overflow: hidden; }
+        .sb-logo-full { display: flex; align-items: center; background: #fff; border-radius: 10px; padding: 5px 9px; height: 44px; box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+        .sb-logo-full img { height: 100%; width: auto; max-width: 178px; object-fit: contain; }
+        .sb-logo-mark { display: none; }
+        body.sb-collapsed .sb-logo-full { display: none; }
+        body.sb-collapsed .sb-logo-mark { display: flex; }
 
         .sb-brand-name {
             font-family: var(--font-head);
@@ -384,6 +390,8 @@
             body.sb-collapsed .sb-user-meta, body.sb-collapsed .sb-label { display: revert; }
             body.sb-collapsed .sb-link { justify-content: flex-start; padding: 10px 12px; }
             body.sb-collapsed .sb-logout { display: flex; }
+            body.sb-collapsed .sb-logo-full { display: flex; }
+            body.sb-collapsed .sb-logo-mark { display: none; }
             .sb-overlay.open { display: block; }
             .content { padding: 18px 15px; }
             .toast-shelf { width: calc(100vw - 32px); right: 16px; bottom: 16px; }
@@ -404,8 +412,10 @@
         <aside class="sb" id="sb">
             <div class="sb-head">
                 <a href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('student.dashboard') }}"
-                    class="sb-logo" title="Accueil"><img src="{{ asset('assets/uk/logo-bg.png') }}" alt="UK"></a>
-                <span class="sb-brand-name">UK Démat</span>
+                    class="sb-brand-link" title="Accueil">
+                    <span class="sb-logo sb-logo-mark"><img src="{{ asset('assets/uk/logo-bg.png') }}" alt="UK"></span>
+                    <span class="sb-logo-full"><img src="{{ asset('assets/uk/logo-sigle-bg.png') }}" alt="Université de Kara"></span>
+                </a>
             </div>
 
             <nav class="sb-nav">
