@@ -11,6 +11,10 @@ class StudentRequest extends Model
 
     protected $fillable = [
         'student_id',
+        'parcours_id',          // contexte académique du dépôt
+        'annee_academique_id',
+        'semestre',
+        'engagement_accepte',   // « Lu et approuvé » confirmé avant soumission
         'category',
         'status',
         'version',
@@ -27,7 +31,17 @@ class StudentRequest extends Model
         'submitted_at' => 'datetime',
         'validated_at' => 'datetime',
         'rendez_vous_at' => 'datetime',
+        'engagement_accepte' => 'boolean',
     ];
+
+    /** Saison d'un semestre : 1/3/5 = Harmattan, 2/4/6 = Mousson. */
+    public static function saison(?string $semestre): ?string
+    {
+        if (!$semestre || !preg_match('/(\d+)/', $semestre, $m)) {
+            return null;
+        }
+        return ((int) $m[1]) % 2 === 1 ? 'Harmattan' : 'Mousson';
+    }
 
     /* ── Relations ──────────────────────────────────────── */
 
@@ -44,6 +58,21 @@ class StudentRequest extends Model
     public function validator(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    public function parcours(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Parcours::class);
+    }
+
+    public function anneeAcademique(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(AnneeAcademique::class);
+    }
+
+    public function etudesAnterieures(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(EtudeAnterieure::class);
     }
 
     /* ── Helpers statut ─────────────────────────────────── */

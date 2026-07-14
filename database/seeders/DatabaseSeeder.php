@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             AncienEtudiantSeeder::class,
             RequestTypeSeeder::class,    // types de documents par catégorie
             UserSeeder::class,           // compte super-administrateur
+            TestStudentSeeder::class,    // compte étudiant de test (ETUD001 / etudiant123)
         ]);
     }
 }
