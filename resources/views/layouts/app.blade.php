@@ -466,6 +466,11 @@
                             <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
                         </a>
                     @endcan
+                    @can('utilisateurs.gerer')
+                        <a href="{{ route('admin.utilisateurs.index') }}" class="sb-link {{ request()->routeIs('admin.utilisateurs.*') ? 'active' : '' }}" title="Utilisateurs">
+                            <span class="sb-icon"><i class="fas fa-users-gear"></i></span><span class="sb-label">Utilisateurs</span>
+                        </a>
+                    @endcan
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>

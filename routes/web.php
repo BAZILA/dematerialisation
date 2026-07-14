@@ -10,6 +10,7 @@ use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\AcademicController;
 use App\Http\Controllers\AnneeController;
 use App\Http\Controllers\IdentityController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -101,6 +102,15 @@ Route::middleware('auth')->group(function () {
             Route::post('/anciens/import', [IdentityController::class, 'importAnciens'])->name('anciens.import');
             Route::get('/anciens/export', [IdentityController::class, 'exportAnciens'])->name('anciens.export');
             Route::get('/anciens/modele', [IdentityController::class, 'templateAnciens'])->name('anciens.template');
+        });
+
+        // Gestion des utilisateurs (personnel)
+        Route::middleware('permission:utilisateurs.gerer')->prefix('utilisateurs')->name('utilisateurs.')->group(function () {
+            Route::get('/', [UserController::class, 'index'])->name('index');
+            Route::post('/', [UserController::class, 'store'])->name('store');
+            Route::put('/{user}', [UserController::class, 'update'])->name('update');
+            Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
+            Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
         });
 
         // Demandes & dépôts

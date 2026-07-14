@@ -13,10 +13,13 @@ class User extends Authenticatable
 
     protected $fillable = [
         'numero_identifiant',
+        'nom',            // nom réel (personnel / staff)
+        'prenom',         // prénom réel (personnel / staff)
         'email',
         'password',
         'role',           // rôle principal dénormalisé (affichage / redirection rapide)
         'type_etudiant',
+        'signature_path', // image de signature (staff), pour le verso des fiches
         'is_active',
     ];
 
@@ -64,5 +67,13 @@ class User extends Authenticatable
     public function isCandidat(): bool
     {
         return $this->role === 'candidat' || $this->hasRole('candidat');
+    }
+
+    /** Nom d'affichage : « Prénom Nom » si renseignés, sinon l'identifiant. */
+    public function getStaffNameAttribute(): string
+    {
+        $full = trim(($this->prenom ?? '') . ' ' . ($this->nom ?? ''));
+
+        return $full !== '' ? $full : $this->numero_identifiant;
     }
 }
