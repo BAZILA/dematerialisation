@@ -6,6 +6,7 @@ use App\Http\Controllers\StudentRequestController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminRequestController;
 use App\Http\Controllers\RequestTypeController;
+use App\Http\Controllers\SuperAdminController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -29,6 +30,12 @@ Route::middleware('auth')->group(function () {
             ? redirect()->route('admin.dashboard')
             : redirect()->route('student.dashboard');
     })->name('dashboard');
+
+    /* ─── SUPER-ADMIN ─────────────────────────────────── */
+    Route::middleware('role:super_admin')->prefix('super-admin')->name('superadmin.')->group(function () {
+        Route::get('/parametres', [SuperAdminController::class, 'settings'])->name('settings');
+        Route::post('/parametres', [SuperAdminController::class, 'updateSettings'])->name('settings.update');
+    });
 
     /* ─── ÉTUDIANT ───────────────────────────────────── */
     Route::middleware('role:etudiant')->prefix('student')->name('student.')->group(function () {

@@ -1285,6 +1285,14 @@
                         <span class="sb-icon"><i class="fas fa-sliders"></i></span>
                         <span class="sb-label">Types de documents</span>
                     </a>
+
+                    @if (auth()->user()->isSuperAdmin())
+                        <a href="{{ route('superadmin.settings') }}"
+                            class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}">
+                            <span class="sb-icon"><i class="fas fa-gears"></i></span>
+                            <span class="sb-label">Paramètres</span>
+                        </a>
+                    @endif
                 @else
                     <div class="sb-section">Mon espace</div>
 
