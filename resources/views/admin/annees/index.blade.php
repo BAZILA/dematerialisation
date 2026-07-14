@@ -11,8 +11,8 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="text-muted small">
-            <i class="fas fa-circle-info"></i> L'année <strong>active</strong> définit le contexte des opérations.
-            Une opération n'est possible que si sa <strong>fenêtre</strong> est ouverte. Années clôturées/archivées = lecture seule.
+            <i class="fas fa-circle-info"></i> Cliquez sur une année pour déplier ses fenêtres.
+            L'année <strong>active</strong> définit le contexte ; les clôturées/archivées sont en lecture seule.
         </div>
         <button class="btn btn-primary" onclick="openAnnee('create')" data-bs-toggle="modal" data-bs-target="#modalAnnee">
             <i class="fas fa-plus"></i> Ajouter une année
@@ -20,14 +20,15 @@
     </div>
 
     @forelse ($annees as $a)
-        <div class="card mb-4">
+        <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
+                <div data-bs-toggle="collapse" data-bs-target="#an-{{ $a->id }}" role="button" style="cursor:pointer;flex:1;min-width:0;">
+                    <i class="fas fa-chevron-down me-1" style="font-size:11px;color:var(--t3);transition:transform .2s;"></i>
                     <i class="fas fa-calendar-days" style="color:var(--brand);"></i>
                     <strong class="ms-1" style="font-size:15px;">{{ $a->libelle }}</strong>
                     <span class="badge bg-{{ $badge[$a->statut] ?? 'secondary' }} ms-1">{{ $a->statut_label }}</span>
                     @if ($a->is_active)<span class="badge bg-primary ms-1"><i class="fas fa-circle-check"></i> Active</span>@endif
-                    @if ($a->date_debut)<span class="text-muted small ms-2">{{ $a->date_debut->format('d/m/Y') }} → {{ $a->date_fin?->format('d/m/Y') ?? '…' }}</span>@endif
+                    @if ($a->date_debut)<span class="text-muted small ms-2 d-none d-md-inline">{{ $a->date_debut->format('d/m/Y') }} → {{ $a->date_fin?->format('d/m/Y') ?? '…' }}</span>@endif
                 </div>
                 <div class="d-flex gap-1">
                     @unless ($a->is_active)
@@ -52,40 +53,42 @@
                     @endunless
                 </div>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0 align-middle">
-                        <thead>
-                            <tr><th>Opération</th><th>État</th><th>Ouverture</th><th>Fermeture</th><th class="text-end">Réglage</th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($ops as $opKey => $opLabel)
-                                @php $p = $a->periodes->firstWhere('operation', $opKey); @endphp
-                                <tr>
-                                    <td><strong>{{ $opLabel }}</strong></td>
-                                    <td>
-                                        @if ($p && $p->is_open)
-                                            <span class="badge bg-success"><i class="fas fa-lock-open"></i> Ouverte</span>
-                                        @else
-                                            <span class="badge bg-secondary"><i class="fas fa-lock"></i> Fermée</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-muted small">{{ $p && $p->date_debut ? $p->date_debut->format('d/m/Y') : '—' }}</td>
-                                    <td class="text-muted small">{{ $p && $p->date_fin ? $p->date_fin->format('d/m/Y') : '—' }}</td>
-                                    <td class="text-end">
-                                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPeriode"
-                                            onclick="openPeriode(this)" data-url="{{ route('admin.annees.periodes.save', $a) }}"
-                                            data-operation="{{ $opKey }}" data-label="{{ $opLabel }}"
-                                            data-open="{{ $p && $p->is_open ? 1 : 0 }}"
-                                            data-debut="{{ $p && $p->date_debut ? $p->date_debut->format('Y-m-d') : '' }}"
-                                            data-fin="{{ $p && $p->date_fin ? $p->date_fin->format('Y-m-d') : '' }}">
-                                            <i class="fas fa-sliders"></i> Régler
-                                        </button>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+            <div class="collapse {{ $a->is_active ? 'show' : '' }}" id="an-{{ $a->id }}">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0 align-middle">
+                            <thead>
+                                <tr><th>Opération</th><th>État</th><th>Ouverture</th><th>Fermeture</th><th class="text-end">Réglage</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($ops as $opKey => $opLabel)
+                                    @php $p = $a->periodes->firstWhere('operation', $opKey); @endphp
+                                    <tr>
+                                        <td><strong>{{ $opLabel }}</strong></td>
+                                        <td>
+                                            @if ($p && $p->is_open)
+                                                <span class="badge bg-success"><i class="fas fa-lock-open"></i> Ouverte</span>
+                                            @else
+                                                <span class="badge bg-secondary"><i class="fas fa-lock"></i> Fermée</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-muted small">{{ $p && $p->date_debut ? $p->date_debut->format('d/m/Y') : '—' }}</td>
+                                        <td class="text-muted small">{{ $p && $p->date_fin ? $p->date_fin->format('d/m/Y') : '—' }}</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPeriode"
+                                                onclick="openPeriode(this)" data-url="{{ route('admin.annees.periodes.save', $a) }}"
+                                                data-operation="{{ $opKey }}" data-label="{{ $opLabel }}"
+                                                data-open="{{ $p && $p->is_open ? 1 : 0 }}"
+                                                data-debut="{{ $p && $p->date_debut ? $p->date_debut->format('Y-m-d') : '' }}"
+                                                data-fin="{{ $p && $p->date_fin ? $p->date_fin->format('Y-m-d') : '' }}">
+                                                <i class="fas fa-sliders"></i> Régler
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

@@ -7,7 +7,8 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="text-muted small">
-            <i class="fas fa-circle-info"></i> Données de classement — utilisées pour filtrer les demandes et définir les périmètres des agents.
+            <i class="fas fa-circle-info"></i> Cliquez sur une composante pour la déplier.
+            Données de classement — servent à filtrer les demandes et définir les périmètres des agents.
         </div>
         <button class="btn btn-primary" onclick="openFaculte('create')" data-bs-toggle="modal" data-bs-target="#modalFaculte">
             <i class="fas fa-plus"></i> Ajouter une composante
@@ -15,13 +16,15 @@
     </div>
 
     @forelse ($facultes as $fac)
-        <div class="card mb-4">
+        <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <i class="fas {{ $fac->type === 'institut' ? 'fa-building-columns' : 'fa-landmark' }}"></i>
+                <div data-bs-toggle="collapse" data-bs-target="#fac-{{ $fac->id }}" role="button" style="cursor:pointer;flex:1;min-width:0;">
+                    <i class="fas fa-chevron-down me-1" style="font-size:11px;color:var(--t3);"></i>
+                    <i class="fas {{ $fac->type === 'institut' ? 'fa-building-columns' : 'fa-landmark' }}" style="color:var(--brand);"></i>
                     <strong class="ms-1">{{ $fac->nom }}</strong>
                     @if ($fac->sigle)<span class="badge bg-secondary ms-1">{{ $fac->sigle }}</span>@endif
                     <span class="badge bg-primary ms-1">{{ $fac->type_label }}</span>
+                    <span class="badge bg-secondary ms-1">{{ $fac->departements->count() }} dépt.</span>
                     @unless ($fac->is_active)<span class="badge bg-warning ms-1">Inactif</span>@endunless
                 </div>
                 <div class="d-flex gap-1">
@@ -41,67 +44,69 @@
                 </div>
             </div>
 
-            <div class="card-body">
-                @forelse ($fac->departements as $dep)
-                    <div class="mb-3 p-3 rounded" style="background:var(--surface-2);border:1px solid var(--line);">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                            <div>
-                                <i class="fas fa-diagram-project" style="color:var(--brand);"></i>
-                                <strong class="ms-1">{{ $dep->nom }}</strong>
-                                @if ($dep->sigle)<span class="badge bg-secondary ms-1">{{ $dep->sigle }}</span>@endif
+            <div class="collapse" id="fac-{{ $fac->id }}">
+                <div class="card-body">
+                    @forelse ($fac->departements as $dep)
+                        <div class="mb-3 p-3 rounded" style="background:var(--surface-2);border:1px solid var(--line);">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <div>
+                                    <i class="fas fa-diagram-project" style="color:var(--brand);"></i>
+                                    <strong class="ms-1">{{ $dep->nom }}</strong>
+                                    @if ($dep->sigle)<span class="badge bg-secondary ms-1">{{ $dep->sigle }}</span>@endif
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalParcours"
+                                        onclick="openParcours('create', this)" data-departement="{{ $dep->id }}" title="Ajouter un parcours">
+                                        <i class="fas fa-plus"></i> Parcours
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalDepartement"
+                                        onclick="openDepartement('edit', this)" data-url="{{ route('admin.academique.departements.update', $dep) }}"
+                                        data-faculte="{{ $dep->faculte_id }}" data-nom="{{ $dep->nom }}" data-sigle="{{ $dep->sigle }}" data-active="{{ $dep->is_active ? 1 : 0 }}">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                    <form method="POST" action="{{ route('admin.academique.departements.destroy', $dep) }}" onsubmit="return confirm('Supprimer ce département et ses parcours ?')">
+                                        @csrf @method('DELETE')
+                                        <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                </div>
                             </div>
-                            <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalParcours"
-                                    onclick="openParcours('create', this)" data-departement="{{ $dep->id }}" title="Ajouter un parcours">
-                                    <i class="fas fa-plus"></i> Parcours
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalDepartement"
-                                    onclick="openDepartement('edit', this)" data-url="{{ route('admin.academique.departements.update', $dep) }}"
-                                    data-faculte="{{ $dep->faculte_id }}" data-nom="{{ $dep->nom }}" data-sigle="{{ $dep->sigle }}" data-active="{{ $dep->is_active ? 1 : 0 }}">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                <form method="POST" action="{{ route('admin.academique.departements.destroy', $dep) }}" onsubmit="return confirm('Supprimer ce département et ses parcours ?')">
-                                    @csrf @method('DELETE')
-                                    <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                </form>
-                            </div>
-                        </div>
 
-                        @if ($dep->parcours->isEmpty())
-                            <div class="small text-muted ps-4">Aucun parcours.</div>
-                        @else
-                            <div class="table-responsive">
-                                <table class="table table-sm mb-0" style="background:var(--surface);border-radius:8px;">
-                                    <tbody>
-                                        @foreach ($dep->parcours as $p)
-                                            <tr>
-                                                <td style="width:24px;color:var(--t3);"><i class="fas fa-graduation-cap"></i></td>
-                                                <td><strong>{{ $p->nom }}</strong>
-                                                    @if ($p->sigle)<span class="badge bg-secondary ms-1">{{ $p->sigle }}</span>@endif
-                                                </td>
-                                                <td><span class="badge bg-info">{{ $p->grade_label }}</span></td>
-                                                <td class="text-muted small">{{ implode(' · ', $p->semestres()) }}</td>
-                                                <td class="text-end" style="white-space:nowrap;">
-                                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalParcours"
-                                                        onclick="openParcours('edit', this)" data-url="{{ route('admin.academique.parcours.update', $p) }}"
-                                                        data-departement="{{ $p->departement_id }}" data-nom="{{ $p->nom }}" data-sigle="{{ $p->sigle }}" data-grade="{{ $p->grade }}" data-active="{{ $p->is_active ? 1 : 0 }}">
-                                                        <i class="fas fa-pen"></i>
-                                                    </button>
-                                                    <form method="POST" action="{{ route('admin.academique.parcours.destroy', $p) }}" class="d-inline" onsubmit="return confirm('Supprimer ce parcours ?')">
-                                                        @csrf @method('DELETE')
-                                                        <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
-                    </div>
-                @empty
-                    <div class="text-muted small">Aucun département. Cliquez sur « Département » pour en ajouter.</div>
-                @endforelse
+                            @if ($dep->parcours->isEmpty())
+                                <div class="small text-muted ps-4">Aucun parcours.</div>
+                            @else
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0" style="background:var(--surface);border-radius:8px;">
+                                        <tbody>
+                                            @foreach ($dep->parcours as $p)
+                                                <tr>
+                                                    <td style="width:24px;color:var(--t3);"><i class="fas fa-graduation-cap"></i></td>
+                                                    <td><strong>{{ $p->nom }}</strong>
+                                                        @if ($p->sigle)<span class="badge bg-secondary ms-1">{{ $p->sigle }}</span>@endif
+                                                    </td>
+                                                    <td><span class="badge bg-info">{{ $p->grade_label }}</span></td>
+                                                    <td class="text-muted small">{{ implode(' · ', $p->semestres()) }}</td>
+                                                    <td class="text-end" style="white-space:nowrap;">
+                                                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalParcours"
+                                                            onclick="openParcours('edit', this)" data-url="{{ route('admin.academique.parcours.update', $p) }}"
+                                                            data-departement="{{ $p->departement_id }}" data-nom="{{ $p->nom }}" data-sigle="{{ $p->sigle }}" data-grade="{{ $p->grade }}" data-active="{{ $p->is_active ? 1 : 0 }}">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                        <form method="POST" action="{{ route('admin.academique.parcours.destroy', $p) }}" class="d-inline" onsubmit="return confirm('Supprimer ce parcours ?')">
+                                                            @csrf @method('DELETE')
+                                                            <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="text-muted small">Aucun département. Cliquez sur « Département » pour en ajouter.</div>
+                    @endforelse
+                </div>
             </div>
         </div>
     @empty
