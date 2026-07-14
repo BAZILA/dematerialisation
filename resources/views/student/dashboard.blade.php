@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.student')
 @section('page-title', 'Mon Espace')
 @section('page-subtitle', 'Dépôts et demandes')
 
