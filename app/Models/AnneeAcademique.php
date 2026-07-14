@@ -39,10 +39,18 @@ class AnneeAcademique extends Model
         return in_array($this->statut, ['cloturee', 'archivee'], true);
     }
 
-    /** L'année de contexte courante. */
+    /** L'année officiellement active (paramétrage). */
     public static function active(): ?self
     {
         return static::where('is_active', true)->first();
+    }
+
+    /** L'année de contexte de consultation (switch utilisateur), sinon l'active. */
+    public static function context(): ?self
+    {
+        $id = session('annee_contexte_id');
+
+        return ($id ? static::find($id) : null) ?? static::active();
     }
 
     /** Une opération est-elle actuellement ouverte pour cette année ? */

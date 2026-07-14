@@ -2,12 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AnneeAcademique;
 use App\Models\RequestType;
 use App\Models\StudentRequest;
 use App\Models\Student;
+use Illuminate\Http\Request;
 
 class AdminController extends Controller
 {
+    /** Change l'année académique de contexte (consultation). */
+    public function switchAnnee(Request $request)
+    {
+        $request->validate(['annee_id' => 'required|exists:annees_academiques,id']);
+        session(['annee_contexte_id' => (int) $request->annee_id]);
+
+        return back();
+    }
+
     public function dashboard()
     {
         $cats = array_keys(RequestType::$categories);

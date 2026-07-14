@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
     /* ─── ADMINISTRATEUR ─────────────────────────────── */
     Route::middleware('permission:acceder-backoffice')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+        Route::post('/contexte/annee', [AdminController::class, 'switchAnnee'])->name('contexte.annee');
 
         // CRUD types de documents
         Route::get('/request-types', [RequestTypeController::class, 'index'])->name('request-types.index');

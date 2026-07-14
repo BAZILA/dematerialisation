@@ -375,6 +375,11 @@
         hr { border-color: var(--line) !important; opacity: 1 !important; }
         code { font-size: 12px; background: var(--em-dim); padding: 2px 7px; border-radius: 5px; color: var(--brand); border: 1px solid var(--line); font-weight: 600; }
         .bg-light { background: var(--surface-2) !important; }
+        .dropdown-menu { border: 1px solid var(--line-mid); border-radius: 12px; box-shadow: var(--shadow-lg); font-size: 13.5px; padding: 6px; background: var(--surface); }
+        .dropdown-item { border-radius: 8px; padding: 8px 12px; color: var(--t1); }
+        .dropdown-item:hover, .dropdown-item:focus { background: var(--surface-2); color: var(--t1); }
+        .dropdown-item.active, .dropdown-item:active { background: var(--em-dim); color: var(--brand); }
+        .dropdown-header { font-size: 11px; color: var(--t3); text-transform: uppercase; letter-spacing: .05em; }
         ::-webkit-scrollbar { width: 9px; height: 9px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--line-mid); border-radius: 99px; border: 2px solid var(--bg); }
@@ -461,16 +466,6 @@
                             <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
                         </a>
                     @endcan
-                    @can('academique.gerer')
-                        <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
-                            <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
-                        </a>
-                    @endcan
-                    @can('identites.importer')
-                        <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import/export)">
-                            <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités (import/export)</span>
-                        </a>
-                    @endcan
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
@@ -515,6 +510,36 @@
                     @endif
                 </div>
                 <div class="tb-right">
+                    @if (auth()->user()->isAdmin())
+                        @php
+                            $ctxAnnee = \App\Models\AnneeAcademique::context();
+                            $allAnnees = \App\Models\AnneeAcademique::orderByDesc('libelle')->get();
+                        @endphp
+                        @if ($allAnnees->isNotEmpty())
+                            <div class="dropdown">
+                                <button class="tb-pill" data-bs-toggle="dropdown" style="cursor:pointer;">
+                                    <i class="fas fa-calendar-days" style="color:var(--brand);"></i>
+                                    <span>{{ $ctxAnnee?->libelle ?? 'Année' }}</span>
+                                    <i class="fas fa-chevron-down" style="font-size:9px;color:var(--t3);"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><h6 class="dropdown-header">Année de consultation</h6></li>
+                                    @foreach ($allAnnees as $an)
+                                        <li>
+                                            <form method="POST" action="{{ route('admin.contexte.annee') }}" data-no-loading>
+                                                @csrf
+                                                <input type="hidden" name="annee_id" value="{{ $an->id }}">
+                                                <button type="submit" class="dropdown-item d-flex align-items-center justify-content-between {{ $ctxAnnee && $ctxAnnee->id === $an->id ? 'active' : '' }}">
+                                                    <span>{{ $an->libelle }}</span>
+                                                    @if ($an->is_active)<span class="badge bg-success ms-2">active</span>@endif
+                                                </button>
+                                            </form>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+                    @endif
                     <div class="tb-pill"><i class="fas fa-circle"></i> {{ now()->translatedFormat('d M Y') }}</div>
                 </div>
             </header>

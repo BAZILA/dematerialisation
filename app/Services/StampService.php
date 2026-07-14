@@ -13,7 +13,7 @@ class StampService
      * @param  string $outputPath Chemin absolu du PDF de sortie
      * @return bool
      */
-    public function stampPdf(string $inputPath, string $outputPath): bool
+    public function stampPdf(string $inputPath, string $outputPath, ?string $validatorName = null): bool
     {
         if (!file_exists($inputPath)) {
             Log::error("StampService: fichier source introuvable — {$inputPath}");
@@ -41,7 +41,7 @@ class StampService
                 $pdf->AddPage($ori, [$size['width'], $size['height']]);
                 $pdf->useTemplate($tpl, 0, 0, $size['width'], $size['height'], true);
 
-                $this->drawStamp($pdf, $size['width'], $size['height']);
+                $this->drawStamp($pdf, $size['width'], $size['height'], $validatorName);
             }
 
             $pdf->Output($outputPath, 'F');
@@ -69,7 +69,7 @@ class StampService
      * - Texte EN BLANC pour une lisibilité maximale
      * - Opacité 50% pour ne pas masquer le document
      */
-    private function drawStamp(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph): void
+    private function drawStamp(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, ?string $validatorName = null): void
     {
         $cx = $pw - 22;  // centre X (coin droit)
         $cy = 22;        // centre Y (coin haut)
@@ -79,8 +79,8 @@ class StampService
         $pdf->setAlpha(0.50);
 
         // ── Fond bleu marine rempli ───────────────────────────
-        $pdf->SetDrawColor(8, 45, 110);
-        $pdf->SetFillColor(8, 45, 110);
+        $pdf->SetDrawColor(26, 86, 168);
+        $pdf->SetFillColor(26, 86, 168);
         $pdf->SetLineWidth(0.8);
         $pdf->Circle($cx, $cy, $r, 0, 360, 'DF'); // D=contour F=rempli
 
@@ -113,6 +113,14 @@ class StampService
 
         // ── Restaurer opacité pleine ──────────────────────────
         $pdf->setAlpha(1);
+
+        // ── Nom du validateur, sous le cachet ─────────────────
+        if ($validatorName) {
+            $pdf->SetTextColor(26, 86, 168);
+            $pdf->SetFont('helvetica', 'B', 6);
+            $pdf->SetXY($cx - $r - 8, $cy + $r + 1.5);
+            $pdf->Cell(($r + 8) * 2, 3, 'Validé par : ' . $validatorName, 0, 0, 'C');
+        }
     }
 
     /**

@@ -127,6 +127,7 @@ class AdminRequestController extends Controller
 
         $stampedCount = 0;
         $stampFailed = [];
+        $validatorName = $request->user()->numero_identifiant;
 
         foreach ($studentRequest->files as $file) {
 
@@ -146,7 +147,7 @@ class AdminRequestController extends Controller
                     mkdir($absDir, 0755, true);
                 }
 
-                $ok = $this->stampService->stampPdf($absIn, $absOut);
+                $ok = $this->stampService->stampPdf($absIn, $absOut, $validatorName);
 
                 if ($ok) {
                     $file->update([
