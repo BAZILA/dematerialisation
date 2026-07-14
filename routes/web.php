@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminRequestController;
 use App\Http\Controllers\RequestTypeController;
 use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\AcademicController;
+use App\Http\Controllers\IdentityController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -73,6 +74,17 @@ Route::middleware('auth')->group(function () {
             Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
             Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
             Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
+        });
+
+        // Identités — import / export
+        Route::middleware('permission:identites.importer')->prefix('identites')->name('identites.')->group(function () {
+            Route::get('/', [IdentityController::class, 'index'])->name('index');
+            Route::post('/bacheliers/import', [IdentityController::class, 'importBacheliers'])->name('bacheliers.import');
+            Route::get('/bacheliers/export', [IdentityController::class, 'exportBacheliers'])->name('bacheliers.export');
+            Route::get('/bacheliers/modele', [IdentityController::class, 'templateBacheliers'])->name('bacheliers.template');
+            Route::post('/anciens/import', [IdentityController::class, 'importAnciens'])->name('anciens.import');
+            Route::get('/anciens/export', [IdentityController::class, 'exportAnciens'])->name('anciens.export');
+            Route::get('/anciens/modele', [IdentityController::class, 'templateAnciens'])->name('anciens.template');
         });
 
         // Demandes & dépôts

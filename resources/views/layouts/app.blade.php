@@ -440,6 +440,11 @@
                             <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
                         </a>
                     @endcan
+                    @can('identites.importer')
+                        <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import/export)">
+                            <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités (import/export)</span>
+                        </a>
+                    @endcan
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
