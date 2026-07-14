@@ -12,7 +12,7 @@
                 <div class="text-center mb-4">
                     <div class="icon-box mx-auto mb-3"
                         style="width:72px;height:72px;font-size:1.8rem;
-                            background:var(--em-dim);border:1px solid rgba(27,58,107,.22);">
+                            background:var(--em-dim);border:1px solid rgba(79,70,229,.22);">
                         <i class="fas fa-user-check" style="color:var(--em);"></i>
                     </div>
                     <h2 style="font-family:var(--font-head);font-size:22px;color:var(--t1);margin-bottom:4px;">
