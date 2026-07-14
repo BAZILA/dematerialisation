@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Accueil') — UK Démat</title>
+    <link rel="icon" href="{{ asset('assets/uk/logo.ico') }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,14 +29,14 @@
             --line-mid: #D3DAE6;
 
             /* Accent (indigo) — alias historiques --brand / --em */
-            --brand: #4F46E5;
-            --brand-600: #4338CA;
-            --em: #4F46E5;
-            --em-dim: rgba(79, 70, 229, .10);
-            --em-glow: rgba(79, 70, 229, .30);
+            --brand: #1A56A8;
+            --brand-600: #14468A;
+            --em: #1A56A8;
+            --em-dim: rgba(26, 86, 168, .10);
+            --em-glow: rgba(26, 86, 168, .30);
 
-            --green: #16A34A;
-            --green-dim: rgba(22, 163, 74, .12);
+            --green: #2F9E33;
+            --green-dim: rgba(47, 158, 51, .12);
             --amber: #B45309;
             --amber-dim: rgba(180, 83, 9, .12);
             --red: #DC2626;
@@ -112,13 +113,14 @@
         }
 
         .sb-logo {
-            width: 38px; height: 38px;
-            background: linear-gradient(135deg, var(--brand) 0%, #7C73FF 100%);
+            width: 40px; height: 40px;
+            background: #fff;
             border-radius: 11px;
             display: flex; align-items: center; justify-content: center;
-            color: #fff; font-size: 17px; flex-shrink: 0;
-            box-shadow: 0 6px 16px rgba(79, 70, 229, .45);
+            flex-shrink: 0; overflow: hidden; padding: 3px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
         }
+        .sb-logo img { width: 100%; height: 100%; object-fit: contain; }
 
         .sb-brand-name {
             font-family: var(--font-head);
@@ -127,14 +129,13 @@
             white-space: nowrap;
         }
 
-        .sb-nav { flex: 1; padding: 12px 12px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
-        .sb-nav::-webkit-scrollbar { width: 6px; }
-        .sb-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 99px; }
+        .sb-nav { flex: 1; padding: 10px 12px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+        .sb-nav::-webkit-scrollbar { display: none; }
 
         .sb-section {
             font-size: 10px; font-weight: 700; letter-spacing: .12em;
             text-transform: uppercase; color: var(--sb-muted);
-            padding: 16px 12px 7px; white-space: nowrap;
+            padding: 11px 12px 5px; white-space: nowrap;
         }
 
         .sb-link {
@@ -149,8 +150,8 @@
         .sb-link:hover { color: var(--sb-text-hover); background: rgba(255, 255, 255, .05); }
         .sb-link.active {
             color: #fff;
-            background: linear-gradient(90deg, var(--brand) 0%, #6D64F0 100%);
-            box-shadow: 0 6px 16px rgba(79, 70, 229, .4);
+            background: linear-gradient(90deg, #1A56A8 0%, #2F9E33 100%);
+            box-shadow: 0 6px 16px rgba(26, 86, 168, .4);
         }
 
         .sb-icon {
@@ -259,7 +260,7 @@
            ║  GUEST (login / register)                      ║
            ╚═══════════════════════════════════════════════╝ */
         .sb-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px); z-index: 299; }
-        body.guest-mode { background: radial-gradient(1200px 600px at 20% -10%, #E7E9FF 0%, transparent 55%), radial-gradient(1000px 500px at 100% 10%, #E0F2FE 0%, transparent 50%), #F1F5F9; }
+        body.guest-mode { background: radial-gradient(1200px 600px at 15% -10%, #DCEBFF 0%, transparent 55%), radial-gradient(1000px 500px at 100% 10%, #DDF3E0 0%, transparent 50%), #F1F5F9; }
         body.guest-mode .sb, body.guest-mode .sb-overlay { display: none !important; }
         body.guest-mode .main { margin-left: 0; }
         body.guest-mode .topbar { display: none; }
@@ -403,7 +404,7 @@
         <aside class="sb" id="sb">
             <div class="sb-head">
                 <a href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('student.dashboard') }}"
-                    class="sb-logo" title="Accueil"><i class="fas fa-graduation-cap"></i></a>
+                    class="sb-logo" title="Accueil"><img src="{{ asset('assets/uk/logo-bg.png') }}" alt="UK"></a>
                 <span class="sb-brand-name">UK Démat</span>
             </div>
 
