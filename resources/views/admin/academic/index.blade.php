@@ -15,6 +15,31 @@
         </button>
     </div>
 
+    {{-- Domaines --}}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="fas fa-shapes" style="color:var(--brand);"></i> <strong class="ms-1">Domaines</strong>
+                <span class="text-muted small ms-2 d-none d-md-inline">Servent au remplissage du verso des fiches de dépôt.</span></span>
+            <button class="btn btn-sm btn-outline-primary" onclick="openDomaine('create')" data-bs-toggle="modal" data-bs-target="#modalDomaine"><i class="fas fa-plus"></i> Domaine</button>
+        </div>
+        <div class="card-body d-flex flex-wrap gap-2">
+            @forelse ($domaines as $d)
+                <span class="badge bg-secondary d-inline-flex align-items-center gap-2" style="font-size:12.5px;padding:7px 11px !important;">
+                    <span>{{ $d->nom }}@if ($d->sigle) · {{ $d->sigle }}@endif</span>
+                    <button type="button" class="btn btn-link p-0" style="color:var(--t2);font-size:11px;line-height:1;"
+                        onclick="openDomaine('edit', this)" data-bs-toggle="modal" data-bs-target="#modalDomaine"
+                        data-url="{{ route('admin.academique.domaines.update', $d) }}" data-nom="{{ $d->nom }}" data-sigle="{{ $d->sigle }}" data-active="{{ $d->is_active ? 1 : 0 }}"><i class="fas fa-pen"></i></button>
+                    <form method="POST" action="{{ route('admin.academique.domaines.destroy', $d) }}" onsubmit="return confirm('Supprimer ce domaine ?')" style="display:inline;">
+                        @csrf @method('DELETE')
+                        <button class="btn btn-link p-0" style="color:var(--red);font-size:11px;line-height:1;"><i class="fas fa-times"></i></button>
+                    </form>
+                </span>
+            @empty
+                <span class="text-muted small">Aucun domaine. Ajoutez-en pour les proposer au dépôt.</span>
+            @endforelse
+        </div>
+    </div>
+
     @forelse ($facultes as $fac)
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -83,12 +108,14 @@
                                                     <td><strong>{{ $p->nom }}</strong>
                                                         @if ($p->sigle)<span class="badge bg-secondary ms-1">{{ $p->sigle }}</span>@endif
                                                     </td>
-                                                    <td><span class="badge bg-info">{{ $p->grade_label }}</span></td>
+                                                    <td><span class="badge bg-info">{{ $p->grade_label }}</span>
+                                                        @if ($p->domaine)<span class="badge bg-secondary ms-1" title="Domaine">{{ $p->domaine->sigle ?? $p->domaine->nom }}</span>@endif
+                                                    </td>
                                                     <td class="text-muted small">{{ implode(' · ', $p->semestres()) }}</td>
                                                     <td class="text-end" style="white-space:nowrap;">
                                                         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalParcours"
                                                             onclick="openParcours('edit', this)" data-url="{{ route('admin.academique.parcours.update', $p) }}"
-                                                            data-departement="{{ $p->departement_id }}" data-nom="{{ $p->nom }}" data-sigle="{{ $p->sigle }}" data-grade="{{ $p->grade }}" data-active="{{ $p->is_active ? 1 : 0 }}">
+                                                            data-departement="{{ $p->departement_id }}" data-nom="{{ $p->nom }}" data-sigle="{{ $p->sigle }}" data-grade="{{ $p->grade }}" data-domaine="{{ $p->domaine_id }}" data-active="{{ $p->is_active ? 1 : 0 }}">
                                                             <i class="fas fa-pen"></i>
                                                         </button>
                                                         <form method="POST" action="{{ route('admin.academique.parcours.destroy', $p) }}" class="d-inline" onsubmit="return confirm('Supprimer ce parcours ?')">
@@ -201,9 +228,42 @@
                                     @endforeach
                                 </select></div>
                         </div>
+                        <div class="mt-3"><label class="form-label">Domaine <span class="text-muted small">(verso des dépôts)</span></label>
+                            <select class="form-select" name="domaine_id" id="par_domaine">
+                                <option value="">— Aucun —</option>
+                                @foreach ($domaines as $d)
+                                    <option value="{{ $d->id }}">{{ $d->nom }}</option>
+                                @endforeach
+                            </select></div>
                         <div class="form-check form-switch mt-3" id="par_active_wrap" style="display:none;">
                             <input class="form-check-input" type="checkbox" name="is_active" value="1" id="par_active" checked>
                             <label class="form-check-label" for="par_active">Actif</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-primary btn-sm" data-loading-text="Enregistrement…"><i class="fas fa-save"></i> Enregistrer</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- ═══ Modal Domaine ═══ --}}
+    <div class="modal fade" id="modalDomaine" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="formDomaine" method="POST">
+                    @csrf
+                    <input type="hidden" name="_method" id="dom_method" value="POST">
+                    <div class="modal-header"><h6 class="modal-title" id="domTitle">Nouveau domaine</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3"><label class="form-label">Nom <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="nom" required></div>
+                        <div><label class="form-label">Sigle</label>
+                            <input type="text" class="form-control" name="sigle"></div>
+                        <div class="form-check form-switch mt-3" id="dom_active_wrap" style="display:none;">
+                            <input class="form-check-input" type="checkbox" name="is_active" value="1" id="dom_active" checked>
+                            <label class="form-check-label" for="dom_active">Actif</label>
                         </div>
                     </div>
                     <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
@@ -220,6 +280,7 @@
             facStore: "{{ route('admin.academique.facultes.store') }}",
             depStore: "{{ route('admin.academique.departements.store') }}",
             parStore: "{{ route('admin.academique.parcours.store') }}",
+            domStore: "{{ route('admin.academique.domaines.store') }}",
         };
 
         function openFaculte(mode, el) {
@@ -260,9 +321,24 @@
             if (mode === 'edit') {
                 f.action = el.dataset.url; document.getElementById('par_method').value = 'PUT';
                 f.nom.value = el.dataset.nom; f.sigle.value = el.dataset.sigle || ''; f.grade.value = el.dataset.grade;
+                document.getElementById('par_domaine').value = el.dataset.domaine || '';
                 document.getElementById('par_active').checked = el.dataset.active === '1';
             } else {
                 f.action = ACAD.parStore; document.getElementById('par_method').value = 'POST';
+            }
+        }
+
+        function openDomaine(mode, el) {
+            const f = document.getElementById('formDomaine');
+            f.reset();
+            document.getElementById('domTitle').textContent = mode === 'edit' ? 'Modifier le domaine' : 'Nouveau domaine';
+            document.getElementById('dom_active_wrap').style.display = mode === 'edit' ? '' : 'none';
+            if (mode === 'edit') {
+                f.action = el.dataset.url; document.getElementById('dom_method').value = 'PUT';
+                f.nom.value = el.dataset.nom; f.sigle.value = el.dataset.sigle || '';
+                document.getElementById('dom_active').checked = el.dataset.active === '1';
+            } else {
+                f.action = ACAD.domStore; document.getElementById('dom_method').value = 'POST';
             }
         }
     </script>

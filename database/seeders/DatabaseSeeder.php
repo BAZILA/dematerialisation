@@ -11,6 +11,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,           // rôles & permissions (Spatie)
             SettingSeeder::class,        // réglages de la plateforme
+            DomaineSeeder::class,        // domaines (transverses, verso des dépôts)
             AcademicSeeder::class,       // référentiel académique (facultés/départements/parcours)
             AnneeAcademiqueSeeder::class, // années académiques + fenêtres d'ouverture
             BachelierSeeder::class,

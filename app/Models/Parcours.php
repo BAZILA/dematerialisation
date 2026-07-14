@@ -8,7 +8,7 @@ class Parcours extends Model
 {
     protected $table = 'parcours';
 
-    protected $fillable = ['departement_id', 'nom', 'sigle', 'grade', 'is_active'];
+    protected $fillable = ['departement_id', 'domaine_id', 'nom', 'sigle', 'grade', 'is_active'];
 
     protected $casts = ['is_active' => 'boolean'];
 
@@ -24,6 +24,11 @@ class Parcours extends Model
     public function departement()
     {
         return $this->belongsTo(Departement::class);
+    }
+
+    public function domaine()
+    {
+        return $this->belongsTo(Domaine::class);
     }
 
     public function getGradeLabelAttribute(): string

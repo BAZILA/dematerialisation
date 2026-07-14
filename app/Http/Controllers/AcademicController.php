@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Departement;
+use App\Models\Domaine;
 use App\Models\Faculte;
 use App\Models\Parcours;
 use Illuminate\Http\Request;
@@ -11,9 +12,10 @@ class AcademicController extends Controller
 {
     public function index()
     {
-        $facultes = Faculte::with(['departements.parcours'])->orderBy('nom')->get();
+        $facultes = Faculte::with(['departements.parcours.domaine'])->orderBy('nom')->get();
+        $domaines = Domaine::orderBy('nom')->get();
 
-        return view('admin.academic.index', compact('facultes'));
+        return view('admin.academic.index', compact('facultes', 'domaines'));
     }
 
     /* ── Facultés / Instituts ─────────────────────────────── */
@@ -93,6 +95,7 @@ class AcademicController extends Controller
             'nom'            => 'required|string|max:200',
             'sigle'          => 'nullable|string|max:30',
             'grade'          => 'required|in:licence,master,doctorat,specialisation,certificat',
+            'domaine_id'     => 'nullable|exists:domaines,id',
         ]);
         Parcours::create($data + ['is_active' => true]);
 
@@ -106,6 +109,7 @@ class AcademicController extends Controller
             'nom'            => 'required|string|max:200',
             'sigle'          => 'nullable|string|max:30',
             'grade'          => 'required|in:licence,master,doctorat,specialisation,certificat',
+            'domaine_id'     => 'nullable|exists:domaines,id',
             'is_active'      => 'nullable|boolean',
         ]);
         $parcours->update($data + ['is_active' => $request->boolean('is_active')]);
@@ -118,5 +122,37 @@ class AcademicController extends Controller
         $parcours->delete();
 
         return back()->with('success', 'Parcours supprimé.');
+    }
+
+    /* ── Domaines (référentiel transverse, sert au verso des dépôts) ── */
+
+    public function storeDomaine(Request $request)
+    {
+        $data = $request->validate([
+            'nom'   => 'required|string|max:200',
+            'sigle' => 'nullable|string|max:30',
+        ]);
+        Domaine::create($data + ['is_active' => true]);
+
+        return back()->with('success', 'Domaine ajouté.');
+    }
+
+    public function updateDomaine(Request $request, Domaine $domaine)
+    {
+        $data = $request->validate([
+            'nom'       => 'required|string|max:200',
+            'sigle'     => 'nullable|string|max:30',
+            'is_active' => 'nullable|boolean',
+        ]);
+        $domaine->update($data + ['is_active' => $request->boolean('is_active')]);
+
+        return back()->with('success', 'Domaine mis à jour.');
+    }
+
+    public function destroyDomaine(Domaine $domaine)
+    {
+        $domaine->delete();
+
+        return back()->with('success', 'Domaine supprimé.');
     }
 }

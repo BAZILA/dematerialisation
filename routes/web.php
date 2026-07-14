@@ -76,6 +76,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
             Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
             Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
+            Route::post('/domaines', [AcademicController::class, 'storeDomaine'])->name('domaines.store');
+            Route::put('/domaines/{domaine}', [AcademicController::class, 'updateDomaine'])->name('domaines.update');
+            Route::delete('/domaines/{domaine}', [AcademicController::class, 'destroyDomaine'])->name('domaines.destroy');
         });
 
         // Années académiques & fenêtres d'ouverture
