@@ -471,6 +471,11 @@
                             <span class="sb-icon"><i class="fas fa-users-gear"></i></span><span class="sb-label">Utilisateurs</span>
                         </a>
                     @endcan
+                    @can('roles.gerer')
+                        <a href="{{ route('admin.roles.index') }}" class="sb-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" title="Rôles & permissions">
+                            <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Rôles &amp; permissions</span>
+                        </a>
+                    @endcan
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>

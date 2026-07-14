@@ -11,6 +11,7 @@ use App\Http\Controllers\AcademicController;
 use App\Http\Controllers\AnneeController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\RolePermissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -111,6 +112,14 @@ Route::middleware('auth')->group(function () {
             Route::put('/{user}', [UserController::class, 'update'])->name('update');
             Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
             Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
+        });
+
+        // Rôles & permissions
+        Route::middleware('permission:roles.gerer')->prefix('roles')->name('roles.')->group(function () {
+            Route::get('/', [RolePermissionController::class, 'index'])->name('index');
+            Route::post('/', [RolePermissionController::class, 'store'])->name('store');
+            Route::put('/{role}', [RolePermissionController::class, 'update'])->name('update');
+            Route::delete('/{role}', [RolePermissionController::class, 'destroy'])->name('destroy');
         });
 
         // Demandes & dépôts
