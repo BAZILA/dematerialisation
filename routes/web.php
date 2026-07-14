@@ -8,6 +8,7 @@ use App\Http\Controllers\AdminRequestController;
 use App\Http\Controllers\RequestTypeController;
 use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\AcademicController;
+use App\Http\Controllers\AnneeController;
 use App\Http\Controllers\IdentityController;
 use Illuminate\Support\Facades\Route;
 
@@ -74,6 +75,17 @@ Route::middleware('auth')->group(function () {
             Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
             Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
             Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
+        });
+
+        // Années académiques & fenêtres d'ouverture
+        Route::middleware('permission:annees.gerer')->prefix('annees')->name('annees.')->group(function () {
+            Route::get('/', [AnneeController::class, 'index'])->name('index');
+            Route::post('/', [AnneeController::class, 'store'])->name('store');
+            Route::put('/{annee}', [AnneeController::class, 'update'])->name('update');
+            Route::post('/{annee}/activer', [AnneeController::class, 'activate'])->name('activate');
+            Route::delete('/{annee}', [AnneeController::class, 'destroy'])->name('destroy');
+            Route::post('/{annee}/periodes', [AnneeController::class, 'savePeriode'])->name('periodes.save');
+            Route::delete('/periodes/{periode}', [AnneeController::class, 'destroyPeriode'])->name('periodes.destroy');
         });
 
         // Identités — import / export

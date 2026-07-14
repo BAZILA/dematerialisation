@@ -451,6 +451,21 @@
                             <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
                         </a>
                     @endcan
+                    @can('annees.gerer')
+                        <a href="{{ route('admin.annees.index') }}" class="sb-link {{ request()->routeIs('admin.annees.*') ? 'active' : '' }}" title="Années académiques">
+                            <span class="sb-icon"><i class="fas fa-calendar-days"></i></span><span class="sb-label">Années académiques</span>
+                        </a>
+                    @endcan
+                    @can('identites.importer')
+                        <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import / export)">
+                            <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
+                        </a>
+                    @endcan
+                    @can('academique.gerer')
+                        <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
+                            <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
+                        </a>
+                    @endcan
                     @can('identites.importer')
                         <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import/export)">
                             <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités (import/export)</span>

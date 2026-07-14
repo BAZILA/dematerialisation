@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,           // rôles & permissions (Spatie)
             SettingSeeder::class,        // réglages de la plateforme
             AcademicSeeder::class,       // référentiel académique (facultés/départements/parcours)
+            AnneeAcademiqueSeeder::class, // années académiques + fenêtres d'ouverture
             BachelierSeeder::class,
             AncienEtudiantSeeder::class,
             RequestTypeSeeder::class,    // types de documents par catégorie
