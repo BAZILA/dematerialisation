@@ -11,6 +11,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,           // rôles & permissions (Spatie)
             SettingSeeder::class,        // réglages de la plateforme
+            AcademicSeeder::class,       // référentiel académique (facultés/départements/parcours)
             BachelierSeeder::class,
             AncienEtudiantSeeder::class,
             RequestTypeSeeder::class,    // types de documents par catégorie

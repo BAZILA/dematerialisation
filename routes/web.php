@@ -7,6 +7,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminRequestController;
 use App\Http\Controllers\RequestTypeController;
 use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\AcademicController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -59,6 +60,20 @@ Route::middleware('auth')->group(function () {
         Route::put('/request-types/{requestType}', [RequestTypeController::class, 'update'])->name('request-types.update');
         Route::delete('/request-types/{requestType}', [RequestTypeController::class, 'destroy'])->name('request-types.destroy');
         Route::patch('/request-types/{requestType}/toggle', [RequestTypeController::class, 'toggleActive'])->name('request-types.toggle');
+
+        // Référentiel académique
+        Route::middleware('permission:academique.gerer')->prefix('academique')->name('academique.')->group(function () {
+            Route::get('/', [AcademicController::class, 'index'])->name('index');
+            Route::post('/facultes', [AcademicController::class, 'storeFaculte'])->name('facultes.store');
+            Route::put('/facultes/{faculte}', [AcademicController::class, 'updateFaculte'])->name('facultes.update');
+            Route::delete('/facultes/{faculte}', [AcademicController::class, 'destroyFaculte'])->name('facultes.destroy');
+            Route::post('/departements', [AcademicController::class, 'storeDepartement'])->name('departements.store');
+            Route::put('/departements/{departement}', [AcademicController::class, 'updateDepartement'])->name('departements.update');
+            Route::delete('/departements/{departement}', [AcademicController::class, 'destroyDepartement'])->name('departements.destroy');
+            Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
+            Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
+            Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
+        });
 
         // Demandes & dépôts
         Route::get('/requests/{category?}', [AdminRequestController::class, 'index'])->name('requests.index');

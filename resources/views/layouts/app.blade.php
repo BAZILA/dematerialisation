@@ -435,6 +435,11 @@
                     <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
                         <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
                     </a>
+                    @can('academique.gerer')
+                        <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
+                            <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
+                        </a>
+                    @endcan
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
