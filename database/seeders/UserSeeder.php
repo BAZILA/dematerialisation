@@ -10,17 +10,18 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        // Compte administrateur
-        User::firstOrCreate(
+        // Compte super-administrateur
+        $admin = User::firstOrCreate(
             ['numero_identifiant' => 'ADMIN001'],
             [
-                'email'         => 'admin@admission.com',
+                'email'         => 'admin@uk.local',
                 'password'      => Hash::make('admin123456'),
-                'role'          => 'admin',
+                'role'          => 'super_admin',
                 'type_etudiant' => null,
                 'is_active'     => true,
             ]
         );
+        $admin->syncRoles(['super_admin']);
 
         /*
          * NOTE : Les comptes étudiants ne sont plus créés manuellement.

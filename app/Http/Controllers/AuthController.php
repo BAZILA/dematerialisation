@@ -177,10 +177,11 @@ class AuthController extends Controller
             'numero_identifiant' => $identifiant,
             'email'              => $request->email,
             'password'           => Hash::make($request->password),
-            'role'               => 'student',
+            'role'               => 'etudiant',
             'type_etudiant'      => $type,
             'is_active'          => true,
         ]);
+        $user->assignRole('etudiant');
 
         // Création du profil étudiant
         $studentData = [

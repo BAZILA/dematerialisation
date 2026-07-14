@@ -5,18 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasRoles;
 
     protected $fillable = [
         'numero_identifiant',
         'email',
         'password',
-        'role',
+        'role',           // rôle principal dénormalisé (affichage / redirection rapide)
         'type_etudiant',
-        'is_active'
+        'is_active',
     ];
 
     protected $hidden = [
@@ -26,6 +27,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_active'         => 'boolean',
     ];
 
     public function student()
@@ -33,13 +35,34 @@ class User extends Authenticatable
         return $this->hasOne(Student::class);
     }
 
-    public function isAdmin()
+    /* ── Helpers de rôle ─────────────────────────────────────────
+       L'autorité des permissions est Spatie ; le champ `role` reste
+       un rôle principal pratique pour l'affichage et la redirection. */
+
+    /** Personnel du back-office (toute personne y ayant accès). */
+    public function isStaff(): bool
     {
-        return $this->role === 'admin';
+        return $this->can('acceder-backoffice');
     }
 
-    public function isStudent()
+    /** Compat : « admin » = membre du personnel back-office. */
+    public function isAdmin(): bool
     {
-        return $this->role === 'student';
+        return $this->isStaff();
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('super_admin');
+    }
+
+    public function isStudent(): bool
+    {
+        return $this->role === 'etudiant' || $this->hasRole('etudiant');
+    }
+
+    public function isCandidat(): bool
+    {
+        return $this->role === 'candidat' || $this->hasRole('candidat');
     }
 }

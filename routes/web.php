@@ -31,7 +31,7 @@ Route::middleware('auth')->group(function () {
     })->name('dashboard');
 
     /* ─── ÉTUDIANT ───────────────────────────────────── */
-    Route::middleware('role:student')->prefix('student')->name('student.')->group(function () {
+    Route::middleware('role:etudiant')->prefix('student')->name('student.')->group(function () {
         Route::get('/dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
 
         // Demandes
@@ -43,7 +43,7 @@ Route::middleware('auth')->group(function () {
     });
 
     /* ─── ADMINISTRATEUR ─────────────────────────────── */
-    Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+    Route::middleware('permission:acceder-backoffice')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
 
         // CRUD types de documents

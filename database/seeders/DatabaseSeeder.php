@@ -9,10 +9,11 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            RoleSeeder::class,           // rôles & permissions (Spatie)
             BachelierSeeder::class,
             AncienEtudiantSeeder::class,
             RequestTypeSeeder::class,    // types de documents par catégorie
-            UserSeeder::class,           // compte administrateur
+            UserSeeder::class,           // compte super-administrateur
         ]);
     }
 }
