@@ -11,6 +11,7 @@ use App\Http\Controllers\AcademicController;
 use App\Http\Controllers\AnneeController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ProcedureController;
 use App\Http\Controllers\RolePermissionController;
 use Illuminate\Support\Facades\Route;
 
@@ -112,6 +113,14 @@ Route::middleware('auth')->group(function () {
             Route::put('/{user}', [UserController::class, 'update'])->name('update');
             Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
             Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
+        });
+
+        // Procédures / opérations dématérialisées (super-admin)
+        Route::middleware('permission:parametres.gerer')->prefix('procedures')->name('procedures.')->group(function () {
+            Route::get('/', [ProcedureController::class, 'index'])->name('index');
+            Route::post('/', [ProcedureController::class, 'store'])->name('store');
+            Route::put('/{procedure}', [ProcedureController::class, 'update'])->name('update');
+            Route::delete('/{procedure}', [ProcedureController::class, 'destroy'])->name('destroy');
         });
 
         // Rôles & permissions

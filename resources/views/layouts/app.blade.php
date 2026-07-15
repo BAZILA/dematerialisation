@@ -448,6 +448,11 @@
                     </a>
 
                     <div class="sb-section">Configuration</div>
+                    @can('parametres.gerer')
+                        <a href="{{ route('admin.procedures.index') }}" class="sb-link {{ request()->routeIs('admin.procedures.*') ? 'active' : '' }}" title="Procédures">
+                            <span class="sb-icon"><i class="fas fa-diagram-project"></i></span><span class="sb-label">Procédures</span>
+                        </a>
+                    @endcan
                     <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
                         <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
                     </a>

@@ -20,6 +20,11 @@ class Procedure extends Model
         'is_active'     => 'boolean',
     ];
 
+    public function requestTypes()
+    {
+        return $this->hasMany(RequestType::class, 'category', 'code');
+    }
+
     protected static function booted(): void
     {
         static::saved(fn () => Cache::forget('procedures.labels'));
