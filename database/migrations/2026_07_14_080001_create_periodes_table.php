@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('periodes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('annee_academique_id')->constrained('annees_academiques')->cascadeOnDelete();
-            $table->enum('operation', ['candidature', 'depot', 'attestation', 'releve', 'diplome', 'duplicat', 'homologation']);
+            $table->string('operation'); // code de procédure (voir table procedures)
             $table->date('date_debut')->nullable();
             $table->date('date_fin')->nullable();
             $table->boolean('is_open')->default(false);

@@ -5,7 +5,7 @@
 @section('content')
 
     @php
-        $cats = \App\Models\RequestType::$categories;
+        $cats = \App\Models\RequestType::categories();
         $catColors = [
             'depot' => 'primary',
             'attestation' => 'success',
@@ -37,7 +37,7 @@
         </a>
         @foreach ($cats as $key => $label)
             <a href="{{ route('admin.requests.index', $key) }}"
-                class="btn btn-sm {{ $category === $key ? 'btn-' . $catColors[$key] : 'btn-outline-secondary' }}">
+                class="btn btn-sm {{ $category === $key ? 'btn-' . ($catColors[$key] ?? 'secondary') : 'btn-outline-secondary' }}">
                 {{ $label }}
             </a>
         @endforeach

@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('request_types', function (Blueprint $table) {
             $table->id();
             $table->string('label');
-            $table->enum('category', ['depot', 'attestation', 'diplome', 'releve', 'duplicat']);
+            $table->string('category'); // code de procédure (voir table procedures)
             $table->enum('type_etudiant', ['nouveau', 'ancien', 'both'])->default('both');
             $table->text('description')->nullable();
             $table->boolean('is_required')->default(true);

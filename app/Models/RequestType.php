@@ -11,7 +11,7 @@ class RequestType extends Model
 
     protected $fillable = [
         'label',
-        'category',
+        'category',       // code de procédure (table procedures)
         'type_etudiant',  // 'nouveau' | 'ancien' | 'both'
         'description',
         'is_required',
@@ -26,27 +26,24 @@ class RequestType extends Model
         'has_stamp'   => 'boolean',
     ];
 
-    /* ──────────────────────────────────────────────────────
-     | Définitions des catégories
-     | depot       → nouveau ET/OU ancien (séparés par type_etudiant)
-     | autres      → ancien UNIQUEMENT
-     ─────────────────────────────────────────────────────── */
+    /* ── Catégories = procédures (dynamiques, gérables depuis l'interface) ── */
 
-    public static array $categories = [
-        'depot'       => 'Dépôt de dossier',
-        'attestation' => "Demande d'attestation",
-        'diplome'     => 'Demande de diplôme',
-        'releve'      => 'Demande de relevé de notes',
-        'duplicat'    => 'Duplicata de carte étudiant',
-    ];
+    /** [code => nom] de toutes les procédures actives. */
+    public static function categories(): array
+    {
+        return Procedure::labels();
+    }
 
-    /** Catégories accessibles à un type d'étudiant donné */
+    /** Procédures accessibles à un type d'étudiant donné (espace authentifié). */
     public static function categoriesFor(string $typeEtudiant): array
     {
-        if ($typeEtudiant === 'nouveau') {
-            return ['depot' => self::$categories['depot']];
-        }
-        return self::$categories;
+        $col = $typeEtudiant === 'nouveau' ? 'pour_nouveaux' : 'pour_anciens';
+
+        return Procedure::where('is_active', true)
+            ->where('requires_auth', true)
+            ->where($col, true)
+            ->orderBy('ordre')->orderBy('id')
+            ->pluck('nom', 'code')->toArray();
     }
 
     /* ── Relations ─────────────────────────────────────── */
@@ -59,14 +56,13 @@ class RequestType extends Model
     /* ── Scopes / helpers ──────────────────────────────── */
 
     /**
-     * Retourne les types actifs pour une catégorie et un profil étudiant.
-     * Pour le dépôt : filtre par type_etudiant (nouveau, ancien, both).
-     * Pour les autres : toujours ancien, donc on retourne tout ce qui est actif.
+     * Types actifs pour une procédure et un profil étudiant.
+     * Une procédure non ouverte aux nouveaux → rien pour un nouveau.
      */
     public static function forCategory(string $category, string $typeEtudiant = 'both'): \Illuminate\Database\Eloquent\Collection
     {
-        // Les demandes (hors dépôt) ne concernent que les anciens
-        if ($category !== 'depot' && $typeEtudiant === 'nouveau') {
+        $proc = Procedure::where('code', $category)->first();
+        if ($typeEtudiant === 'nouveau' && $proc && !$proc->pour_nouveaux) {
             return collect();
         }
 
@@ -85,12 +81,12 @@ class RequestType extends Model
 
     public function getCategoryLabelAttribute(): string
     {
-        return self::$categories[$this->category] ?? $this->category;
+        return self::categories()[$this->category] ?? $this->category;
     }
 
     public function getTypeEtudiantLabelAttribute(): string
     {
-        return match($this->type_etudiant) {
+        return match ($this->type_etudiant) {
             'nouveau' => 'Nouveau seulement',
             'ancien'  => 'Ancien seulement',
             'both'    => 'Nouveau & Ancien',

@@ -152,6 +152,6 @@ class StudentRequest extends Model
 
     public function getCategoryLabelAttribute(): string
     {
-        return RequestType::$categories[$this->category] ?? $this->category;
+        return RequestType::categories()[$this->category] ?? $this->category;
     }
 }

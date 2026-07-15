@@ -4,7 +4,7 @@
 
 @section('content')
     @php
-        $cats = \App\Models\RequestType::$categories;
+        $cats = \App\Models\RequestType::categories();
         $catColors = [
             'depot' => 'primary',
             'attestation' => 'success',
@@ -98,7 +98,7 @@
             @if ($key !== 'depot')
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="tab" href="#td-{{ $key }}" data-tab="{{ $key }}">
-                        <i class="fas {{ $catIcons[$key] }}"></i>
+                        <i class="fas {{ $catIcons[$key] ?? 'fa-file' }}"></i>
                         <span class="d-none d-md-inline ms-1">{{ $label }}</span>
                         @if (($stats["pending_{$key}"] ?? 0) > 0)
                             <span class="badge bg-warning ms-1">{{ $stats["pending_{$key}"] }}</span>

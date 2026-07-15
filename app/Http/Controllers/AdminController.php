@@ -21,7 +21,7 @@ class AdminController extends Controller
 
     public function dashboard()
     {
-        $cats = array_keys(RequestType::$categories);
+        $cats = array_keys(RequestType::categories());
 
         /* ── Stats ── toutes les clés utilisées par la vue ─── */
         $stats = [
@@ -49,7 +49,7 @@ class AdminController extends Controller
         $chartData = [
             'by_category' => collect($cats)->map(fn($c) => [
                 'key' => $c,
-                'label' => RequestType::$categories[$c],
+                'label' => RequestType::categories()[$c],
                 'total' => StudentRequest::where('category', $c)->count(),
             ])->values()->toArray(),
 

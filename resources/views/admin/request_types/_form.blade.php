@@ -27,7 +27,7 @@
         </label>
         <select class="form-select @error('category') is-invalid @enderror" name="category"
             id="cat-{{ $item?->id ?? 'new' }}" onchange="toggleProfile(this)" required>
-            @foreach (\App\Models\RequestType::$categories as $key => $label)
+            @foreach (\App\Models\RequestType::categories() as $key => $label)
                 <option value="{{ $key }}" {{ old('category', $item?->category) === $key ? 'selected' : '' }}>
                     {{ $label }}
                 </option>

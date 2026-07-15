@@ -381,7 +381,7 @@
                                 <div class="card mb-4"
                                     style="border:2px dashed rgba(16,201,122,.25);background:rgba(16,201,122,.03);">
                                     <div class="card-body text-center py-5">
-                                        <i class="fas {{ $catIcons[$key] }}"
+                                        <i class="fas {{ $catIcons[$key] ?? 'fa-file' }}"
                                             style="font-size:3rem;color:rgba(16,201,122,.3);"></i>
                                         <h5 class="fw-bold mt-3" style="color:var(--t1);">{{ $label }}</h5>
                                         <p style="color:var(--t2);max-width:400px;margin:0 auto 20px;">
@@ -392,7 +392,7 @@
                                             action="{{ route('student.requests.create') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="category" value="{{ $key }}">
-                                            <button type="submit" class="btn btn-{{ $catColors[$key] }} btn-lg"
+                                            <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-lg"
                                                 data-loading-text="Création…">
                                                 <i class="fas fa-plus"></i> Créer une demande
                                             </button>
@@ -524,7 +524,7 @@
                                                     </div>
                                                     @if ($canUpload)
                                                         <button type="button"
-                                                            class="btn btn-sm btn-{{ $catColors[$key] }}"
+                                                            class="btn btn-sm btn-{{ $catColors[$key] ?? 'primary' }}"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#up-{{ $key }}-{{ $type->id }}">
                                                             <i class="fas fa-upload"></i> Remplacer
@@ -574,7 +574,7 @@
                                                     </div>
                                                     @if ($canUpload && !$file)
                                                         <button type="button"
-                                                            class="btn btn-sm btn-{{ $catColors[$key] }}"
+                                                            class="btn btn-sm btn-{{ $catColors[$key] ?? 'primary' }}"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#up-{{ $key }}-{{ $type->id }}">
                                                             <i class="fas fa-upload"></i>
@@ -612,7 +612,7 @@
                     <div class="col-lg-4">
                         @if ($req && $req->canEdit())
                             <div class="card sticky-top" style="top:80px;">
-                                <div class="card-header bg-{{ $catColors[$key] }} text-white">
+                                <div class="card-header bg-{{ $catColors[$key] ?? 'primary' }} text-white">
                                     <h6 class="mb-0"><i class="fas fa-paper-plane"></i> Soumettre</h6>
                                 </div>
                                 <div class="card-body">
@@ -645,7 +645,7 @@
                                             action="{{ route('student.requests.submit') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="student_request_id" value="{{ $req->id }}">
-                                            <button type="submit" class="btn btn-{{ $catColors[$key] }} w-100"
+                                            <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100"
                                                 onclick="return confirm('Confirmer la soumission ?')"
                                                 data-loading-text="Soumission…">
                                                 <i class="fas fa-check"></i> Soumettre

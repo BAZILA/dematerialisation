@@ -20,7 +20,7 @@ class RequestTypeController extends Controller
     {
         $types = RequestType::orderBy('category')->orderBy('order')->orderBy('id')
             ->get()->groupBy('category');
-        $categories = RequestType::$categories;
+        $categories = RequestType::categories();
 
         return view('admin.request_types.index', compact('types', 'categories'));
     }

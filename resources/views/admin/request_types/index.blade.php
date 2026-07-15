@@ -33,7 +33,7 @@
             @php
                 $total = ($types->get($key) ?? collect())->count();
                 $actifs = ($types->get($key) ?? collect())->where('is_active', true)->count();
-                $c = $catColors[$key];
+                $c = $catColors[$key] ?? ['bg' => '64748B', 'badge' => 'secondary', 'icon' => 'fa-folder-open'];
             @endphp
             <li class="nav-item">
                 <a class="nav-link {{ $key === $activeTab ? 'active' : '' }}" data-bs-toggle="tab"
@@ -50,7 +50,7 @@
         @foreach ($categories as $key => $label)
             @php
                 $catTypes = ($types->get($key) ?? collect())->sortBy('order');
-                $c = $catColors[$key];
+                $c = $catColors[$key] ?? ['bg' => '64748B', 'badge' => 'secondary', 'icon' => 'fa-folder-open'];
                 $isDepot = $key === 'depot';
             @endphp
 
