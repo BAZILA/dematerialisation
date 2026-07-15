@@ -446,6 +446,11 @@
                     <a href="{{ route('admin.requests.index', ['category' => 'duplicat']) }}" class="sb-link {{ request()->route('category') === 'duplicat' ? 'active' : '' }}" title="Duplicatas carte">
                         <span class="sb-icon"><i class="fas fa-id-card"></i></span><span class="sb-label">Duplicatas carte</span>
                     </a>
+                    @can('candidature.traiter')
+                        <a href="{{ route('admin.candidatures.index') }}" class="sb-link {{ request()->routeIs('admin.candidatures.*') ? 'active' : '' }}" title="Candidatures">
+                            <span class="sb-icon"><i class="fas fa-file-signature"></i></span><span class="sb-label">Candidatures</span>
+                        </a>
+                    @endcan
 
                     <div class="sb-section">Configuration</div>
                     @can('parametres.gerer')

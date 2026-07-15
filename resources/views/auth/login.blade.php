@@ -76,6 +76,10 @@
                     <a href="{{ route('register') }}" style="color:var(--brand);font-weight:600;text-decoration:none;"><i class="fas fa-user-plus"></i> S'inscrire</a>
                 </p>
 
+                <a href="{{ route('candidature.create') }}" class="btn btn-outline-primary w-100 mt-3">
+                    <i class="fas fa-file-signature"></i> Candidature en ligne <span class="text-muted">(sans compte)</span>
+                </a>
+
                 <div class="alert alert-info mt-4 mb-0" style="font-size:12px;">
                     <strong><i class="fas fa-circle-info"></i> Démonstration</strong>
                     <div class="mt-1">Administrateur : <code>ADMIN001</code> / <code>admin123456</code></div>

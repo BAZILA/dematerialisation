@@ -12,6 +12,8 @@ use App\Http\Controllers\AnneeController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProcedureController;
+use App\Http\Controllers\PublicCandidatureController;
+use App\Http\Controllers\CandidatureController;
 use App\Http\Controllers\RolePermissionController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +29,15 @@ Route::middleware('guest')->group(function () {
     Route::post('/register/complete', [AuthController::class, 'completeRegistration'])->name('register.complete.post');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+
+/* ── Candidature publique (soumission ANONYME, sans compte) ── */
+Route::prefix('candidature')->name('candidature.')->group(function () {
+    Route::get('/', [PublicCandidatureController::class, 'create'])->name('create');
+    Route::post('/', [PublicCandidatureController::class, 'store'])->name('store');
+    Route::get('/confirmation/{reference}', [PublicCandidatureController::class, 'confirmation'])->name('confirmation');
+    Route::get('/suivi', [PublicCandidatureController::class, 'suiviForm'])->name('suivi');
+    Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->name('suivi.post');
+});
 
 /* ── Routes protégées ────────────────────────────────── */
 Route::middleware('auth')->group(function () {
@@ -121,6 +132,15 @@ Route::middleware('auth')->group(function () {
             Route::post('/', [ProcedureController::class, 'store'])->name('store');
             Route::put('/{procedure}', [ProcedureController::class, 'update'])->name('update');
             Route::delete('/{procedure}', [ProcedureController::class, 'destroy'])->name('destroy');
+        });
+
+        // Candidatures (traitement par l'agent candidatures)
+        Route::middleware('permission:candidature.traiter')->prefix('candidatures')->name('candidatures.')->group(function () {
+            Route::get('/', [CandidatureController::class, 'index'])->name('index');
+            Route::get('/file/{file}/preview', [CandidatureController::class, 'previewFile'])->name('file.preview');
+            Route::get('/file/{file}/download', [CandidatureController::class, 'downloadFile'])->name('file.download');
+            Route::get('/{candidature}', [CandidatureController::class, 'show'])->name('show');
+            Route::post('/{candidature}/statut', [CandidatureController::class, 'updateStatus'])->name('status');
         });
 
         // Rôles & permissions
