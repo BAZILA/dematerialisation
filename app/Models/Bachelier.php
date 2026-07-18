@@ -10,6 +10,7 @@ class Bachelier extends Model
     use HasFactory;
 
     protected $fillable = [
+        'numero_suivi',
         'nom',
         'prenom',
         'date_naissance',
@@ -18,7 +19,10 @@ class Bachelier extends Model
         'serie_bac',
         'annee_bac',
         'numero_releve',
+        'numero_table',
         'academie',
+        'telephone',
+        'email',
         'is_registered',
     ];
 

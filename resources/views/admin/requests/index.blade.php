@@ -35,7 +35,7 @@
             class="btn btn-sm {{ $category === 'all' ? 'btn-primary' : 'btn-outline-secondary' }}">
             <i class="fas fa-th-list"></i> Toutes
         </a>
-        @foreach ($cats as $key => $label)
+        @foreach (array_intersect_key($cats, array_flip($treatable ?? [])) as $key => $label)
             <a href="{{ route('admin.requests.index', $key) }}"
                 class="btn btn-sm {{ $category === $key ? 'btn-' . ($catColors[$key] ?? 'secondary') : 'btn-outline-secondary' }}">
                 {{ $label }}
@@ -79,7 +79,13 @@
             <span style="color:var(--t1);font-weight:600;">
                 <i class="fas fa-list"></i> Résultats
             </span>
-            <small style="color:var(--t2);">{{ $requests->total() }} demande(s)</small>
+            <div class="d-flex align-items-center gap-3">
+                <small style="color:var(--t2);">{{ $requests->total() }} demande(s)</small>
+                <a href="{{ route('admin.requests.export', $category) }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
+                    class="btn btn-sm btn-success" title="Exporter la liste (Excel) pour le logiciel d'inscription">
+                    <i class="fas fa-file-excel"></i> Exporter
+                </a>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">

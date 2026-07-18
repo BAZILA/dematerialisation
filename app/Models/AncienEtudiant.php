@@ -13,6 +13,7 @@ class AncienEtudiant extends Model
 
     protected $fillable = [
         'numero_carte',
+        'numero_suivi',
         'nom',
         'prenom',
         'date_naissance',
@@ -20,6 +21,9 @@ class AncienEtudiant extends Model
         'sexe',
         'specialite',
         'derniere_universite',
+        'telephone',
+        'email',
+        'adresse',
         'is_registered',
     ];
 

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentRequestController;
+use App\Http\Controllers\StudentDepotController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminRequestController;
 use App\Http\Controllers\RequestTypeController;
@@ -15,6 +16,10 @@ use App\Http\Controllers\ProcedureController;
 use App\Http\Controllers\PublicCandidatureController;
 use App\Http\Controllers\CandidatureController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\PerimetreController;
+use App\Http\Controllers\StatistiqueController;
+use App\Http\Controllers\ArchiveController;
+use App\Http\Controllers\AuditController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -22,21 +27,23 @@ Route::redirect('/', '/dashboard');
 /* ── Auth ────────────────────────────────────────────── */
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+    // Anti-force brute : 5 tentatives / minute / IP
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1')->name('login.post');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Route::post('/register/verify', [AuthController::class, 'verifyIdentity'])->name('register.verify');
+    Route::post('/register/verify', [AuthController::class, 'verifyIdentity'])->middleware('throttle:10,1')->name('register.verify');
     Route::get('/register/complete', [AuthController::class, 'showComplete'])->name('register.complete');
-    Route::post('/register/complete', [AuthController::class, 'completeRegistration'])->name('register.complete.post');
+    Route::post('/register/complete', [AuthController::class, 'completeRegistration'])->middleware('throttle:10,1')->name('register.complete.post');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 /* ── Candidature publique (soumission ANONYME, sans compte) ── */
 Route::prefix('candidature')->name('candidature.')->group(function () {
     Route::get('/', [PublicCandidatureController::class, 'create'])->name('create');
-    Route::post('/', [PublicCandidatureController::class, 'store'])->name('store');
+    // Anti-spam : plafonner les soumissions et le suivi anonymes
+    Route::post('/', [PublicCandidatureController::class, 'store'])->middleware('throttle:6,1')->name('store');
     Route::get('/confirmation/{reference}', [PublicCandidatureController::class, 'confirmation'])->name('confirmation');
     Route::get('/suivi', [PublicCandidatureController::class, 'suiviForm'])->name('suivi');
-    Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->name('suivi.post');
+    Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->middleware('throttle:15,1')->name('suivi.post');
 });
 
 /* ── Routes protégées ────────────────────────────────── */
@@ -52,11 +59,20 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:super_admin')->prefix('super-admin')->name('superadmin.')->group(function () {
         Route::get('/parametres', [SuperAdminController::class, 'settings'])->name('settings');
         Route::post('/parametres', [SuperAdminController::class, 'updateSettings'])->name('settings.update');
+        Route::post('/cachet', [SuperAdminController::class, 'uploadCachet'])->name('cachet.upload');
+        Route::delete('/cachet', [SuperAdminController::class, 'deleteCachet'])->name('cachet.delete');
+        Route::get('/cachet', [SuperAdminController::class, 'cachet'])->name('cachet');
     });
 
     /* ─── ÉTUDIANT ───────────────────────────────────── */
     Route::middleware('role:etudiant')->prefix('student')->name('student.')->group(function () {
         Route::get('/dashboard', [StudentController::class, 'dashboard'])->name('dashboard');
+        Route::post('/contexte/annee', [StudentController::class, 'switchAnnee'])->name('contexte.annee');
+
+        // Assistant de dépôt (contexte académique + études antérieures)
+        Route::get('/depot/nouveau', [StudentDepotController::class, 'start'])->name('depot.start');
+        Route::post('/depot/nouveau', [StudentDepotController::class, 'store'])->name('depot.store');
+        Route::post('/depot/{studentRequest}/etudes', [StudentDepotController::class, 'saveEtudes'])->name('depot.etudes');
 
         // Demandes
         Route::post('/requests/create', [StudentRequestController::class, 'create'])->name('requests.create');
@@ -70,6 +86,20 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:acceder-backoffice')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
         Route::post('/contexte/annee', [AdminController::class, 'switchAnnee'])->name('contexte.annee');
+
+        // Statistiques
+        Route::get('/statistiques', [StatistiqueController::class, 'index'])->name('statistiques.index');
+
+        // Journal d'audit (traçabilité)
+        Route::middleware('permission:audit.consulter')->get('/audit', [AuditController::class, 'index'])->name('audit.index');
+
+        // Archives numériques (rôle archiviste)
+        Route::middleware('permission:archives.consulter')->prefix('archives')->name('archives.')->group(function () {
+            Route::get('/', [ArchiveController::class, 'index'])->name('index');
+            Route::get('/fiche/{file}', [ArchiveController::class, 'downloadFiche'])->name('fiche');
+            Route::get('/dossier/{studentRequest}', [ArchiveController::class, 'downloadDossier'])->name('dossier');
+            Route::match(['get', 'post'], '/lot', [ArchiveController::class, 'downloadLot'])->name('lot');
+        });
 
         // CRUD types de documents
         Route::get('/request-types', [RequestTypeController::class, 'index'])->name('request-types.index');
@@ -101,6 +131,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/', [AnneeController::class, 'store'])->name('store');
             Route::put('/{annee}', [AnneeController::class, 'update'])->name('update');
             Route::post('/{annee}/activer', [AnneeController::class, 'activate'])->name('activate');
+            Route::post('/{annee}/cloner', [AnneeController::class, 'cloner'])->name('cloner');
             Route::delete('/{annee}', [AnneeController::class, 'destroy'])->name('destroy');
             Route::post('/{annee}/periodes', [AnneeController::class, 'savePeriode'])->name('periodes.save');
             Route::delete('/periodes/{periode}', [AnneeController::class, 'destroyPeriode'])->name('periodes.destroy');
@@ -124,6 +155,13 @@ Route::middleware('auth')->group(function () {
             Route::put('/{user}', [UserController::class, 'update'])->name('update');
             Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
             Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
+        });
+
+        // Affectation des périmètres (agent ↔ parcours × semestre)
+        Route::middleware('permission:utilisateurs.gerer')->prefix('perimetres')->name('perimetres.')->group(function () {
+            Route::get('/', [PerimetreController::class, 'index'])->name('index');
+            Route::post('/', [PerimetreController::class, 'store'])->name('store');
+            Route::delete('/{perimetre}', [PerimetreController::class, 'destroy'])->name('destroy');
         });
 
         // Procédures / opérations dématérialisées (super-admin)
@@ -152,6 +190,7 @@ Route::middleware('auth')->group(function () {
         });
 
         // Demandes & dépôts
+        Route::get('/requests-export/{category?}', [AdminRequestController::class, 'export'])->name('requests.export');
         Route::get('/requests/{category?}', [AdminRequestController::class, 'index'])->name('requests.index');
         Route::get('/requests/detail/{studentRequest}', [AdminRequestController::class, 'show'])->name('requests.show');
         Route::post('/requests/{studentRequest}/validate', [AdminRequestController::class, 'validate'])->name('requests.validate');

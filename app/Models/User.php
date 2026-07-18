@@ -38,6 +38,85 @@ class User extends Authenticatable
         return $this->hasOne(Student::class);
     }
 
+    /* ── Périmètres d'affectation (agent ↔ parcours × semestre) ── */
+
+    public function perimetres()
+    {
+        return $this->hasMany(AgentPerimetre::class);
+    }
+
+    /** L'agent est-il restreint à un périmètre ? (0 ligne = couvre tout) */
+    public function hasPerimetres(): bool
+    {
+        return $this->perimetres()->exists();
+    }
+
+    /**
+     * Applique le filtre de périmètre à une requête de StudentRequest.
+     * - aucun périmètre → aucune restriction (voit tout) ;
+     * - sinon → uniquement les dépôts des parcours (× semestres) affectés,
+     *   les demandes sans contexte académique restant visibles.
+     */
+    public function applyPerimeterFilter($query)
+    {
+        if ($this->isSuperAdmin()) {
+            return $query; // le super-admin voit toujours tout
+        }
+
+        $perimetres = $this->perimetres()->get();
+        if ($perimetres->isEmpty()) {
+            return $query; // défaut = tout
+        }
+
+        return $query->where(function ($q) use ($perimetres) {
+            $q->whereNull('parcours_id'); // demandes hors contexte (non-dépôt)
+            foreach ($perimetres as $p) {
+                $q->orWhere(function ($qq) use ($p) {
+                    $qq->where('parcours_id', $p->parcours_id);
+                    if ($p->semestre) {
+                        $qq->where('semestre', $p->semestre);
+                    }
+                });
+            }
+        });
+    }
+
+    /** Procédures (catégories) que l'utilisateur a le droit de traiter. */
+    public function treatableCategories(): array
+    {
+        $codes = \App\Models\Procedure::query()->pluck('code');
+
+        if ($this->isSuperAdmin()) {
+            return $codes->all();
+        }
+
+        return $codes->filter(fn ($code) => $this->can($code . '.traiter'))->values()->all();
+    }
+
+    /** Peut-il traiter cette catégorie précise ? */
+    public function canTreatCategory(string $code): bool
+    {
+        return $this->isSuperAdmin() || $this->can($code . '.traiter');
+    }
+
+    /** L'agent peut-il traiter cette demande (selon son périmètre) ? */
+    public function coversRequest(StudentRequest $sr): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $perimetres = $this->perimetres()->get();
+        if ($perimetres->isEmpty() || $sr->parcours_id === null) {
+            return true; // pas de restriction, ou demande hors contexte
+        }
+
+        return $perimetres->contains(function ($p) use ($sr) {
+            return $p->parcours_id === $sr->parcours_id
+                && ($p->semestre === null || $p->semestre === $sr->semestre);
+        });
+    }
+
     /* ── Helpers de rôle ─────────────────────────────────────────
        L'autorité des permissions est Spatie ; le champ `role` reste
        un rôle principal pratique pour l'affichage et la redirection. */

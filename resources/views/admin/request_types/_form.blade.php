@@ -105,6 +105,18 @@
                 </label>
             </div>
 
+            {{-- Remplit le verso (la fiche) --}}
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="fills_verso" value="1"
+                    id="verso-{{ $item?->id ?? 'new' }}"
+                    {{ old('fills_verso', $item?->fills_verso ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="verso-{{ $item?->id ?? 'new' }}">
+                    <strong>Remplit le verso auto.</strong>
+                    <br><small class="text-muted ">La fiche : verso rempli (études antérieures +
+                        cachet + signature agent). Nécessite « Tamponné ».</small>
+                </label>
+            </div>
+
             {{-- Actif (modification seulement) --}}
             @if ($item)
                 <div class="form-check form-switch">

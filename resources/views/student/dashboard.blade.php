@@ -2,6 +2,70 @@
 @section('page-title', 'Mon Espace')
 @section('page-subtitle', 'Dépôts et demandes')
 
+@section('css')
+    <style>
+        .dash-hero {
+            background: linear-gradient(120deg, var(--brand) 0%, #1f7a48 100%);
+            border-radius: var(--r-lg); padding: 26px 30px; color: #fff;
+            position: relative; overflow: hidden; box-shadow: var(--shadow);
+        }
+        .dash-hero::after { content:''; position:absolute; right:-50px; top:-60px; width:230px; height:230px;
+            background: radial-gradient(circle, rgba(255,255,255,.16), transparent 70%); }
+        .dash-hero h1 { font-family: var(--font-head); font-size: 25px; font-weight: 800; letter-spacing:-.02em; position:relative; }
+        .dash-hero p { opacity: .92; margin-top: 4px; font-size: 14px; position:relative; }
+        .hero-badges { margin-top: 15px; display:flex; gap:9px; flex-wrap:wrap; position:relative; }
+        .hero-chip { background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28);
+            padding: 6px 12px; border-radius: 10px; font-size: 12px; font-weight:600; }
+
+        .stat-grid { display:grid; grid-template-columns: repeat(4,1fr); gap:14px; }
+        .stat-tile { background: var(--surface); border:1px solid var(--line); border-radius: var(--r-lg);
+            padding: 16px 18px; box-shadow: var(--shadow-sm); display:flex; align-items:center; gap:13px; transition: all var(--dur) var(--ease); }
+        .stat-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+        .stat-ic { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:1.15rem; flex-shrink:0; }
+        .stat-n { font-family: var(--font-head); font-size:24px; font-weight:800; line-height:1; color:var(--t1); }
+        .stat-l { font-size:12px; color:var(--t2); margin-top:4px; }
+
+        .qa-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(158px,1fr)); gap:14px; }
+        .qa-tile { background: var(--surface); border:1px solid var(--line); border-radius: var(--r-lg);
+            padding: 17px; text-decoration:none; display:block; box-shadow: var(--shadow-sm); transition: all var(--dur) var(--ease); }
+        .qa-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+        .qa-ic { width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:11px; }
+        .qa-title { font-weight:700; color:var(--t1); font-size:14px; }
+        .qa-sub { font-size:11.5px; color:var(--t3); margin-top:2px; }
+        .sect-label { font-family:var(--font-head); font-weight:700; font-size:13px; letter-spacing:.04em;
+            text-transform:uppercase; color:var(--t3); margin:26px 0 12px; }
+
+        /* Sélecteur d'année dans le hero */
+        .year-switch { position:relative; flex-shrink:0; }
+        .year-label { display:block; font-size:11px; font-weight:600; opacity:.85; margin-bottom:5px; letter-spacing:.03em; }
+        .year-select {
+            background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35);
+            color:#fff; font-weight:600; font-size:13px; border-radius:10px;
+            padding:8px 12px; cursor:pointer; outline:none; min-width:180px;
+            -webkit-appearance:none; appearance:none;
+            background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+            background-repeat:no-repeat; background-position:right 10px center; background-size:14px; padding-right:32px;
+        }
+        .year-select:focus { border-color:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.18); }
+        .year-select option { color:#14243B; background:#fff; }
+
+        @media(max-width:720px){ .stat-grid{grid-template-columns:repeat(2,1fr);} .dash-hero h1{font-size:21px;} }
+
+        /* Études antérieures — cartes responsives */
+        .etu-card { border:1px solid var(--line); border-radius:14px; padding:14px 14px 6px; margin-bottom:12px;
+            background:var(--surface-2); position:relative; }
+        .etu-card .etu-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+        .etu-num { font-size:12px; font-weight:700; color:var(--t2); font-family:var(--font-head); }
+        .etu-grid { display:grid; grid-template-columns:repeat(12,1fr); gap:10px; }
+        .etu-grid .fld { display:flex; flex-direction:column; }
+        .etu-grid label { font-size:11px; color:var(--t3); margin-bottom:3px; font-weight:600; }
+        .c-2 { grid-column:span 2; } .c-3 { grid-column:span 3; } .c-4 { grid-column:span 4; } .c-6 { grid-column:span 6; }
+        .etu-card .form-control, .etu-card .form-select { padding:8px 10px !important; font-size:13px; }
+        .etu-hors { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--t2); white-space:nowrap; }
+        @media(max-width:640px){ .c-2,.c-3,.c-4,.c-6{ grid-column:span 6; } }
+    </style>
+@endsection
+
 @section('content')
     @php
         $cats = \App\Models\RequestType::categoriesFor($typeEtudiant);
@@ -35,27 +99,87 @@
         ];
     @endphp
 
-    {{-- En-tête --}}
-    <div class="card mb-4">
-        <div class="card-body py-3">
-            <div class="d-flex align-items-center gap-3">
-                <div class="icon-box bg-primary text-white" style="width:50px;height:50px;font-size:1.3rem;">
-                    <i class="fas fa-user-graduate"></i>
-                </div>
-                <div>
-                    <h5 class="mb-0 fw-bold" style="color:var(--t1);">
-                        {{ $student->prenom }} {{ $student->nom }}
-                    </h5>
-                    <small style="color:var(--t2);">
-                        <code>{{ Auth::user()->numero_identifiant }}</code> &nbsp;·&nbsp;
-                        <span class="badge bg-{{ $typeEtudiant === 'nouveau' ? 'primary' : 'secondary' }}">
-                            {{ $typeEtudiant === 'nouveau' ? 'Nouveau Bachelier' : 'Ancien Étudiant' }}
-                        </span>
-                    </small>
+    {{-- ═══ Hero ═══ --}}
+    <div class="dash-hero mb-4">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+                <h1>Bonjour, {{ $student->prenom }}</h1>
+                <p>Bienvenue dans votre espace — déposez vos dossiers et suivez vos demandes en ligne.</p>
+                <div class="hero-badges">
+                    <span class="hero-chip"><i class="fas fa-id-card-clip me-1"></i>{{ Auth::user()->numero_identifiant }}</span>
+                    <span class="hero-chip"><i class="fas fa-user-graduate me-1"></i>{{ $typeEtudiant === 'nouveau' ? 'Nouveau Bachelier' : 'Ancien Étudiant' }}</span>
+                    @if ($student->numero_suivi)
+                        <span class="hero-chip"><i class="fas fa-hashtag me-1"></i>Suivi {{ $student->numero_suivi }}</span>
+                    @endif
                 </div>
             </div>
+
+            {{-- Sélecteur d'année de consultation --}}
+            @if ($annees->count() > 0)
+                <form method="POST" action="{{ route('student.contexte.annee') }}" class="year-switch" data-no-loading>
+                    @csrf
+                    <label class="year-label"><i class="fas fa-calendar-days me-1"></i>Année académique</label>
+                    <select name="annee_academique_id" class="year-select" onchange="this.form.submit()">
+                        @foreach ($annees as $a)
+                            <option value="{{ $a->id }}" @selected($anneeContexte && $anneeContexte->id === $a->id)>
+                                {{ $a->libelle }}{{ $a->is_active ? ' (en cours)' : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </form>
+            @endif
         </div>
     </div>
+
+    @if ($isReadOnly)
+        <div class="alert alert-info d-flex align-items-start gap-2 mb-4">
+            <i class="fas fa-clock-rotate-left mt-1"></i>
+            <span>Vous consultez l'année <strong>{{ $anneeContexte->libelle }}</strong> en
+                <strong>lecture seule</strong> : vos dossiers et fiches de cette année restent
+                consultables et téléchargeables, mais aucune nouvelle opération n'est possible.
+                Revenez à l'année en cours pour déposer.</span>
+        </div>
+    @endif
+
+    {{-- ═══ Statistiques ═══ --}}
+    <div class="stat-grid mb-2">
+        @php
+            $tiles = [
+                ['n' => $stats['total'],      'l' => 'Demandes',   'i' => 'fa-folder-open',    'c' => 'var(--brand)',  'bg' => 'var(--em-dim)'],
+                ['n' => $stats['en_attente'], 'l' => 'En attente', 'i' => 'fa-hourglass-half', 'c' => 'var(--amber)',  'bg' => 'var(--amber-dim)'],
+                ['n' => $stats['a_corriger'], 'l' => 'À corriger', 'i' => 'fa-rotate-left',     'c' => 'var(--blue)',   'bg' => 'var(--blue-dim)'],
+                ['n' => $stats['validees'],   'l' => 'Validées',   'i' => 'fa-circle-check',    'c' => '#1f7a24',       'bg' => 'var(--green-dim)'],
+            ];
+        @endphp
+        @foreach ($tiles as $t)
+            <div class="stat-tile">
+                <div class="stat-ic" style="background:{{ $t['bg'] }};color:{{ $t['c'] }};"><i class="fas {{ $t['i'] }}"></i></div>
+                <div>
+                    <div class="stat-n">{{ $t['n'] }}</div>
+                    <div class="stat-l">{{ $t['l'] }}</div>
+                </div>
+            </div>
+        @endforeach
+    </div>
+
+    {{-- ═══ Actions rapides ═══ --}}
+    <div class="sect-label">Actions rapides</div>
+    <div class="qa-grid mb-2">
+        @foreach ($cats as $key => $label)
+            <a href="{{ route('student.dashboard', ['tab' => $key]) }}#st-{{ $key }}" class="qa-tile">
+                <div class="qa-ic" style="background:var(--em-dim);color:var(--brand);">
+                    <i class="fas {{ $catIcons[$key] ?? 'fa-file' }}"></i>
+                </div>
+                <div class="qa-title">{{ $label }}</div>
+                <div class="qa-sub">
+                    @php $c = ($requestsByCategory[$key] ?? collect())->sortByDesc('created_at')->first(); @endphp
+                    {{ $c ? ($slabel[$c->status] ?? 'En cours') : ($key === 'depot' ? 'Déposer mon dossier' : 'Faire une demande') }}
+                </div>
+            </a>
+        @endforeach
+    </div>
+
+    <div class="sect-label">Mes dossiers &amp; demandes</div>
 
     {{-- Onglets --}}
     <ul class="nav nav-tabs mb-0" id="stTabs">
@@ -109,18 +233,48 @@
                                             Uploadez les pièces requises, puis soumettez. L'administration validera
                                             et vos documents tamponnés seront disponibles en téléchargement.
                                         </p>
-                                        <form method="POST"
-                                            action="{{ route('student.requests.create') }}?tab={{ $key }}">
-                                            @csrf
-                                            <input type="hidden" name="category" value="depot">
-                                            <button type="submit" class="btn btn-primary btn-lg"
-                                                data-loading-text="Création…">
+                                        @if ($isReadOnly)
+                                            <span class="badge bg-secondary py-2 px-3">
+                                                <i class="fas fa-lock"></i> Année clôturée — aucun dépôt pour cette année
+                                            </span>
+                                        @else
+                                            <a href="{{ route('student.depot.start') }}" class="btn btn-primary btn-lg">
                                                 <i class="fas fa-folder-plus"></i> Créer mon dossier
-                                            </button>
-                                        </form>
+                                            </a>
+                                        @endif
                                     </div>
                                 </div>
                             @else
+                                {{-- ─── Contexte académique du dépôt ─── --}}
+                                @php $saison = \App\Models\StudentRequest::saison($req->semestre); @endphp
+                                <div class="card mb-4">
+                                    <div class="card-body py-3">
+                                        <div class="d-flex flex-wrap gap-4 align-items-center">
+                                            <div>
+                                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Parcours</div>
+                                                <div style="font-weight:600;color:var(--t1);">
+                                                    {{ $req->parcours->nom ?? '—' }}
+                                                    @if ($req->parcours)<span class="badge bg-secondary ms-1" style="font-size:10px;">{{ $req->parcours->grade_label }}</span>@endif
+                                                </div>
+                                                @if ($req->parcours)
+                                                    <small style="color:var(--t2);">{{ $req->parcours->departement->faculte->nom ?? '' }}</small>
+                                                @endif
+                                            </div>
+                                            <div>
+                                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Année</div>
+                                                <div style="font-weight:600;color:var(--t1);">{{ $req->anneeAcademique->libelle ?? '—' }}</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Semestre</div>
+                                                <div style="font-weight:600;color:var(--t1);">
+                                                    {{ $req->semestre ?? '—' }}
+                                                    @if ($saison)<span class="ms-1" style="color:var(--blue);font-size:12px;"><i class="fas fa-leaf"></i> {{ $saison }}</span>@endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {{-- ─── Bandeau de statut global ─── --}}
                                 @if ($req->isValidated())
                                     <div class="mb-4 p-4 rounded"
@@ -134,7 +288,7 @@
                                                     Validé le {{ $req->validated_at?->format('d/m/Y à H:i') }}.
                                                     @if ($req->validator)
                                                         Par <strong
-                                                            style="color:var(--t1);">{{ $req->validator->numero_identifiant }}</strong>.
+                                                            style="color:var(--t1);">{{ $req->validator->staff_name }}</strong>.
                                                     @endif
                                                     @php $nbStamped = $req->files->where('is_stamped', true)->count(); @endphp
                                                     @if ($nbStamped > 0)
@@ -370,6 +524,71 @@
                                         @endforeach
                                     </div>
                                 </div>
+
+                                {{-- ─── Études antérieures (verso de la fiche) ─── --}}
+                                @php $etudes = $req->etudesAnterieures; @endphp
+                                <div class="card mt-4">
+                                    <div class="card-header d-flex align-items-center justify-content-between">
+                                        <span style="color:var(--t1);font-weight:600;">
+                                            <i class="fas fa-graduation-cap"></i> Études antérieures
+                                        </span>
+                                        <small style="color:var(--t2);">Ces informations rempliront le verso de votre fiche.</small>
+                                    </div>
+                                    <div class="card-body">
+                                        @if ($req->canEdit())
+                                            @php
+                                                $etudesData = $etudes->map(fn ($e) => [
+                                                    'annee_debut' => $e->annee_debut, 'annee_fin' => $e->annee_fin,
+                                                    'universite' => $e->universite, 'domaine' => $e->domaine,
+                                                    'etablissement' => $e->etablissement, 'parcours' => $e->parcours,
+                                                    'credits' => $e->credits,
+                                                ])->values();
+                                            @endphp
+                                            <div id="etudesApp"
+                                                data-save-url="{{ route('student.depot.etudes', $req) }}"
+                                                data-etudes='@json($etudesData)'
+                                                data-ref='@json($refEtudes)'>
+                                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                                    <small style="color:var(--t2);">
+                                                        Seuls <strong>l'année</strong> et les <strong>crédits</strong> sont à saisir —
+                                                        le reste se choisit dans les listes.
+                                                    </small>
+                                                    <span id="etudesStatus" class="small" style="color:var(--t3);"></span>
+                                                </div>
+                                                <div id="etudesList"></div>
+                                                <button type="button" id="addEtude" class="btn btn-sm btn-outline-primary mt-1">
+                                                    <i class="fas fa-plus"></i> Ajouter une année
+                                                </button>
+                                                <small class="d-block mt-2" style="color:var(--t3);">
+                                                    <i class="fas fa-circle-info"></i> Enregistrement automatique. Laissez vide si vous n'avez aucune étude antérieure.
+                                                    Cochez « hors UK » pour une étude effectuée dans un autre établissement.
+                                                </small>
+                                            </div>
+                                        @else
+                                            @if ($etudes->isEmpty())
+                                                <p class="mb-0 small" style="color:var(--t2);">Aucune étude antérieure déclarée.</p>
+                                            @else
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm align-middle mb-0">
+                                                        <thead><tr style="font-size:12px;color:var(--t2);"><th>Période</th><th>Université</th><th>Domaine</th><th>Établissement</th><th>Parcours</th><th>Crédits</th></tr></thead>
+                                                        <tbody>
+                                                            @foreach ($etudes as $e)
+                                                                <tr style="font-size:13px;color:var(--t1);">
+                                                                    <td>{{ $e->periode ?: '—' }}</td>
+                                                                    <td>{{ $e->universite ?: '—' }}</td>
+                                                                    <td>{{ $e->domaine ?: '—' }}</td>
+                                                                    <td>{{ $e->etablissement ?: '—' }}</td>
+                                                                    <td>{{ $e->parcours ?: '—' }}</td>
+                                                                    <td>{{ $e->credits ?? '—' }}</td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            @endif
+                                        @endif
+                                    </div>
+                                </div>
                             @endif {{-- fin $req existant --}}
 
 
@@ -388,15 +607,21 @@
                                             Soumettez votre demande en fournissant les documents requis.
                                             Vous recevrez une date de rendez-vous pour le retrait.
                                         </p>
-                                        <form method="POST"
-                                            action="{{ route('student.requests.create') }}?tab={{ $key }}">
-                                            @csrf
-                                            <input type="hidden" name="category" value="{{ $key }}">
-                                            <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-lg"
-                                                data-loading-text="Création…">
-                                                <i class="fas fa-plus"></i> Créer une demande
-                                            </button>
-                                        </form>
+                                        @if ($isReadOnly)
+                                            <span class="badge bg-secondary py-2 px-3">
+                                                <i class="fas fa-lock"></i> Année clôturée — aucune demande pour cette année
+                                            </span>
+                                        @else
+                                            <form method="POST"
+                                                action="{{ route('student.requests.create') }}?tab={{ $key }}">
+                                                @csrf
+                                                <input type="hidden" name="category" value="{{ $key }}">
+                                                <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-lg"
+                                                    data-loading-text="Création…">
+                                                    <i class="fas fa-plus"></i> Créer une demande
+                                                </button>
+                                            </form>
+                                        @endif
                                     </div>
                                 </div>
                             @elseif($req->isSubmitted())
@@ -470,7 +695,7 @@
                                                 @if ($req->validator)
                                                     <div class="mt-2 small" style="color:var(--t3);">
                                                         Validé par : <strong
-                                                            style="color:var(--t2);">{{ $req->validator->numero_identifiant }}</strong>
+                                                            style="color:var(--t2);">{{ $req->validator->staff_name }}</strong>
                                                     </div>
                                                 @endif
                                             </div>
@@ -645,11 +870,42 @@
                                             action="{{ route('student.requests.submit') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="student_request_id" value="{{ $req->id }}">
-                                            <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100"
-                                                onclick="return confirm('Confirmer la soumission ?')"
-                                                data-loading-text="Soumission…">
-                                                <i class="fas fa-check"></i> Soumettre
-                                            </button>
+                                            @if ($isDepot)
+                                                {{-- Engagement obligatoire avant soumission --}}
+                                                <div class="p-3 rounded mb-3"
+                                                    style="background:var(--surface-2);border:1px solid var(--line);">
+                                                    <div class="small mb-2" style="color:var(--t2);">
+                                                        <i class="fas fa-file-signature"></i>
+                                                        <strong style="color:var(--t1);">Engagement</strong>
+                                                    </div>
+                                                    <p class="small mb-2" style="color:var(--t2);">
+                                                        Je certifie que les informations et pièces fournies sont exactes et
+                                                        authentiques. J'ai <strong>lu et approuvé</strong> les conditions
+                                                        de dépôt.
+                                                    </p>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="engagement"
+                                                            value="1" id="engage-{{ $req->id }}"
+                                                            onchange="document.getElementById('submitBtn-{{ $req->id }}').disabled = !this.checked;">
+                                                        <label class="form-check-label small" for="engage-{{ $req->id }}"
+                                                            style="color:var(--t1);">
+                                                            Lu et approuvé
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" id="submitBtn-{{ $req->id }}"
+                                                    class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100" disabled
+                                                    onclick="return confirm('Confirmer la soumission de votre dépôt ?')"
+                                                    data-loading-text="Soumission…">
+                                                    <i class="fas fa-check"></i> Soumettre
+                                                </button>
+                                            @else
+                                                <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100"
+                                                    onclick="return confirm('Confirmer la soumission ?')"
+                                                    data-loading-text="Soumission…">
+                                                    <i class="fas fa-check"></i> Soumettre
+                                                </button>
+                                            @endif
                                         </form>
                                     @endif
                                     @if ($isDepot && $types->where('has_stamp', true)->isNotEmpty())
@@ -767,6 +1023,134 @@
                     history.replaceState(null, '', url);
                 });
             });
+
+            // ── Études antérieures : composant cartes + listes + auto-save ──
+            const app = document.getElementById('etudesApp');
+            if (app) initEtudes(app);
+
+            function initEtudes(root) {
+                const SAVE_URL = root.dataset.saveUrl;
+                const REF = JSON.parse(root.dataset.ref || '{}');
+                const DATA = JSON.parse(root.dataset.etudes || '[]');
+                const list = root.querySelector('#etudesList');
+                const statusEl = root.querySelector('#etudesStatus');
+                const MIN_ROWS = 4;
+                const SELECT_FIELDS = { universite: REF.universites || [], domaine: REF.domaines || [], etablissement: REF.etablissements || [], parcours: REF.parcours || [] };
+
+                const inList = (field, val) => val && (SELECT_FIELDS[field] || []).some(o => o.value === val);
+                const esc = s => (s ?? '').toString().replace(/"/g, '&quot;');
+
+                function fieldSelect(field, val, hors) {
+                    const opts = SELECT_FIELDS[field] || [];
+                    if (hors) {
+                        return `<input class="form-control" data-f="${field}" value="${esc(val)}" placeholder="Saisir (hors UK)…">`;
+                    }
+                    let html = `<select class="form-select" data-f="${field}"><option value="">— Choisir —</option>`;
+                    opts.forEach(o => { html += `<option value="${esc(o.value)}" ${o.value === val ? 'selected' : ''}>${esc(o.label)}</option>`; });
+                    html += `</select>`;
+                    return html;
+                }
+
+                function cardHtml(e, idx) {
+                    const hors = !!(e.universite && !inList('universite', e.universite)) ||
+                                 !!(e.domaine && !inList('domaine', e.domaine)) ||
+                                 !!(e.etablissement && !inList('etablissement', e.etablissement)) ||
+                                 !!(e.parcours && !inList('parcours', e.parcours));
+                    const c = document.createElement('div');
+                    c.className = 'etu-card';
+                    c.dataset.hors = hors ? '1' : '0';
+                    c.innerHTML = `
+                        <div class="etu-head">
+                            <span class="etu-num">Étude ${idx + 1}</span>
+                            <div class="d-flex align-items-center gap-3">
+                                <label class="etu-hors"><input type="checkbox" class="form-check-input mt-0 chk-hors" ${hors ? 'checked' : ''}> Étude hors UK</label>
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-del" title="Retirer"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                        <div class="etu-grid">
+                            <div class="fld c-3"><label>Année début</label><input class="form-control" data-f="annee_debut" value="${esc(e.annee_debut)}" maxlength="4" inputmode="numeric" placeholder="2024"></div>
+                            <div class="fld c-3"><label>Année fin</label><input class="form-control" data-f="annee_fin" value="${esc(e.annee_fin)}" maxlength="4" inputmode="numeric" placeholder="2025"></div>
+                            <div class="fld c-3"><label>Crédits</label><input class="form-control" data-f="credits" value="${esc(e.credits)}" inputmode="numeric" placeholder="60"></div>
+                            <div class="fld c-3"><label>Université</label><span class="wrap-universite">${fieldSelect('universite', e.universite, hors)}</span></div>
+                            <div class="fld c-6"><label>Domaine</label><span class="wrap-domaine">${fieldSelect('domaine', e.domaine, hors)}</span></div>
+                            <div class="fld c-6"><label>Établissement</label><span class="wrap-etablissement">${fieldSelect('etablissement', e.etablissement, hors)}</span></div>
+                            <div class="fld c-12" style="grid-column:span 12;"><label>Parcours</label><span class="wrap-parcours">${fieldSelect('parcours', e.parcours, hors)}</span></div>
+                        </div>`;
+                    return c;
+                }
+
+                function collect() {
+                    return [...list.querySelectorAll('.etu-card')].map(card => {
+                        const o = {};
+                        card.querySelectorAll('[data-f]').forEach(el => o[el.dataset.f] = el.value.trim());
+                        return o;
+                    }).filter(o => Object.values(o).some(v => v));
+                }
+
+                let timer = null, saving = false;
+                function scheduleSave() {
+                    statusEl.textContent = 'Modifié…';
+                    clearTimeout(timer);
+                    timer = setTimeout(save, 900);
+                }
+                async function save() {
+                    if (saving) { scheduleSave(); return; }
+                    saving = true;
+                    statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement…';
+                    const rows = collect();
+                    const body = new FormData();
+                    body.append('_token', document.querySelector('meta[name=csrf-token]')?.content || '');
+                    rows.forEach((r, i) => Object.entries(r).forEach(([k, v]) => body.append(`lignes[${i}][${k}]`, v)));
+                    try {
+                        const res = await fetch(SAVE_URL, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body });
+                        statusEl.innerHTML = res.ok ? '<i class="fas fa-check text-success"></i> Enregistré' : '<i class="fas fa-triangle-exclamation text-warning"></i> Non enregistré';
+                    } catch (e) {
+                        statusEl.innerHTML = '<i class="fas fa-triangle-exclamation text-warning"></i> Hors ligne';
+                    }
+                    saving = false;
+                }
+
+                function ensureTrailingEmpty() {
+                    const cards = list.querySelectorAll('.etu-card');
+                    const last = cards[cards.length - 1];
+                    const lastFilled = last && [...last.querySelectorAll('[data-f]')].some(el => el.value.trim());
+                    if (!last || lastFilled) addCard({});
+                    renumber();
+                }
+                function renumber() { list.querySelectorAll('.etu-num').forEach((n, i) => n.textContent = 'Étude ' + (i + 1)); }
+
+                function addCard(e) {
+                    const card = cardHtml(e, list.querySelectorAll('.etu-card').length);
+                    list.appendChild(card);
+                    wire(card);
+                }
+                function wire(card) {
+                    card.addEventListener('input', () => { scheduleSave(); ensureTrailingEmpty(); });
+                    card.addEventListener('change', () => scheduleSave());
+                    card.querySelector('.btn-del').addEventListener('click', () => {
+                        card.remove();
+                        if (!list.querySelector('.etu-card')) addCard({});
+                        renumber(); ensureTrailingEmpty(); scheduleSave();
+                    });
+                    card.querySelector('.chk-hors').addEventListener('change', function () {
+                        const hors = this.checked; card.dataset.hors = hors ? '1' : '0';
+                        ['universite', 'domaine', 'etablissement', 'parcours'].forEach(f => {
+                            const wrap = card.querySelector('.wrap-' + f);
+                            const cur = wrap.querySelector('[data-f]').value;
+                            wrap.innerHTML = fieldSelect(f, cur, hors);
+                        });
+                        scheduleSave();
+                    });
+                }
+
+                // Rendu initial : données existantes + lignes vides jusqu'à MIN_ROWS
+                const initial = DATA.length ? DATA.slice() : [];
+                while (initial.length < MIN_ROWS) initial.push({});
+                initial.forEach(e => addCard(e));
+                ensureTrailingEmpty();
+
+                document.getElementById('addEtude').addEventListener('click', () => { addCard({}); renumber(); });
+            }
         })();
     </script>
 @endsection

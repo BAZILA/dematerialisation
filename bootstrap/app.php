@@ -11,6 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // En-têtes de sécurité sur toutes les réponses web
+        $middleware->web(append: [
+            \App\Http\Middleware\SecurityHeaders::class,
+        ]);
+
         // Alias de rôles/permissions (Spatie)
         $middleware->alias([
             'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,

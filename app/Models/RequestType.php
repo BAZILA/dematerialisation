@@ -17,6 +17,7 @@ class RequestType extends Model
         'is_required',
         'is_active',
         'has_stamp',      // tamponné automatiquement à la validation
+        'fills_verso',    // fiche dont le verso est rempli automatiquement
         'order',
     ];
 
@@ -24,6 +25,7 @@ class RequestType extends Model
         'is_required' => 'boolean',
         'is_active'   => 'boolean',
         'has_stamp'   => 'boolean',
+        'fills_verso' => 'boolean',
     ];
 
     /* ── Catégories = procédures (dynamiques, gérables depuis l'interface) ── */

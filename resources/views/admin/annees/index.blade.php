@@ -121,6 +121,24 @@
                             <div class="col-6"><label class="form-label">Début</label><input type="date" class="form-control" name="date_debut"></div>
                             <div class="col-6"><label class="form-label">Fin</label><input type="date" class="form-control" name="date_fin"></div>
                         </div>
+
+                        {{-- Clonage des paramètres (création uniquement) --}}
+                        @if ($annees->isNotEmpty())
+                            <div class="mt-3 p-3 rounded" id="an_clone_box"
+                                style="background:var(--surface-2);border:1px solid var(--line);">
+                                <label class="form-label mb-1"><i class="fas fa-copy"></i> Cloner les paramètres</label>
+                                <select class="form-select" name="cloner_de" id="an_cloner">
+                                    <option value="">— Ne rien cloner —</option>
+                                    @foreach ($annees as $a)
+                                        <option value="{{ $a->id }}">{{ $a->libelle }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted d-block mt-2">
+                                    Reprend les <strong>fenêtres d'ouverture</strong> (dates + état) de l'année choisie.
+                                    Les réglages globaux (cachet, signatures) restent partagés entre les années.
+                                </small>
+                            </div>
+                        @endif
                     </div>
                     <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
                         <button type="submit" class="btn btn-primary btn-sm" data-loading-text="Enregistrement…"><i class="fas fa-save"></i> Enregistrer</button></div>
@@ -165,6 +183,9 @@
             const f = document.getElementById('formAnnee');
             f.reset();
             document.getElementById('anTitle').textContent = mode === 'edit' ? "Modifier l'année" : 'Nouvelle année';
+            // Le clonage n'a de sens qu'à la création
+            const cloneBox = document.getElementById('an_clone_box');
+            if (cloneBox) cloneBox.style.display = (mode === 'edit') ? 'none' : '';
             if (mode === 'edit') {
                 f.action = el.dataset.url;
                 document.getElementById('an_method').value = 'PUT';

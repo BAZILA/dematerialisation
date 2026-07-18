@@ -27,6 +27,11 @@ class SettingSeeder extends Seeder
             // Notifications
             ['key' => 'notifications.email.enabled', 'value' => '1', 'type' => 'boolean', 'group' => 'notifications', 'label' => 'Notifications e-mail'],
             ['key' => 'notifications.sms.enabled', 'value' => '0', 'type' => 'boolean', 'group' => 'notifications', 'label' => 'Notifications SMS'],
+
+            // Recyclage (réinscription après interruption, par dérogation)
+            ['key' => 'recyclage.enabled', 'value' => '1', 'type' => 'boolean', 'group' => 'recyclage', 'label' => 'Recyclage autorisé', 'description' => "Permettre la réinscription des étudiants après interruption."],
+            ['key' => 'recyclage.max_annees', 'value' => '10', 'type' => 'integer', 'group' => 'recyclage', 'label' => "Nombre d'années maximum", 'description' => "Ancienneté maximale (en années depuis le BAC / la 1re inscription) admise en recyclage."],
+            ['key' => 'recyclage.derogation_requise', 'value' => '1', 'type' => 'boolean', 'group' => 'recyclage', 'label' => 'Dérogation requise', 'description' => "Exiger une dérogation pour tout recyclage."],
         ];
 
         foreach ($defaults as $d) {

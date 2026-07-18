@@ -20,13 +20,14 @@ class AnciensExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['numero_carte', 'nom', 'prenom', 'sexe', 'date_naissance', 'lieu_naissance', 'specialite', 'derniere_universite', 'is_registered'];
+        return ['numero_carte', 'numero_suivi', 'nom', 'prenom', 'sexe', 'date_naissance', 'lieu_naissance', 'specialite', 'derniere_universite', 'telephone', 'email', 'adresse', 'is_registered'];
     }
 
     public function map($a): array
     {
         return [
             $a->numero_carte,
+            $a->numero_suivi,
             $a->nom,
             $a->prenom,
             $a->sexe,
@@ -34,6 +35,9 @@ class AnciensExport implements FromCollection, WithHeadings, WithMapping
             $a->lieu_naissance,
             $a->specialite,
             $a->derniere_universite,
+            $a->telephone,
+            $a->email,
+            $a->adresse,
             $a->is_registered ? 'oui' : 'non',
         ];
     }

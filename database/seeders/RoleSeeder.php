@@ -27,6 +27,8 @@ class RoleSeeder extends Seeder
             'identites.importer', 'academique.gerer', 'annees.gerer',
             'parametres.gerer', 'utilisateurs.gerer', 'roles.gerer',
             'perimetres.affecter', 'audit.consulter',
+            // Archives numériques
+            'archives.consulter',
         ];
         foreach ($permissions as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
@@ -43,6 +45,11 @@ class RoleSeeder extends Seeder
             'admin'                   => [
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'identites.importer',
                 'utilisateurs.gerer', 'perimetres.affecter', 'dossiers.consulter', 'audit.consulter',
+                'archives.consulter',
+            ],
+            // Archiviste : consultation et export de l'archive des dossiers validés
+            'archiviste'              => [
+                'acceder-backoffice', 'archives.consulter', 'dossiers.consulter',
             ],
             'gestionnaire_academique' => [
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'dossiers.consulter',

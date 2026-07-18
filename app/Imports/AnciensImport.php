@@ -36,6 +36,7 @@ class AnciensImport implements ToCollection, WithHeadingRow
             }
 
             $data = [
+                'numero_suivi'        => $this->s($row['numero_suivi'] ?? $row['suivi'] ?? null),
                 'nom'                 => $nom,
                 'prenom'              => $prenom,
                 'sexe'                => $sexe,
@@ -43,6 +44,9 @@ class AnciensImport implements ToCollection, WithHeadingRow
                 'lieu_naissance'      => $lieu,
                 'specialite'          => $this->s($row['specialite'] ?? null),
                 'derniere_universite' => $this->s($row['derniere_universite'] ?? null),
+                'telephone'           => $this->s($row['telephone'] ?? $row['tel'] ?? null),
+                'email'               => $this->s($row['email'] ?? null),
+                'adresse'             => $this->s($row['adresse'] ?? null),
             ];
 
             $a = AncienEtudiant::firstOrNew(['numero_carte' => $carte]);

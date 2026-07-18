@@ -13,7 +13,7 @@ class StampService
      * @param  string $outputPath Chemin absolu du PDF de sortie
      * @return bool
      */
-    public function stampPdf(string $inputPath, string $outputPath, ?string $validatorName = null): bool
+    public function stampPdf(string $inputPath, string $outputPath, ?string $validatorName = null, ?string $cachetPath = null): bool
     {
         if (!file_exists($inputPath)) {
             Log::error("StampService: fichier source introuvable — {$inputPath}");
@@ -41,7 +41,12 @@ class StampService
                 $pdf->AddPage($ori, [$size['width'], $size['height']]);
                 $pdf->useTemplate($tpl, 0, 0, $size['width'], $size['height'], true);
 
-                $this->drawStamp($pdf, $size['width'], $size['height'], $validatorName);
+                // Cachet image (si chargé) sur CHAQUE page ; sinon cachet vectoriel de repli
+                if ($cachetPath && file_exists($cachetPath)) {
+                    $this->drawCachetImage($pdf, $size['width'], $size['height'], $cachetPath, $validatorName);
+                } else {
+                    $this->drawStamp($pdf, $size['width'], $size['height'], $validatorName);
+                }
             }
 
             $pdf->Output($outputPath, 'F');
@@ -120,6 +125,34 @@ class StampService
             $pdf->SetFont('helvetica', 'B', 6);
             $pdf->SetXY($cx - $r - 8, $cy + $r + 1.5);
             $pdf->Cell(($r + 8) * 2, 3, 'Validé par : ' . $validatorName, 0, 0, 'C');
+        }
+    }
+
+    /**
+     * Appose l'image de cachet (chargée par le super-admin) en bas à droite
+     * de la page, + le nom du validateur. Utilisé sur CHAQUE page.
+     */
+    private function drawCachetImage(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, string $cachetPath, ?string $validatorName = null): void
+    {
+        $w = 42;                                   // largeur du cachet (hauteur auto)
+        // Zone CENTRE / HAUT, position aléatoire (jamais en bas)
+        $x = ($pw - $w) / 2 + mt_rand(-250, 250) / 10;   // centré ±25 mm
+        $y = mt_rand(400, 1350) / 10;                    // 40 à 135 mm (moitié haute)
+        $angle = mt_rand(-80, 80) / 10;                  // ±8°
+        try {
+            $pdf->StartTransform();
+            $pdf->Rotate($angle, $x + $w / 2, $y + $w / 2);
+            $pdf->Image($cachetPath, $x, $y, $w, 0, '', '', '', false, 300);
+            $pdf->StopTransform();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('StampService cachet image: ' . $e->getMessage());
+        }
+
+        if ($validatorName) {
+            $pdf->SetTextColor(0, 0, 0);
+            $pdf->SetFont('helvetica', '', 6.5);
+            $pdf->SetXY($x - 6, $y - 4);
+            $pdf->Cell($w + 12, 3, 'Validé par : ' . $validatorName, 0, 0, 'C');
         }
     }
 

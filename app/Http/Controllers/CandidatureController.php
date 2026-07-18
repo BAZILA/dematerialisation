@@ -53,6 +53,10 @@ class CandidatureController extends Controller
             'decision_at'   => in_array($data['status'], ['admis', 'refuse'], true) ? now() : null,
         ]);
 
+        \App\Models\AuditLog::record('candidature.decision', $candidature,
+            "Candidature {$candidature->reference} → {$data['status']}",
+            ['status' => $data['status']]);
+
         return back()->with('success', 'Candidature mise à jour.');
     }
 

@@ -20,12 +20,13 @@ class BacheliersExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['nom', 'prenom', 'sexe', 'date_naissance', 'lieu_naissance', 'serie_bac', 'annee_bac', 'numero_releve', 'academie', 'is_registered'];
+        return ['numero_suivi', 'nom', 'prenom', 'sexe', 'date_naissance', 'lieu_naissance', 'serie_bac', 'annee_bac', 'numero_releve', 'numero_table', 'academie', 'telephone', 'email', 'is_registered'];
     }
 
     public function map($b): array
     {
         return [
+            $b->numero_suivi,
             $b->nom,
             $b->prenom,
             $b->sexe,
@@ -34,7 +35,10 @@ class BacheliersExport implements FromCollection, WithHeadings, WithMapping
             $b->serie_bac,
             $b->annee_bac,
             $b->numero_releve,
+            $b->numero_table,
             $b->academie,
+            $b->telephone,
+            $b->email,
             $b->is_registered ? 'oui' : 'non',
         ];
     }

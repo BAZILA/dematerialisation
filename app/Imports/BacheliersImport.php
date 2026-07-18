@@ -35,19 +35,29 @@ class BacheliersImport implements ToCollection, WithHeadingRow
             }
 
             $data = [
+                'numero_suivi'   => $this->s($row['numero_suivi'] ?? $row['suivi'] ?? null),
                 'nom'            => $nom,
                 'prenom'         => $prenom,
                 'sexe'           => $sexe,
                 'date_naissance' => $date,
                 'lieu_naissance' => $lieu,
                 'serie_bac'      => $this->s($row['serie_bac'] ?? null),
-                'annee_bac'      => $this->s($row['annee_bac'] ?? null),
+                'annee_bac'      => $this->s($row['annee_bac'] ?? $row['annee'] ?? null),
                 'numero_releve'  => $this->s($row['numero_releve'] ?? null),
+                'numero_table'   => $this->s($row['numero_table'] ?? $row['n_table'] ?? null),
                 'academie'       => $this->s($row['academie'] ?? null),
+                'telephone'      => $this->s($row['telephone'] ?? $row['tel'] ?? null),
+                'email'          => $this->s($row['email'] ?? null),
             ];
 
-            if ($data['numero_releve']) {
-                $b = Bachelier::firstOrNew(['numero_releve' => $data['numero_releve']]);
+            // Dédoublonnage : priorité au N° de suivi, sinon N° relevé, sinon N° table
+            $key = null;
+            foreach (['numero_suivi', 'numero_releve', 'numero_table'] as $k) {
+                if ($data[$k]) { $key = [$k => $data[$k]]; break; }
+            }
+
+            if ($key) {
+                $b = Bachelier::firstOrNew($key);
                 $existed = $b->exists;
                 $b->fill($data);
                 if (!$existed) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\RequestType;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class RequestTypeController extends Controller
 {
@@ -31,11 +32,12 @@ class RequestTypeController extends Controller
     {
         $data = $request->validate([
             'label' => 'required|string|max:200',
-            'category' => 'required|in:depot,attestation,diplome,releve,duplicat',
+            'category' => ['required', Rule::exists('procedures', 'code')],
             'type_etudiant' => 'required|in:nouveau,ancien,both',
             'description' => 'nullable|string|max:500',
             'is_required' => 'nullable|boolean',
             'has_stamp' => 'nullable|boolean',
+            'fills_verso' => 'nullable|boolean',
             'order' => 'nullable|integer|min:0',
         ]);
 
@@ -50,6 +52,7 @@ class RequestTypeController extends Controller
             'description' => $data['description'] ?? null,
             'is_required' => $request->boolean('is_required', true),
             'has_stamp' => $request->boolean('has_stamp', false),
+            'fills_verso' => $request->boolean('fills_verso', false),
             'is_active' => true,
             'order' => $data['order'] ?? 99,
         ]);
@@ -64,11 +67,12 @@ class RequestTypeController extends Controller
     {
         $data = $request->validate([
             'label' => 'required|string|max:200',
-            'category' => 'required|in:depot,attestation,diplome,releve,duplicat',
+            'category' => ['required', Rule::exists('procedures', 'code')],
             'type_etudiant' => 'required|in:nouveau,ancien,both',
             'description' => 'nullable|string|max:500',
             'is_required' => 'nullable|boolean',
             'has_stamp' => 'nullable|boolean',
+            'fills_verso' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
             'order' => 'nullable|integer|min:0',
         ]);
@@ -84,6 +88,7 @@ class RequestTypeController extends Controller
             'description' => $data['description'] ?? null,
             'is_required' => $request->boolean('is_required', true),
             'has_stamp' => $request->boolean('has_stamp', false),
+            'fills_verso' => $request->boolean('fills_verso', false),
             'is_active' => $request->boolean('is_active', true),
             'order' => $data['order'] ?? $requestType->order,
         ]);

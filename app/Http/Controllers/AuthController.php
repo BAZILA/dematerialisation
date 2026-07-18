@@ -30,6 +30,7 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
+            \App\Models\AuditLog::record('auth.login', Auth::user(), 'Connexion réussie');
             return redirect()->intended('/dashboard');
         }
 
@@ -40,6 +41,7 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        \App\Models\AuditLog::record('auth.logout', Auth::user(), 'Déconnexion');
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

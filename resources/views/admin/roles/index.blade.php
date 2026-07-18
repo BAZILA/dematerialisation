@@ -12,7 +12,8 @@
             'agent_attestation' => 'Agent attestation', 'agent_releve' => 'Agent relevé de notes',
             'agent_homologation' => 'Agent homologation', 'agent_diplome' => 'Agent diplômes',
             'agent_candidature' => 'Agent candidatures', 'agent_financier' => 'Agent financier',
-            'auditeur' => 'Auditeur', 'etudiant' => 'Étudiant', 'candidat' => 'Candidat',
+            'auditeur' => 'Auditeur', 'archiviste' => 'Archiviste',
+            'etudiant' => 'Étudiant', 'candidat' => 'Candidat',
         ];
         $permLabels = [
             'acceder-backoffice'   => 'Accéder au back-office',
@@ -36,11 +37,22 @@
             'roles.gerer'          => 'Gérer les rôles & permissions',
             'perimetres.affecter'  => 'Affecter les périmètres agents',
             'audit.consulter'      => "Consulter le journal d'audit",
+            'archives.consulter'   => 'Consulter les archives numériques',
         ];
+        // Libellé automatique pour les procédures créées ensuite (ex. bourse.traiter)
+        $procNoms = \App\Models\Procedure::pluck('nom', 'code');
+        foreach ($permissions as $perm) {
+            if (!isset($permLabels[$perm->name]) && str_ends_with($perm->name, '.traiter')) {
+                $code = str_replace('.traiter', '', $perm->name);
+                $permLabels[$perm->name] = 'Traiter : ' . ($procNoms[$code] ?? $code);
+            }
+        }
+        // Toutes les permissions « .traiter » (dont les procédures custom) vont dans « Traitement »
+        $traitement = $permissions->pluck('name')->filter(fn ($n) => str_ends_with($n, '.traiter'))->values()->all();
         $groups = [
             'Accès'          => ['acceder-backoffice'],
-            'Traitement'     => ['depot.traiter', 'attestation.traiter', 'releve.traiter', 'diplome.traiter', 'duplicat.traiter', 'homologation.traiter', 'candidature.traiter'],
-            'Supervision'    => ['demandes.controler', 'documents.valider', 'documents.signer', 'paiements.confirmer', 'dossiers.consulter', 'audit.consulter'],
+            'Traitement des demandes' => $traitement,
+            'Supervision'    => ['demandes.controler', 'documents.valider', 'documents.signer', 'paiements.confirmer', 'dossiers.consulter', 'audit.consulter', 'archives.consulter'],
             'Administration' => ['identites.importer', 'academique.gerer', 'annees.gerer', 'utilisateurs.gerer', 'perimetres.affecter', 'roles.gerer', 'parametres.gerer'],
         ];
         $known = collect($groups)->flatten()->all();

@@ -429,28 +429,42 @@
                     <a href="{{ route('admin.dashboard') }}" class="sb-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" title="Vue d'ensemble">
                         <span class="sb-icon"><i class="fas fa-gauge-high"></i></span><span class="sb-label">Vue d'ensemble</span>
                     </a>
-
-                    <div class="sb-section">Dépôts &amp; Demandes</div>
-                    <a href="{{ route('admin.requests.index', ['category' => 'depot']) }}" class="sb-link {{ request()->routeIs('admin.requests.*') && request()->route('category') === 'depot' ? 'active' : '' }}" title="Dépôts">
-                        <span class="sb-icon"><i class="fas fa-folder-open"></i></span><span class="sb-label">Dépôts</span>
+                    <a href="{{ route('admin.statistiques.index') }}" class="sb-link {{ request()->routeIs('admin.statistiques.*') ? 'active' : '' }}" title="Statistiques">
+                        <span class="sb-icon"><i class="fas fa-chart-column"></i></span><span class="sb-label">Statistiques</span>
                     </a>
-                    <a href="{{ route('admin.requests.index', ['category' => 'attestation']) }}" class="sb-link {{ request()->route('category') === 'attestation' ? 'active' : '' }}" title="Attestations">
-                        <span class="sb-icon"><i class="fas fa-certificate"></i></span><span class="sb-label">Attestations</span>
-                    </a>
-                    <a href="{{ route('admin.requests.index', ['category' => 'diplome']) }}" class="sb-link {{ request()->route('category') === 'diplome' ? 'active' : '' }}" title="Diplômes">
-                        <span class="sb-icon"><i class="fas fa-graduation-cap"></i></span><span class="sb-label">Diplômes</span>
-                    </a>
-                    <a href="{{ route('admin.requests.index', ['category' => 'releve']) }}" class="sb-link {{ request()->route('category') === 'releve' ? 'active' : '' }}" title="Relevés de notes">
-                        <span class="sb-icon"><i class="fas fa-list-alt"></i></span><span class="sb-label">Relevés de notes</span>
-                    </a>
-                    <a href="{{ route('admin.requests.index', ['category' => 'duplicat']) }}" class="sb-link {{ request()->route('category') === 'duplicat' ? 'active' : '' }}" title="Duplicatas carte">
-                        <span class="sb-icon"><i class="fas fa-id-card"></i></span><span class="sb-label">Duplicatas carte</span>
-                    </a>
-                    @can('candidature.traiter')
-                        <a href="{{ route('admin.candidatures.index') }}" class="sb-link {{ request()->routeIs('admin.candidatures.*') ? 'active' : '' }}" title="Candidatures">
-                            <span class="sb-icon"><i class="fas fa-file-signature"></i></span><span class="sb-label">Candidatures</span>
+                    @can('archives.consulter')
+                        <a href="{{ route('admin.archives.index') }}" class="sb-link {{ request()->routeIs('admin.archives.*') ? 'active' : '' }}" title="Archives numériques">
+                            <span class="sb-icon"><i class="fas fa-box-archive"></i></span><span class="sb-label">Archives</span>
                         </a>
                     @endcan
+                    @can('audit.consulter')
+                        <a href="{{ route('admin.audit.index') }}" class="sb-link {{ request()->routeIs('admin.audit.*') ? 'active' : '' }}" title="Journal d'audit">
+                            <span class="sb-icon"><i class="fas fa-clipboard-list"></i></span><span class="sb-label">Journal d'audit</span>
+                        </a>
+                    @endcan
+
+                    @php
+                        $procIcons = ['depot'=>'fa-folder-open','attestation'=>'fa-certificate','diplome'=>'fa-graduation-cap','releve'=>'fa-list-alt','duplicat'=>'fa-id-card','homologation'=>'fa-stamp'];
+                        $mesCategories = auth()->user()->treatableCategories();
+                        $reqProcs = \App\Models\Procedure::whereIn('code', $mesCategories)
+                            ->where('code', '<>', 'candidature')->orderBy('ordre')->orderBy('id')->get();
+                        $voitCandidatures = auth()->user()->can('candidature.traiter');
+                    @endphp
+                    @if ($reqProcs->isNotEmpty() || $voitCandidatures)
+                        <div class="sb-section">Dépôts &amp; Demandes</div>
+                        @foreach ($reqProcs as $proc)
+                            <a href="{{ route('admin.requests.index', ['category' => $proc->code]) }}"
+                                class="sb-link {{ request()->routeIs('admin.requests.*') && request()->route('category') === $proc->code ? 'active' : '' }}"
+                                title="{{ $proc->nom }}">
+                                <span class="sb-icon"><i class="fas {{ $procIcons[$proc->code] ?? 'fa-file-lines' }}"></i></span><span class="sb-label">{{ $proc->nom }}</span>
+                            </a>
+                        @endforeach
+                        @if ($voitCandidatures)
+                            <a href="{{ route('admin.candidatures.index') }}" class="sb-link {{ request()->routeIs('admin.candidatures.*') ? 'active' : '' }}" title="Candidatures">
+                                <span class="sb-icon"><i class="fas fa-file-signature"></i></span><span class="sb-label">Candidatures</span>
+                            </a>
+                        @endif
+                    @endif
 
                     <div class="sb-section">Configuration</div>
                     @can('parametres.gerer')
@@ -479,6 +493,9 @@
                     @can('utilisateurs.gerer')
                         <a href="{{ route('admin.utilisateurs.index') }}" class="sb-link {{ request()->routeIs('admin.utilisateurs.*') ? 'active' : '' }}" title="Utilisateurs">
                             <span class="sb-icon"><i class="fas fa-users-gear"></i></span><span class="sb-label">Utilisateurs</span>
+                        </a>
+                        <a href="{{ route('admin.perimetres.index') }}" class="sb-link {{ request()->routeIs('admin.perimetres.*') ? 'active' : '' }}" title="Périmètres agents">
+                            <span class="sb-icon"><i class="fas fa-location-crosshairs"></i></span><span class="sb-label">Périmètres agents</span>
                         </a>
                     @endcan
                     @can('roles.gerer')

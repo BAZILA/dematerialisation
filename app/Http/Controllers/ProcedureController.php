@@ -27,8 +27,10 @@ class ProcedureController extends Controller
             'ordre'         => 'nullable|integer|min:0',
         ]);
 
+        $code = Str::of($data['code'])->lower()->replace('-', '_')->toString();
+
         Procedure::create([
-            'code'          => Str::of($data['code'])->lower()->replace('-', '_')->toString(),
+            'code'          => $code,
             'nom'           => $data['nom'],
             'description'   => $data['description'] ?? null,
             'requires_auth' => $request->boolean('requires_auth'),
@@ -37,6 +39,18 @@ class ProcedureController extends Controller
             'is_active'     => true,
             'ordre'         => $data['ordre'] ?? 99,
         ]);
+
+        // Permission de traitement associée (assignable aux rôles depuis l'UI)
+        $perm = \Spatie\Permission\Models\Permission::firstOrCreate(
+            ['name' => $code . '.traiter', 'guard_name' => 'web']
+        );
+        // Les rôles « couvre-tout » la reçoivent d'office
+        foreach (['chef_scolarite'] as $roleName) {
+            if ($role = \Spatie\Permission\Models\Role::where('name', $roleName)->first()) {
+                $role->givePermissionTo($perm);
+            }
+        }
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         return back()->with('success', "Procédure « {$data['nom']} » créée. Ajoutez-lui ses types de documents.");
     }

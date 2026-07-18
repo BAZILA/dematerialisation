@@ -18,11 +18,18 @@ class StudentRequestController extends Controller
 
     public function create(Request $request)
     {
-        $request->validate(['category' => 'required|in:depot,attestation,diplome,releve,duplicat']);
+        $request->validate([
+            'category' => ['required', \Illuminate\Validation\Rule::exists('procedures', 'code')],
+        ]);
 
         $student = Auth::user()->student;
         $typeEtudiant = Auth::user()->type_etudiant;
         $category = $request->category;
+
+        // Le dépôt passe désormais par l'assistant (choix Faculté → Parcours → Année → Semestre)
+        if ($category === 'depot') {
+            return redirect()->route('student.depot.start');
+        }
 
         if ($typeEtudiant === 'nouveau' && $category !== 'depot') {
             return $this->tabRedirect($category)
@@ -39,9 +46,17 @@ class StudentRequestController extends Controller
                 ->with('info', 'Vous avez déjà une demande en cours pour cette catégorie.');
         }
 
+        // Toute demande est rattachée à l'année académique active
+        $annee = \App\Models\AnneeAcademique::active();
+        if (!$annee) {
+            return $this->tabRedirect($category)
+                ->withErrors("Aucune année académique active. Contactez l'administration.");
+        }
+
         StudentRequest::create([
             'student_id' => $student->id,
             'category' => $category,
+            'annee_academique_id' => $annee->id,
             'status' => 'brouillon',
             'version' => 1,
         ]);
@@ -136,10 +151,17 @@ class StudentRequestController extends Controller
             return $this->tabRedirect($tab)->withErrors('Uploadez tous les documents obligatoires avant de soumettre.');
         }
 
+        // Pour un dépôt : l'étudiant doit avoir confirmé l'engagement (« Lu et approuvé »)
+        if ($sr->category === 'depot' && !$request->boolean('engagement')) {
+            return $this->tabRedirect($tab)
+                ->withErrors("Vous devez lire et accepter l'engagement avant de soumettre votre dépôt.");
+        }
+
         $sr->update([
             'status' => 'soumis',
             'submitted_at' => now(),
             'version' => $sr->version + 1,
+            'engagement_accepte' => $sr->category === 'depot' ? true : $sr->engagement_accepte,
         ]);
 
         return $this->tabRedirect($tab)->with('success', 'Demande soumise avec succès.');
