@@ -144,7 +144,8 @@ class AdminRequestController extends Controller
         abort_unless(request()->user()->coversRequest($studentRequest), 403,
             "Cette demande est hors de votre périmètre d'affectation.");
 
-        $studentRequest->load('student.user', 'files.requestType', 'validator');
+        $studentRequest->load('student.user', 'files.requestType', 'validator',
+            'etudesAnterieures', 'parcours.departement.faculte', 'anneeAcademique');
 
         $types = RequestType::forCategory(
             $studentRequest->category,
@@ -401,5 +402,54 @@ class AdminRequestController extends Controller
         return redirect()
             ->route('admin.requests.index', ['category' => $studentRequest->category])
             ->with('success', 'Demande rejetée définitivement.');
+    }
+
+    /* ════════════════════════════════════════════════════════
+     |  ANNULER UNE VALIDATION — rouvre le dossier
+     |  Opération irréversible côté tampons : on supprime les
+     |  fichiers tamponnés et on renvoie le dossier à l'étudiant.
+     ════════════════════════════════════════════════════════ */
+
+    public function reopen(Request $request, StudentRequest $studentRequest)
+    {
+        abort_unless($request->user()->canTreatCategory($studentRequest->category), 403,
+            "Vous n'êtes pas autorisé à traiter cette catégorie.");
+        abort_unless($request->user()->coversRequest($studentRequest), 403,
+            "Cette demande est hors de votre périmètre d'affectation.");
+
+        $request->validate(['reopen_message' => 'required|string|min:10|max:1000']);
+
+        if (!in_array($studentRequest->status, ['validé', 'rejeté'], true)) {
+            return back()->withErrors("Seule une demande déjà validée ou rejetée peut être rouverte.");
+        }
+
+        // Supprimer les fichiers tamponnés et déverrouiller les pièces
+        foreach ($studentRequest->files as $file) {
+            if ($file->stamped_file_path) {
+                Storage::disk('local')->delete($file->stamped_file_path);
+            }
+            $file->update([
+                'is_stamped' => false,
+                'stamped_file_path' => null,
+                'is_locked' => false,
+                'is_valid' => false,
+                'admin_comment' => null,
+            ]);
+        }
+
+        $studentRequest->update([
+            'status' => 'en_correction',
+            'rejection_message' => $request->reopen_message,
+            'validated_at' => null,
+            'validated_by' => Auth::id(),  // trace de l'agent qui a rouvert
+        ]);
+
+        \App\Models\AuditLog::record('demande.rouverte', $studentRequest,
+            "Demande #{$studentRequest->id} rouverte (validation annulée)",
+            ['motif' => $request->reopen_message]);
+
+        return redirect()
+            ->route('admin.requests.index', ['category' => $studentRequest->category])
+            ->with('success', "Validation annulée. Le dossier est renvoyé à l'étudiant pour correction.");
     }
 }

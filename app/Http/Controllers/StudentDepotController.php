@@ -64,10 +64,15 @@ class StudentDepotController extends Controller
             ->orderBy('nom')
             ->get();
 
+        // Semestres regroupés par année d'études, par grade (pour l'affichage « 1ère année (S1 & S2) »)
+        $gradeAnnees = collect(Parcours::$grades)
+            ->mapWithKeys(fn ($g, $code) => [$code => Parcours::semestresParAnnee($code)]);
+
         return view('student.depot.start', [
-            'facultes'  => $facultes,
-            'annee'     => $annee,
-            'grades'    => Parcours::$grades,
+            'facultes'    => $facultes,
+            'annee'       => $annee,
+            'grades'      => Parcours::$grades,
+            'gradeAnnees' => $gradeAnnees,
         ]);
     }
 

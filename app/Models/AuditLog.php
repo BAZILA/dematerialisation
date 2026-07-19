@@ -62,6 +62,7 @@ class AuditLog extends Model
         'demande.validee'          => 'Demande validée',
         'demande.correction'       => 'Renvoyée en correction',
         'demande.rejetee'          => 'Demande rejetée',
+        'demande.rouverte'         => 'Validation annulée (rouverte)',
         'candidature.decision'     => 'Décision de candidature',
         'archive.fiche'            => 'Téléchargement de fiche',
         'archive.dossier'          => 'Téléchargement de dossier',

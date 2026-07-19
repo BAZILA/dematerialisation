@@ -180,6 +180,88 @@
                 </div>
             </div>
 
+            {{-- Contexte académique + études antérieures déclarées (dépôt) --}}
+            @if ($isDepot)
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span style="color:var(--t1);font-weight:600;">
+                            <i class="fas fa-graduation-cap"></i> Contexte académique & études antérieures
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        {{-- Contexte du dépôt --}}
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <div class="small" style="color:var(--t3);">Parcours</div>
+                                <div style="color:var(--t1);font-weight:600;">
+                                    {{ $studentRequest->parcours?->nom ?? '—' }}
+                                </div>
+                                @if ($studentRequest->parcours?->departement?->faculte)
+                                    <div class="small" style="color:var(--t2);">
+                                        {{ $studentRequest->parcours->departement->faculte->nom }}
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="col-md-3">
+                                <div class="small" style="color:var(--t3);">Année</div>
+                                <div style="color:var(--t1);font-weight:600;">
+                                    {{ $studentRequest->anneeAcademique?->libelle ?? '—' }}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="small" style="color:var(--t3);">Année d'études & semestre</div>
+                                <div style="color:var(--t1);font-weight:600;">
+                                    {{ \App\Models\Parcours::anneeDuSemestre($studentRequest->semestre) ?? '—' }}
+                                    @if ($studentRequest->semestre)
+                                        <span class="small" style="color:var(--t2);">
+                                            · {{ $studentRequest->semestre }}
+                                            ({{ \App\Models\StudentRequest::saison($studentRequest->semestre) }})
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Tableau des études déclarées --}}
+                        @if ($studentRequest->etudesAnterieures->isNotEmpty())
+                            <div class="small mb-2" style="color:var(--t3);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">
+                                Études antérieures déclarées ({{ $studentRequest->etudesAnterieures->count() }})
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr class="small" style="color:var(--t2);">
+                                            <th>Période</th>
+                                            <th>Université</th>
+                                            <th>Domaine</th>
+                                            <th>Établissement</th>
+                                            <th>Parcours</th>
+                                            <th class="text-end">Crédits</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($studentRequest->etudesAnterieures as $et)
+                                            <tr class="small" style="color:var(--t1);">
+                                                <td>{{ trim(($et->annee_debut ?? '') . ' – ' . ($et->annee_fin ?? ''), ' –') ?: '—' }}</td>
+                                                <td>{{ $et->universite ?: '—' }}</td>
+                                                <td>{{ $et->domaine ?: '—' }}</td>
+                                                <td>{{ $et->etablissement ?: '—' }}</td>
+                                                <td>{{ $et->parcours ?: '—' }}</td>
+                                                <td class="text-end">{{ $et->credits ?: '—' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <p class="small mb-0" style="color:var(--t3);">
+                                <i class="fas fa-circle-info"></i> Aucune étude antérieure déclarée par l'étudiant.
+                            </p>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
         </div>{{-- /col principale --}}
 
         {{-- ══════════════ Colonne décision ══════════════ --}}
@@ -295,6 +377,29 @@
                                 {{ $studentRequest->admin_comment }}
                             </div>
                         @endif
+
+                        {{-- Annuler la validation (rouvre le dossier pour l'étudiant) --}}
+                        <div class="mt-3 pt-3 text-start" style="border-top:1px solid var(--line);">
+                            <button type="button" class="btn btn-sm btn-outline-danger w-100"
+                                data-bs-toggle="collapse" data-bs-target="#reopenBox">
+                                <i class="fas fa-rotate-left"></i> Annuler la validation
+                            </button>
+                            <div class="collapse mt-2" id="reopenBox">
+                                <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
+                                    @csrf
+                                    <p class="small text-muted mb-2">
+                                        <i class="fas fa-triangle-exclamation text-warning"></i>
+                                        Les documents tamponnés seront <strong>supprimés</strong> et le dossier
+                                        renvoyé à l'étudiant pour correction. Indiquez le motif.
+                                    </p>
+                                    <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
+                                        minlength="10" required placeholder="Motif de l'annulation (min. 10 caractères)…"></textarea>
+                                    <button type="submit" class="btn btn-sm btn-danger w-100">
+                                        <i class="fas fa-rotate-left"></i> Confirmer l'annulation
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 @elseif($studentRequest->isInCorrection())
                     <div class="card-body">
@@ -311,6 +416,24 @@
                             <h6 class="fw-bold mt-2" style="color:var(--red);">Rejetée définitivement</h6>
                         </div>
                         <div class="alert alert-danger small">{{ $studentRequest->rejection_message }}</div>
+
+                        {{-- Rouvrir un dossier rejeté (donne une nouvelle chance à l'étudiant) --}}
+                        <div class="mt-2 pt-3 text-start" style="border-top:1px solid var(--line);">
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                                data-bs-toggle="collapse" data-bs-target="#reopenBox">
+                                <i class="fas fa-rotate-left"></i> Rouvrir pour correction
+                            </button>
+                            <div class="collapse mt-2" id="reopenBox">
+                                <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
+                                    @csrf
+                                    <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
+                                        minlength="10" required placeholder="Motif de la réouverture (min. 10 caractères)…"></textarea>
+                                    <button type="submit" class="btn btn-sm btn-warning w-100">
+                                        <i class="fas fa-rotate-left"></i> Renvoyer à l'étudiant
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 @endif
 

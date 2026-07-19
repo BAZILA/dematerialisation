@@ -77,15 +77,14 @@ class StudentRequestController extends Controller
         $this->authorizeRequest($sr);
 
         if (!$sr->canEdit()) {
-            return $this->tabRedirect($tab)->withErrors('Cette demande ne peut plus être modifiée.');
+            return $this->ajaxOrBack($request, false, 'Cette demande ne peut plus être modifiée.', $tab);
         }
 
         $type = RequestType::findOrFail($request->request_type_id);
         $existing = $sr->files()->where('request_type_id', $type->id)->first();
 
         if ($existing?->is_locked) {
-            return $this->tabRedirect($tab)
-                ->withErrors("« {$type->label} » a été validé et ne peut plus être remplacé.");
+            return $this->ajaxOrBack($request, false, "« {$type->label} » a été validé et ne peut plus être remplacé.", $tab);
         }
 
         if ($existing) {
@@ -110,10 +109,21 @@ class StudentRequestController extends Controller
             'file_size' => $file->getSize(),
         ]);
 
-        return $this->tabRedirect($tab)->with('success', "« {$type->label} » uploadé avec succès.");
+        return $this->ajaxOrBack($request, true, "« {$type->label} » ajouté.", $tab);
     }
 
-    public function deleteFile($fileId)
+    /** Réponse JSON si AJAX, sinon redirection classique avec message. */
+    private function ajaxOrBack(Request $request, bool $ok, string $message, string $tab)
+    {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['ok' => $ok, 'message' => $message], $ok ? 200 : 422);
+        }
+        return $ok
+            ? $this->tabRedirect($tab)->with('success', $message)
+            : $this->tabRedirect($tab)->withErrors($message);
+    }
+
+    public function deleteFile(Request $request, $fileId)
     {
         $file = RequestFile::findOrFail($fileId);
         $sr = $file->studentRequest;
@@ -121,10 +131,10 @@ class StudentRequestController extends Controller
         $this->authorizeRequest($sr);
 
         if ($file->is_locked) {
-            return $this->tabRedirect($tab)->withErrors('Ce fichier a été validé et ne peut pas être supprimé.');
+            return $this->ajaxOrBack($request, false, 'Ce fichier a été validé et ne peut pas être supprimé.', $tab);
         }
         if (!$sr->canEdit()) {
-            return $this->tabRedirect($tab)->withErrors('Cette demande ne peut plus être modifiée.');
+            return $this->ajaxOrBack($request, false, 'Cette demande ne peut plus être modifiée.', $tab);
         }
 
         Storage::disk('local')->delete($file->file_path);
@@ -133,7 +143,36 @@ class StudentRequestController extends Controller
         }
         $file->delete();
 
-        return $this->tabRedirect($tab)->with('success', 'Fichier supprimé.');
+        return $this->ajaxOrBack($request, true, 'Fichier supprimé.', $tab);
+    }
+
+    /* ── Annuler / recommencer un dépôt encore modifiable ──
+     |  L'étudiant peut supprimer un brouillon (avant soumission)
+     |  pour repartir de zéro : contexte + pièces + études effacés.
+     */
+    public function cancelRequest(Request $request, StudentRequest $studentRequest)
+    {
+        $this->authorizeRequest($studentRequest);
+        $tab = $studentRequest->category;
+
+        // Seul un brouillon (jamais soumis) peut être annulé par l'étudiant
+        if ($studentRequest->status !== 'brouillon') {
+            return $this->tabRedirect($tab)
+                ->withErrors("Ce dossier a déjà été soumis et ne peut plus être annulé. Contactez l'administration si besoin.");
+        }
+
+        // Supprimer les pièces stockées puis l'enregistrement
+        foreach ($studentRequest->files as $file) {
+            Storage::disk('local')->delete($file->file_path);
+            if ($file->stamped_file_path) {
+                Storage::disk('local')->delete($file->stamped_file_path);
+            }
+        }
+        $studentRequest->files()->delete();
+        $studentRequest->etudesAnterieures()->delete();
+        $studentRequest->delete();
+
+        return $this->tabRedirect($tab)->with('success', 'Dépôt annulé. Vous pouvez en démarrer un nouveau.');
     }
 
     public function submit(Request $request)

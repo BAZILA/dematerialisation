@@ -21,6 +21,7 @@
 
         $gradeSemestres = collect($grades)->mapWithKeys(fn ($g, $k) => [$k => $g['semestres']]);
     @endphp
+    @php /* $gradeAnnees fourni par le contrôleur : grade → groupes d'années */ @endphp
 
     <div class="row justify-content-center">
         <div class="col-lg-8">
@@ -91,9 +92,9 @@
                             </select>
                         </div>
 
-                        {{-- Semestre --}}
+                        {{-- Année d'études & semestre --}}
                         <div class="mb-4">
-                            <label class="form-label" style="color:var(--t2);">Semestre <span class="text-danger">*</span></label>
+                            <label class="form-label" style="color:var(--t2);">Année d'études & semestre <span class="text-danger">*</span></label>
                             <select id="sel-semestre" name="semestre" class="form-select" required disabled>
                                 <option value="">— Choisir d'abord un parcours —</option>
                             </select>
@@ -120,6 +121,7 @@
         (function () {
             const TREE = @json($tree);
             const SEM  = @json($gradeSemestres);
+            const ANNEES = @json($gradeAnnees);
 
             const selF = document.getElementById('sel-faculte');
             const selD = document.getElementById('sel-departement');
@@ -163,13 +165,23 @@
             });
 
             selP.addEventListener('change', function () {
-                reset(selS, '— Choisir un semestre —');
+                reset(selS, '— Choisir une année / un semestre —');
                 hint.textContent = '';
                 const grade = this.selectedOptions[0]?.dataset.grade;
-                const sems = SEM[grade] || [];
-                if (!sems.length) return;
-                sems.forEach(s => {
-                    selS.insertAdjacentHTML('beforeend', `<option value="${s}">${s}</option>`);
+                const groupes = ANNEES[grade] || [];
+                if (!groupes.length) return;
+                // Un optgroup par année d'études : « 1ère année (S1 & S2) »
+                groupes.forEach(g => {
+                    const sems = g.semestres || [];
+                    if (sems.length > 1) {
+                        let html = `<optgroup label="${g.label}">`;
+                        sems.forEach(s => { html += `<option value="${s}">${s}</option>`; });
+                        html += `</optgroup>`;
+                        selS.insertAdjacentHTML('beforeend', html);
+                    } else if (sems.length === 1) {
+                        // Année à un seul palier (ex. doctorat) : option simple
+                        selS.insertAdjacentHTML('beforeend', `<option value="${sems[0]}">${g.annee}</option>`);
+                    }
                 });
                 selS.disabled = false;
             });

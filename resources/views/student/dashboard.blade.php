@@ -21,7 +21,12 @@
         .stat-tile { background: var(--surface); border:1px solid var(--line); border-radius: var(--r-lg);
             padding: 16px 18px; box-shadow: var(--shadow-sm); display:flex; align-items:center; gap:13px; transition: all var(--dur) var(--ease); }
         .stat-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-        .stat-ic { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:1.15rem; flex-shrink:0; }
+        .stat-ic { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:1.15rem; flex-shrink:0;
+            background:var(--surface-2); color:var(--t2); border:1px solid var(--line); }
+        /* Mise en avant discrète du compteur « En attente » (sans rainbow) */
+        .stat-attn { border-color:rgba(245,158,11,.4); }
+        .stat-attn .stat-ic { background:rgba(245,158,11,.10); color:var(--amber,#b45309); border-color:rgba(245,158,11,.3); }
+        .stat-attn .stat-n { color:var(--amber,#b45309); }
         .stat-n { font-family: var(--font-head); font-size:24px; font-weight:800; line-height:1; color:var(--t1); }
         .stat-l { font-size:12px; color:var(--t2); margin-top:4px; }
 
@@ -29,7 +34,9 @@
         .qa-tile { background: var(--surface); border:1px solid var(--line); border-radius: var(--r-lg);
             padding: 17px; text-decoration:none; display:block; box-shadow: var(--shadow-sm); transition: all var(--dur) var(--ease); }
         .qa-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-        .qa-ic { width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:11px; }
+        .qa-ic { width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:11px;
+            background:var(--surface-2); color:var(--t2); border:1px solid var(--line); transition:all var(--dur) var(--ease); }
+        .qa-tile:hover .qa-ic { background:var(--em-dim); color:var(--brand); border-color:transparent; }
         .qa-title { font-weight:700; color:var(--t1); font-size:14px; }
         .qa-sub { font-size:11.5px; color:var(--t3); margin-top:2px; }
         .sect-label { font-family:var(--font-head); font-weight:700; font-size:13px; letter-spacing:.04em;
@@ -63,10 +70,33 @@
         .etu-card .form-control, .etu-card .form-select { padding:8px 10px !important; font-size:13px; }
         .etu-hors { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--t2); white-space:nowrap; }
         @media(max-width:640px){ .c-2,.c-3,.c-4,.c-6{ grid-column:span 6; } }
+
+        /* Toasts (feedback AJAX sans rechargement) */
+        #toastShelf { position:fixed; right:18px; bottom:18px; z-index:1080; display:flex; flex-direction:column; gap:10px; max-width:min(360px,calc(100vw - 36px)); }
+        .toast-pill { display:flex; align-items:flex-start; gap:11px; background:var(--surface); border:1px solid var(--line);
+            border-left:4px solid var(--brand); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow);
+            transition:opacity .32s var(--ease), transform .32s var(--ease); }
+        .toast-pill.toast-success { border-left-color:var(--green,#2F9E33); }
+        .toast-pill.toast-danger  { border-left-color:#d33; }
+        .toast-dot { width:9px; height:9px; border-radius:50%; margin-top:5px; flex-shrink:0; background:var(--brand); }
+        .toast-success .toast-dot { background:var(--green,#2F9E33); }
+        .toast-danger .toast-dot  { background:#d33; }
+        .toast-title { font-weight:700; font-size:12.5px; color:var(--t1); }
+        .toast-msg { font-size:12.5px; color:var(--t2); margin-top:2px; line-height:1.35; }
+        .toast-text { flex:1; min-width:0; }
+        .toast-x { background:none; border:none; color:var(--t3); cursor:pointer; font-size:13px; padding:0 2px; line-height:1; }
+        .toast-x:hover { color:var(--t1); }
+
+        /* Bouton de téléchargement du document officiel (vif, met en valeur l'action) */
+        .dl-official { background:linear-gradient(135deg,#16a34a,#15803d); border:1px solid #15803d; color:#fff !important;
+            box-shadow:0 3px 10px rgba(22,163,74,.35); transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+        .dl-official:hover { transform:translateY(-1px); box-shadow:0 5px 16px rgba(22,163,74,.5); color:#fff !important; }
     </style>
 @endsection
 
 @section('content')
+    <div id="toastShelf"></div>
+    <div id="dashRoot" data-url="{{ route('student.dashboard') }}">
     @php
         $cats = \App\Models\RequestType::categoriesFor($typeEtudiant);
         $catIcons = [
@@ -144,16 +174,18 @@
     {{-- ═══ Statistiques ═══ --}}
     <div class="stat-grid mb-2">
         @php
+            // Icônes sobres et monochromes (style pro) : la couleur ne sert plus de code,
+            // seul le compteur « En attente » est discrètement mis en avant.
             $tiles = [
-                ['n' => $stats['total'],      'l' => 'Demandes',   'i' => 'fa-folder-open',    'c' => 'var(--brand)',  'bg' => 'var(--em-dim)'],
-                ['n' => $stats['en_attente'], 'l' => 'En attente', 'i' => 'fa-hourglass-half', 'c' => 'var(--amber)',  'bg' => 'var(--amber-dim)'],
-                ['n' => $stats['a_corriger'], 'l' => 'À corriger', 'i' => 'fa-rotate-left',     'c' => 'var(--blue)',   'bg' => 'var(--blue-dim)'],
-                ['n' => $stats['validees'],   'l' => 'Validées',   'i' => 'fa-circle-check',    'c' => '#1f7a24',       'bg' => 'var(--green-dim)'],
+                ['n' => $stats['total'],      'l' => 'Demandes',   'i' => 'fa-folder-open',    'attn' => false],
+                ['n' => $stats['en_attente'], 'l' => 'En attente', 'i' => 'fa-hourglass-half', 'attn' => $stats['en_attente'] > 0],
+                ['n' => $stats['a_corriger'], 'l' => 'À corriger', 'i' => 'fa-rotate-left',     'attn' => false],
+                ['n' => $stats['validees'],   'l' => 'Validées',   'i' => 'fa-circle-check',    'attn' => false],
             ];
         @endphp
         @foreach ($tiles as $t)
-            <div class="stat-tile">
-                <div class="stat-ic" style="background:{{ $t['bg'] }};color:{{ $t['c'] }};"><i class="fas {{ $t['i'] }}"></i></div>
+            <div class="stat-tile {{ $t['attn'] ? 'stat-attn' : '' }}">
+                <div class="stat-ic"><i class="fas {{ $t['i'] }}"></i></div>
                 <div>
                     <div class="stat-n">{{ $t['n'] }}</div>
                     <div class="stat-l">{{ $t['l'] }}</div>
@@ -167,7 +199,7 @@
     <div class="qa-grid mb-2">
         @foreach ($cats as $key => $label)
             <a href="{{ route('student.dashboard', ['tab' => $key]) }}#st-{{ $key }}" class="qa-tile">
-                <div class="qa-ic" style="background:var(--em-dim);color:var(--brand);">
+                <div class="qa-ic">
                     <i class="fas {{ $catIcons[$key] ?? 'fa-file' }}"></i>
                 </div>
                 <div class="qa-title">{{ $label }}</div>
@@ -265,9 +297,11 @@
                                                 <div style="font-weight:600;color:var(--t1);">{{ $req->anneeAcademique->libelle ?? '—' }}</div>
                                             </div>
                                             <div>
-                                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Semestre</div>
+                                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Année d'études</div>
                                                 <div style="font-weight:600;color:var(--t1);">
-                                                    {{ $req->semestre ?? '—' }}
+                                                    @php $anneeEtude = \App\Models\Parcours::anneeDuSemestre($req->semestre); @endphp
+                                                    {{ $anneeEtude ?? '—' }}
+                                                    @if ($req->semestre)<span style="color:var(--t3);font-weight:500;">· {{ $req->semestre }}</span>@endif
                                                     @if ($saison)<span class="ms-1" style="color:var(--blue);font-size:12px;"><i class="fas fa-leaf"></i> {{ $saison }}</span>@endif
                                                 </div>
                                             </div>
@@ -458,8 +492,8 @@
                                                                 {{-- ✅ TÉLÉCHARGER — uniquement fichier is_stamped=true --}}
                                                                 @if ($canDl)
                                                                     <a href="{{ route('student.requests.file.download', $file) }}"
-                                                                        class="btn btn-sm"
-                                                                        style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);color:#93c5fd;white-space:nowrap;"
+                                                                        class="btn btn-sm fw-semibold dl-official"
+                                                                        style="white-space:nowrap;"
                                                                         title="Télécharger la version officielle avec cachet">
                                                                         <i class="fas fa-stamp"></i>
                                                                         <i class="fas fa-download ms-1"></i>
@@ -471,7 +505,7 @@
                                                                 @if ($canUpload)
                                                                     <form method="POST"
                                                                         action="{{ route('student.requests.file.delete', $file) }}?tab={{ $key }}"
-                                                                        class="d-inline">
+                                                                        class="d-inline js-ajax">
                                                                         @csrf @method('DELETE')
                                                                         <button type="submit"
                                                                             class="btn btn-sm btn-outline-danger"
@@ -813,7 +847,7 @@
                                                             </button>
                                                             <form method="POST"
                                                                 action="{{ route('student.requests.file.delete', $file) }}?tab={{ $key }}"
-                                                                class="d-inline">
+                                                                class="d-inline js-ajax">
                                                                 @csrf @method('DELETE')
                                                                 <button type="submit" class="btn btn-sm btn-outline-danger"
                                                                     onclick="return confirm('Supprimer ?')">
@@ -930,6 +964,20 @@
                                             </small>
                                         </div>
                                     @endif
+
+                                    {{-- Annuler / recommencer : possible tant que le dossier est un brouillon --}}
+                                    @if ($req->isDraft())
+                                        <div class="mt-3 pt-3" style="border-top:1px solid var(--line);">
+                                            <form method="POST" action="{{ route('student.requests.cancel', $req) }}?tab={{ $key }}"
+                                                onsubmit="return confirm('Annuler ce dossier ? Les pièces déjà chargées seront supprimées et vous pourrez recommencer.');">
+                                                @csrf @method('DELETE')
+                                                <button type="submit" class="btn btn-outline-danger btn-sm w-100"
+                                                    data-loading-text="Annulation…">
+                                                    <i class="fas fa-trash-can"></i> Annuler et recommencer
+                                                </button>
+                                            </form>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         @endif
@@ -966,7 +1014,7 @@
                                 </div>
                                 <form method="POST"
                                     action="{{ route('student.requests.file.upload') }}?tab={{ $key }}"
-                                    enctype="multipart/form-data">
+                                    enctype="multipart/form-data" class="js-ajax" data-modal="up-{{ $key }}-{{ $type->id }}">
                                     @csrf
                                     <input type="hidden" name="student_request_id" value="{{ $ar->id }}">
                                     <input type="hidden" name="request_type_id" value="{{ $type->id }}">
@@ -1010,23 +1058,30 @@
             @endforeach
         @endif
     @endforeach
-
+    </div>{{-- /#dashRoot --}}
 @endsection
 
 @section('js')
     <script>
         (function() {
-            document.querySelectorAll('#stTabs .nav-link').forEach(link => {
-                link.addEventListener('shown.bs.tab', function() {
-                    const url = new URL(window.location);
-                    url.searchParams.set('tab', this.dataset.tab);
-                    history.replaceState(null, '', url);
+            // Montage (ré-exécutable après un rafraîchissement AJAX du bloc dépôt)
+            function mountDash() {
+                document.querySelectorAll('#stTabs .nav-link').forEach(link => {
+                    link.addEventListener('shown.bs.tab', function() {
+                        const url = new URL(window.location);
+                        url.searchParams.set('tab', this.dataset.tab);
+                        history.replaceState(null, '', url);
+                        // Ramène la barre d'onglets en haut de l'écran pour voir le contenu
+                        const tabs = document.getElementById('stTabs');
+                        if (tabs) {
+                            const top = tabs.getBoundingClientRect().top + window.scrollY - 80;
+                            if (window.scrollY > top + 4) window.scrollTo({ top, behavior: 'smooth' });
+                        }
+                    });
                 });
-            });
-
-            // ── Études antérieures : composant cartes + listes + auto-save ──
-            const app = document.getElementById('etudesApp');
-            if (app) initEtudes(app);
+                const app = document.getElementById('etudesApp');
+                if (app) initEtudes(app);
+            }
 
             function initEtudes(root) {
                 const SAVE_URL = root.dataset.saveUrl;
@@ -1151,6 +1206,76 @@
 
                 document.getElementById('addEtude').addEventListener('click', () => { addCard({}); renumber(); });
             }
+
+            /* ── Toast minimal ── */
+            function toast(msg, type) {
+                const shelf = document.getElementById('toastShelf');
+                if (!shelf) { return; }
+                const el = document.createElement('div');
+                el.className = 'toast-pill toast-' + (type || 'info');
+                el.innerHTML = '<div class="toast-dot"></div><div class="toast-text"><div class="toast-title">' +
+                    (type === 'danger' ? 'Erreur' : 'Succès') + '</div><div class="toast-msg">' + msg + '</div></div>' +
+                    '<button class="toast-x" onclick="this.closest(\'.toast-pill\').remove()"><i class="fas fa-xmark"></i></button>';
+                shelf.appendChild(el);
+                setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(10px)'; setTimeout(() => el.remove(), 360); }, 4000);
+            }
+
+            /* ── Rafraîchissement ciblé du bloc dépôt (sans recharger la page) ── */
+            let reloading = false;
+            async function reloadDash() {
+                if (reloading) return;
+                reloading = true;
+                const y = window.scrollY;
+                const root = document.getElementById('dashRoot');
+                const url = new URL(root.dataset.url, window.location.origin);
+                url.searchParams.set('tab', 'depot');
+                try {
+                    const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const html = await res.text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const fresh = doc.getElementById('dashRoot');
+                    if (fresh) {
+                        root.innerHTML = fresh.innerHTML;
+                        mountDash();
+                        window.scrollTo(0, y);
+                    }
+                } catch (e) { /* silencieux */ }
+                reloading = false;
+            }
+
+            /* ── Interception AJAX des formulaires d'upload / suppression ── */
+            document.addEventListener('submit', function (e) {
+                const form = e.target;
+                if (!form.classList || !form.classList.contains('js-ajax')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const btn = form.querySelector('button[type="submit"], button:not([type])');
+                if (btn) { btn.disabled = true; btn.dataset._h = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+                const modalId = form.dataset.modal;
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    body: new FormData(form)
+                }).then(async res => {
+                    let data = {};
+                    try { data = await res.json(); } catch (_) {}
+                    if (res.ok) {
+                        if (modalId) { const m = bootstrap.Modal.getInstance(document.getElementById(modalId)); if (m) m.hide(); }
+                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                        document.body.classList.remove('modal-open'); document.body.style.removeProperty('overflow'); document.body.style.removeProperty('padding-right');
+                        toast(data.message || 'Enregistré.', 'success');
+                        await reloadDash();
+                    } else {
+                        toast(data.message || (data.errors ? Object.values(data.errors)[0][0] : 'Action impossible.'), 'danger');
+                        if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset._h; }
+                    }
+                }).catch(() => {
+                    toast('Connexion interrompue.', 'danger');
+                    if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset._h; }
+                });
+            }, true); // capture : passe avant le handler global de chargement
+
+            mountDash();
         })();
     </script>
 @endsection

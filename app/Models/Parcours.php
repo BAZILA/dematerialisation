@@ -41,4 +41,45 @@ class Parcours extends Model
     {
         return self::$grades[$this->grade]['semestres'] ?? [];
     }
+
+    /** Ordinal français court d'une année d'études (1 → « 1ère année »). */
+    public static function ordinalAnnee(int $n): string
+    {
+        return $n === 1 ? '1ère année' : $n . 'e année';
+    }
+
+    /**
+     * Année d'études correspondant à un semestre.
+     *   S1/S2 → « 1ère année », S3/S4 → « 2e année », …
+     *   « Année 2 » (doctorat) reste tel quel.
+     */
+    public static function anneeDuSemestre(?string $semestre): ?string
+    {
+        if (!$semestre) {
+            return null;
+        }
+        if (preg_match('/S\s*(\d+)/i', $semestre, $m)) {
+            return self::ordinalAnnee((int) ceil(((int) $m[1]) / 2));
+        }
+        return $semestre; // ex. « Année 1 »
+    }
+
+    /**
+     * Regroupe les semestres d'un grade par année d'études.
+     * Retourne : [['annee' => '1ère année', 'label' => '1ère année (S1 & S2)', 'semestres' => ['S1','S2']], …]
+     */
+    public static function semestresParAnnee(string $grade): array
+    {
+        $sems = self::$grades[$grade]['semestres'] ?? [];
+        $groupes = [];
+        foreach ($sems as $s) {
+            $annee = self::anneeDuSemestre($s) ?? $s;
+            $groupes[$annee]['annee'] = $annee;
+            $groupes[$annee]['semestres'][] = $s;
+        }
+        return array_values(array_map(function ($g) {
+            $g['label'] = $g['annee'] . ' (' . implode(' & ', $g['semestres']) . ')';
+            return $g;
+        }, $groupes));
+    }
 }

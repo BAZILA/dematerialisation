@@ -77,6 +77,8 @@ Route::middleware('auth')->group(function () {
         // Demandes
         Route::post('/requests/create', [StudentRequestController::class, 'create'])->name('requests.create');
         Route::post('/requests/submit', [StudentRequestController::class, 'submit'])->name('requests.submit');
+        // Annuler / recommencer un dépôt encore modifiable (avant validation)
+        Route::delete('/requests/{studentRequest}/cancel', [StudentRequestController::class, 'cancelRequest'])->name('requests.cancel');
         Route::post('/requests/file/upload', [StudentRequestController::class, 'uploadFile'])->name('requests.file.upload');
         Route::delete('/requests/file/{file}', [StudentRequestController::class, 'deleteFile'])->name('requests.file.delete');
         Route::get('/requests/file/{file}/download', [StudentRequestController::class, 'downloadFile'])->name('requests.file.download');
@@ -196,6 +198,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/requests/{studentRequest}/validate', [AdminRequestController::class, 'validate'])->name('requests.validate');
         Route::post('/requests/{studentRequest}/reject', [AdminRequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{studentRequest}/reject-final', [AdminRequestController::class, 'rejectFinal'])->name('requests.reject-final');
+        // Annuler une validation : rouvre le dépôt pour que l'étudiant recommence
+        Route::post('/requests/{studentRequest}/reopen', [AdminRequestController::class, 'reopen'])->name('requests.reopen');
         Route::get('/requests/file/{file}/preview', [AdminRequestController::class, 'previewFile'])->name('requests.file.preview');
         Route::get('/requests/file/{file}/download', [AdminRequestController::class, 'downloadFile'])->name('requests.file.download');
     });

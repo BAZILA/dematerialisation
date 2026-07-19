@@ -102,7 +102,7 @@
                 </thead>
                 <tbody>
                     @forelse($requests as $req)
-                        <tr>
+                        <tr @if ($req->status === 'soumis') style="background:rgba(245,158,11,.09);box-shadow:inset 3px 0 0 var(--amber,#f59e0b);" title="En attente de traitement" @endif>
                             <td>
                                 <strong style="color:var(--t1);">{{ $req->student->full_name }}</strong><br>
                                 <code class="small">{{ $req->student->user->numero_identifiant }}</code>
