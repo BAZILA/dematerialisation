@@ -10,6 +10,7 @@
             'paiement'      => ['Paiement', 'fa-credit-card'],
             'notifications' => ['Notifications', 'fa-bell'],
             'recyclage'     => ['Recyclage', 'fa-arrows-rotate'],
+            'affichage'     => ['Affichage', 'fa-table-list'],
         ];
     @endphp
 

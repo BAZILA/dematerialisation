@@ -46,6 +46,9 @@
                             </h5>
                             <small style="color:var(--t2);">
                                 <code>{{ $studentRequest->student->user->numero_identifiant }}</code>
+                                @if ($studentRequest->student->numero_suivi)
+                                    &nbsp;·&nbsp; Suivi <code>{{ $studentRequest->student->numero_suivi }}</code>
+                                @endif
                                 &nbsp;·&nbsp;
                                 {{ $studentRequest->student->user->type_etudiant === 'nouveau' ? 'Nouveau Bachelier' : 'Ancien Étudiant' }}
                                 &nbsp;·&nbsp; Version : <strong
@@ -55,6 +58,27 @@
                                         style="color:var(--t1);">{{ $studentRequest->submitted_at->format('d/m/Y') }}</strong>
                                 @endif
                             </small>
+                            {{-- Contexte académique visible D'EMBLÉE (parcours / année / niveau) --}}
+                            @if ($studentRequest->parcours || $studentRequest->anneeAcademique)
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    @if ($studentRequest->parcours)
+                                        <span class="badge" style="background:var(--em-dim,#e8eefb);color:var(--brand,#1A56A8);">
+                                            <i class="fas fa-graduation-cap"></i> {{ $studentRequest->parcours->nom }}
+                                        </span>
+                                        <span class="badge bg-secondary">{{ $studentRequest->parcours->departement->faculte->nom ?? '' }}</span>
+                                    @endif
+                                    @if ($studentRequest->anneeAcademique)
+                                        <span class="badge bg-secondary"><i class="fas fa-calendar-days"></i> {{ $studentRequest->anneeAcademique->libelle }}</span>
+                                    @endif
+                                    @if ($studentRequest->semestre)
+                                        @php $derog = \App\Models\Parcours::estDerogatoire($studentRequest->semestre, $studentRequest->parcours?->grade); @endphp
+                                        <span class="badge" style="background:{{ $derog ? 'rgba(245,158,11,.15)' : 'var(--surface-2)' }};color:{{ $derog ? '#B45309' : 'var(--t2)' }};border:1px solid {{ $derog ? 'rgba(245,158,11,.35)' : 'var(--line)' }};">
+                                            {{ \App\Models\Parcours::libelleNiveau($studentRequest->semestre, $studentRequest->parcours?->grade) }}
+                                            @if ($derog) <i class="fas fa-triangle-exclamation ms-1"></i> @endif
+                                        </span>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                         <span class="badge bg-{{ $statusColors[$studentRequest->status] ?? 'secondary' }} fs-6 px-3 py-2">
                             {{ $statusLabels[$studentRequest->status] ?? $studentRequest->status }}
@@ -209,15 +233,9 @@
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="small" style="color:var(--t3);">Année d'études & semestre</div>
+                                <div class="small" style="color:var(--t3);">Année d'études</div>
                                 <div style="color:var(--t1);font-weight:600;">
-                                    {{ \App\Models\Parcours::anneeDuSemestre($studentRequest->semestre) ?? '—' }}
-                                    @if ($studentRequest->semestre)
-                                        <span class="small" style="color:var(--t2);">
-                                            · {{ $studentRequest->semestre }}
-                                            ({{ \App\Models\StudentRequest::saison($studentRequest->semestre) }})
-                                        </span>
-                                    @endif
+                                    {{ \App\Models\Parcours::libelleNiveau($studentRequest->semestre, $studentRequest->parcours?->grade) ?? '—' }}
                                 </div>
                             </div>
                         </div>
@@ -378,28 +396,30 @@
                             </div>
                         @endif
 
-                        {{-- Annuler la validation (rouvre le dossier pour l'étudiant) --}}
-                        <div class="mt-3 pt-3 text-start" style="border-top:1px solid var(--line);">
-                            <button type="button" class="btn btn-sm btn-outline-danger w-100"
-                                data-bs-toggle="collapse" data-bs-target="#reopenBox">
-                                <i class="fas fa-rotate-left"></i> Annuler la validation
-                            </button>
-                            <div class="collapse mt-2" id="reopenBox">
-                                <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
-                                    @csrf
-                                    <p class="small text-muted mb-2">
-                                        <i class="fas fa-triangle-exclamation text-warning"></i>
-                                        Les documents tamponnés seront <strong>supprimés</strong> et le dossier
-                                        renvoyé à l'étudiant pour correction. Indiquez le motif.
-                                    </p>
-                                    <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
-                                        minlength="10" required placeholder="Motif de l'annulation (min. 10 caractères)…"></textarea>
-                                    <button type="submit" class="btn btn-sm btn-danger w-100">
-                                        <i class="fas fa-rotate-left"></i> Confirmer l'annulation
-                                    </button>
-                                </form>
+                        {{-- Annuler la validation — réservé aux superviseurs (permission dédiée) --}}
+                        @can('demandes.rouvrir')
+                            <div class="mt-3 pt-3 text-start" style="border-top:1px solid var(--line);">
+                                <button type="button" class="btn btn-sm btn-outline-danger w-100"
+                                    data-bs-toggle="collapse" data-bs-target="#reopenBox">
+                                    <i class="fas fa-rotate-left"></i> Annuler la validation
+                                </button>
+                                <div class="collapse mt-2" id="reopenBox">
+                                    <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
+                                        @csrf
+                                        <p class="small text-muted mb-2">
+                                            <i class="fas fa-triangle-exclamation text-warning"></i>
+                                            Les documents tamponnés seront <strong>supprimés</strong> et le dossier
+                                            renvoyé à l'étudiant pour correction. Indiquez le motif.
+                                        </p>
+                                        <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
+                                            minlength="10" required placeholder="Motif de l'annulation (min. 10 caractères)…"></textarea>
+                                        <button type="submit" class="btn btn-sm btn-danger w-100">
+                                            <i class="fas fa-rotate-left"></i> Confirmer l'annulation
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
-                        </div>
+                        @endcan
                     </div>
                 @elseif($studentRequest->isInCorrection())
                     <div class="card-body">
@@ -417,23 +437,25 @@
                         </div>
                         <div class="alert alert-danger small">{{ $studentRequest->rejection_message }}</div>
 
-                        {{-- Rouvrir un dossier rejeté (donne une nouvelle chance à l'étudiant) --}}
-                        <div class="mt-2 pt-3 text-start" style="border-top:1px solid var(--line);">
-                            <button type="button" class="btn btn-sm btn-outline-secondary w-100"
-                                data-bs-toggle="collapse" data-bs-target="#reopenBox">
-                                <i class="fas fa-rotate-left"></i> Rouvrir pour correction
-                            </button>
-                            <div class="collapse mt-2" id="reopenBox">
-                                <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
-                                    @csrf
-                                    <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
-                                        minlength="10" required placeholder="Motif de la réouverture (min. 10 caractères)…"></textarea>
-                                    <button type="submit" class="btn btn-sm btn-warning w-100">
-                                        <i class="fas fa-rotate-left"></i> Renvoyer à l'étudiant
-                                    </button>
-                                </form>
+                        {{-- Rouvrir un dossier rejeté — réservé aux superviseurs --}}
+                        @can('demandes.rouvrir')
+                            <div class="mt-2 pt-3 text-start" style="border-top:1px solid var(--line);">
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                                    data-bs-toggle="collapse" data-bs-target="#reopenBox">
+                                    <i class="fas fa-rotate-left"></i> Rouvrir pour correction
+                                </button>
+                                <div class="collapse mt-2" id="reopenBox">
+                                    <form method="POST" action="{{ route('admin.requests.reopen', $studentRequest) }}" id="reopenForm">
+                                        @csrf
+                                        <textarea class="form-control form-control-sm mb-2" name="reopen_message" rows="3"
+                                            minlength="10" required placeholder="Motif de la réouverture (min. 10 caractères)…"></textarea>
+                                        <button type="submit" class="btn btn-sm btn-warning w-100">
+                                            <i class="fas fa-rotate-left"></i> Renvoyer à l'étudiant
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
-                        </div>
+                        @endcan
                     </div>
                 @endif
 

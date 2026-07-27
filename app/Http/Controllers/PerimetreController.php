@@ -20,7 +20,7 @@ class PerimetreController extends Controller
         $agents = User::whereNotIn('role', ['etudiant', 'candidat', 'super_admin'])
             ->with('perimetres.parcours.departement.faculte')
             ->orderBy('nom')->orderBy('numero_identifiant')
-            ->get();
+            ->paginate(\App\Models\Setting::perPage())->withQueryString();
 
         $facultes = Faculte::where('is_active', true)
             ->with(['departements' => fn ($q) => $q->where('is_active', true)

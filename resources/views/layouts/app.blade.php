@@ -401,6 +401,20 @@
             .content { padding: 18px 15px; }
             .toast-shelf { width: calc(100vw - 32px); right: 16px; bottom: 16px; }
         }
+        @media (max-width: 767px) {
+            .topbar { padding: 0 14px; gap: 10px; }
+            .tb-pill { display: none; }               /* pilule d'état : superflue sur mobile */
+            .tb-title { font-size: 16px; }
+            .tb-sub { display: none; }
+            .card-body { padding: 15px !important; }
+            .table { font-size: 13px; }
+            .table td, .table th { padding: 8px 10px; }
+            /* Boutons d'onglets / filtres : défilement horizontal plutôt qu'empilement */
+            .d-flex.gap-2.flex-wrap.mb-4 { flex-wrap: nowrap !important; overflow-x: auto;
+                padding-bottom: 6px; scrollbar-width: none; }
+            .d-flex.gap-2.flex-wrap.mb-4::-webkit-scrollbar { display: none; }
+            .d-flex.gap-2.flex-wrap.mb-4 .btn { white-space: nowrap; flex-shrink: 0; }
+        }
     </style>
 
     @yield('css')
@@ -429,9 +443,11 @@
                     <a href="{{ route('admin.dashboard') }}" class="sb-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" title="Vue d'ensemble">
                         <span class="sb-icon"><i class="fas fa-gauge-high"></i></span><span class="sb-label">Vue d'ensemble</span>
                     </a>
-                    <a href="{{ route('admin.statistiques.index') }}" class="sb-link {{ request()->routeIs('admin.statistiques.*') ? 'active' : '' }}" title="Statistiques">
-                        <span class="sb-icon"><i class="fas fa-chart-column"></i></span><span class="sb-label">Statistiques</span>
-                    </a>
+                    @can('statistiques.consulter')
+                        <a href="{{ route('admin.statistiques.index') }}" class="sb-link {{ request()->routeIs('admin.statistiques.*') ? 'active' : '' }}" title="Statistiques">
+                            <span class="sb-icon"><i class="fas fa-chart-column"></i></span><span class="sb-label">Statistiques</span>
+                        </a>
+                    @endcan
                     @can('archives.consulter')
                         <a href="{{ route('admin.archives.index') }}" class="sb-link {{ request()->routeIs('admin.archives.*') ? 'active' : '' }}" title="Archives numériques">
                             <span class="sb-icon"><i class="fas fa-box-archive"></i></span><span class="sb-label">Archives</span>
@@ -446,17 +462,18 @@
                     @php
                         $procIcons = ['depot'=>'fa-folder-open','attestation'=>'fa-certificate','diplome'=>'fa-graduation-cap','releve'=>'fa-list-alt','duplicat'=>'fa-id-card','homologation'=>'fa-stamp'];
                         $mesCategories = auth()->user()->treatableCategories();
-                        $reqProcs = \App\Models\Procedure::whereIn('code', $mesCategories)
-                            ->where('code', '<>', 'candidature')->orderBy('ordre')->orderBy('id')->get();
+                        // labels() est en cache permanent : aucune requête SQL ici
+                        $reqProcs = collect(\App\Models\Procedure::labels())
+                            ->only($mesCategories)->except('candidature');
                         $voitCandidatures = auth()->user()->can('candidature.traiter');
                     @endphp
                     @if ($reqProcs->isNotEmpty() || $voitCandidatures)
                         <div class="sb-section">Dépôts &amp; Demandes</div>
-                        @foreach ($reqProcs as $proc)
-                            <a href="{{ route('admin.requests.index', ['category' => $proc->code]) }}"
-                                class="sb-link {{ request()->routeIs('admin.requests.*') && request()->route('category') === $proc->code ? 'active' : '' }}"
-                                title="{{ $proc->nom }}">
-                                <span class="sb-icon"><i class="fas {{ $procIcons[$proc->code] ?? 'fa-file-lines' }}"></i></span><span class="sb-label">{{ $proc->nom }}</span>
+                        @foreach ($reqProcs as $procCode => $procNom)
+                            <a href="{{ route('admin.requests.index', ['category' => $procCode]) }}"
+                                class="sb-link {{ request()->routeIs('admin.requests.*') && request()->route('category') === $procCode ? 'active' : '' }}"
+                                title="{{ $procNom }}">
+                                <span class="sb-icon"><i class="fas {{ $procIcons[$procCode] ?? 'fa-file-lines' }}"></i></span><span class="sb-label">{{ $procNom }}</span>
                             </a>
                         @endforeach
                         @if ($voitCandidatures)
@@ -467,47 +484,56 @@
                     @endif
 
                     <div class="sb-section">Configuration</div>
-                    @can('parametres.gerer')
+                    @canany(['procedures.voir', 'parametres.gerer'])
                         <a href="{{ route('admin.procedures.index') }}" class="sb-link {{ request()->routeIs('admin.procedures.*') ? 'active' : '' }}" title="Procédures">
                             <span class="sb-icon"><i class="fas fa-diagram-project"></i></span><span class="sb-label">Procédures</span>
                         </a>
-                    @endcan
-                    <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
-                        <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
-                    </a>
-                    @can('academique.gerer')
+                    @endcanany
+                    @canany(['types.voir', 'parametres.gerer'])
+                        <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
+                            <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
+                        </a>
+                    @endcanany
+                    @canany(['academique.voir', 'academique.gerer'])
                         <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
                             <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
                         </a>
-                    @endcan
-                    @can('annees.gerer')
+                    @endcanany
+                    @canany(['annees.voir', 'annees.gerer'])
                         <a href="{{ route('admin.annees.index') }}" class="sb-link {{ request()->routeIs('admin.annees.*') ? 'active' : '' }}" title="Années académiques">
                             <span class="sb-icon"><i class="fas fa-calendar-days"></i></span><span class="sb-label">Années académiques</span>
                         </a>
-                    @endcan
-                    @can('identites.importer')
+                    @endcanany
+                    @canany(['identites.voir', 'identites.importer'])
                         <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import / export)">
                             <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
                         </a>
-                    @endcan
-                    @can('utilisateurs.gerer')
+                    @endcanany
+                    @canany(['utilisateurs.voir', 'utilisateurs.gerer'])
                         <a href="{{ route('admin.utilisateurs.index') }}" class="sb-link {{ request()->routeIs('admin.utilisateurs.*') ? 'active' : '' }}" title="Utilisateurs">
                             <span class="sb-icon"><i class="fas fa-users-gear"></i></span><span class="sb-label">Utilisateurs</span>
                         </a>
+                    @endcanany
+                    @canany(['perimetres.voir', 'perimetres.affecter', 'utilisateurs.gerer'])
                         <a href="{{ route('admin.perimetres.index') }}" class="sb-link {{ request()->routeIs('admin.perimetres.*') ? 'active' : '' }}" title="Périmètres agents">
                             <span class="sb-icon"><i class="fas fa-location-crosshairs"></i></span><span class="sb-label">Périmètres agents</span>
                         </a>
-                    @endcan
-                    @can('roles.gerer')
+                    @endcanany
+                    @canany(['roles.voir', 'roles.gerer'])
                         <a href="{{ route('admin.roles.index') }}" class="sb-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" title="Rôles & permissions">
                             <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Rôles &amp; permissions</span>
                         </a>
-                    @endcan
+                    @endcanany
                     @if (auth()->user()->isSuperAdmin())
                         <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
                         </a>
                     @endif
+
+                    <div class="sb-section">Mon compte</div>
+                    <a href="{{ route('admin.securite') }}" class="sb-link {{ request()->routeIs('admin.securite') ? 'active' : '' }}" title="Sécurité (2FA)">
+                        <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Sécurité (2FA)</span>
+                    </a>
                 @else
                     <div class="sb-section">Mon espace</div>
                     <a href="{{ route('student.dashboard') }}" class="sb-link {{ request()->routeIs('student.dashboard') ? 'active' : '' }}" title="Mes demandes">
@@ -550,7 +576,10 @@
                     @if (auth()->user()->isAdmin())
                         @php
                             $ctxAnnee = \App\Models\AnneeAcademique::context();
-                            $allAnnees = \App\Models\AnneeAcademique::orderByDesc('libelle')->get();
+                            // Les années ARCHIVÉES sont retirées du sélecteur de contexte
+                            // (elles restent consultables via les Archives numériques).
+                            $allAnnees = \App\Models\AnneeAcademique::where('statut', '<>', 'archivee')
+                                ->orderByDesc('libelle')->get();
                         @endphp
                         @if ($allAnnees->isNotEmpty())
                             <div class="dropdown">

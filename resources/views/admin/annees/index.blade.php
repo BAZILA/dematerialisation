@@ -4,7 +4,8 @@
 
 @section('content')
     @php
-        $ops = \App\Models\Periode::$operations;
+        // Liste dynamique : toutes les procédures actives (y compris créées via l'UI)
+        $ops = \App\Models\Periode::operations();
         $statuts = \App\Models\AnneeAcademique::$statuts;
         $badge = ['en_preparation' => 'secondary', 'ouverte' => 'success', 'cloturee' => 'warning', 'archivee' => 'secondary'];
     @endphp
@@ -12,7 +13,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="text-muted small">
             <i class="fas fa-circle-info"></i> Cliquez sur une année pour déplier ses fenêtres.
-            L'année <strong>active</strong> définit le contexte ; les clôturées/archivées sont en lecture seule.
+            L'année <strong>active</strong> définit le contexte.
+            <strong>Clôturée</strong> = terminée, consultable en lecture seule dans les sélecteurs.
+            <strong>Archivée</strong> = retirée des sélecteurs (étudiants et personnel) ;
+            ses dossiers restent accessibles via les <strong>Archives numériques</strong>.
         </div>
         <button class="btn btn-primary" onclick="openAnnee('create')" data-bs-toggle="modal" data-bs-target="#modalAnnee">
             <i class="fas fa-plus"></i> Ajouter une année

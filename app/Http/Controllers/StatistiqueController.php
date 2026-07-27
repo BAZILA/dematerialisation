@@ -14,51 +14,86 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Tableau de bord statistique : demandes, dépôts, candidatures.
- * Toujours borné à l'année de contexte et au périmètre de l'agent.
+ * Filtres combinables (année, période, procédure, statut, faculté,
+ * département, parcours, grade, niveau, sexe, type d'étudiant) et
+ * EXPORTS en un clic : Excel (synthèse + détail), CSV (détail), PDF (synthèse).
+ * Toujours borné au périmètre de l'agent.
  */
 class StatistiqueController extends Controller
 {
-    /** Requête de base (année + périmètre + filtres), neuve à chaque appel. */
+    /** Libellés des statuts (partagés index / exports). */
+    public static array $statutsLabels = [
+        'brouillon' => 'Brouillon', 'soumis' => 'En attente', 'en_correction' => 'À corriger',
+        'validé' => 'Validé', 'rejeté' => 'Rejeté',
+    ];
+
+    /** Requête de base (année + périmètre + TOUS les filtres), neuve à chaque appel. */
     private function base(Request $request): \Illuminate\Database\Eloquent\Builder
     {
         $q = StudentRequest::query();
 
-        if ($annee = AnneeAcademique::context()) {
+        // Année : filtrable (défaut = année de contexte ; « all » = toutes)
+        $anneeId = $request->input('annee_id');
+        if ($anneeId === 'all') {
+            // pas de filtre d'année (cumul toutes années)
+        } elseif ($anneeId) {
+            $q->where('annee_academique_id', (int) $anneeId);
+        } elseif ($annee = AnneeAcademique::context()) {
             $q->where('annee_academique_id', $annee->id);
         }
+
         $request->user()->applyPerimeterFilter($q);
 
+        if ($request->filled('category')) {
+            $q->where('category', $request->category);
+        }
+        if ($request->filled('status')) {
+            $q->where('status', $request->status);
+        }
         if ($request->filled('faculte_id')) {
             $fid = $request->faculte_id;
             $q->whereHas('parcours.departement', fn ($d) => $d->where('faculte_id', $fid));
         }
+        if ($request->filled('departement_id')) {
+            $did = $request->departement_id;
+            $q->whereHas('parcours', fn ($p) => $p->where('departement_id', $did));
+        }
         if ($request->filled('parcours_id')) {
             $q->where('parcours_id', $request->parcours_id);
         }
+        if ($request->filled('grade')) {
+            $g = $request->grade;
+            $q->whereHas('parcours', fn ($p) => $p->where('grade', $g));
+        }
         if ($request->filled('semestre')) {
             $q->where('semestre', $request->semestre);
+        }
+        if ($request->filled('type_etudiant')) {
+            $t = $request->type_etudiant;
+            $q->whereHas('student.user', fn ($u) => $u->where('type_etudiant', $t));
+        }
+        if ($request->filled('sexe')) {
+            $s = $request->sexe;
+            $q->whereHas('student', fn ($st) => $st->where('sexe', $s));
+        }
+        // Période de soumission
+        if ($request->filled('date_du')) {
+            $q->where('submitted_at', '>=', $request->date('date_du')->startOfDay());
+        }
+        if ($request->filled('date_au')) {
+            $q->where('submitted_at', '<=', $request->date('date_au')->endOfDay());
         }
 
         return $q;
     }
 
-    public function index(Request $request)
+    /** Tous les agrégats (partagés entre la page et les exports). */
+    private function aggregats(Request $request): array
     {
-        $annee = AnneeAcademique::context();
-
-        /* ── Compteurs par statut ──────────────────────────── */
         $parStatut = $this->base($request)
             ->select('status', DB::raw('COUNT(*) as n'))
             ->groupBy('status')->pluck('n', 'status')->all();
 
-        $total     = array_sum($parStatut);
-        $enAttente = $parStatut['soumis'] ?? 0;
-        $aCorriger = $parStatut['en_correction'] ?? 0;
-        $validees  = $parStatut['validé'] ?? 0;
-        $rejetees  = $parStatut['rejeté'] ?? 0;
-        $brouillon = $parStatut['brouillon'] ?? 0;
-
-        /* ── Par procédure (catégorie) × statut ────────────── */
         $parCatStatut = $this->base($request)
             ->select('category', 'status', DB::raw('COUNT(*) as n'))
             ->groupBy('category', 'status')->get()
@@ -69,7 +104,6 @@ class StatistiqueController extends Controller
             ->select('category', DB::raw('COUNT(*) as n'))
             ->groupBy('category')->pluck('n', 'category')->all();
 
-        /* ── Dépôts par faculté ────────────────────────────── */
         $parFaculte = $this->base($request)
             ->join('parcours', 'parcours.id', '=', 'student_requests.parcours_id')
             ->join('departements', 'departements.id', '=', 'parcours.departement_id')
@@ -78,28 +112,26 @@ class StatistiqueController extends Controller
             ->groupBy('facultes.id', 'facultes.nom')
             ->orderByDesc('n')->pluck('n', 'nom')->all();
 
-        /* ── Top parcours ──────────────────────────────────── */
+        $parDepartement = $this->base($request)
+            ->join('parcours', 'parcours.id', '=', 'student_requests.parcours_id')
+            ->join('departements', 'departements.id', '=', 'parcours.departement_id')
+            ->select('departements.nom', DB::raw('COUNT(*) as n'))
+            ->groupBy('departements.id', 'departements.nom')
+            ->orderByDesc('n')->pluck('n', 'nom')->all();
+
         $parParcours = $this->base($request)
             ->join('parcours', 'parcours.id', '=', 'student_requests.parcours_id')
             ->select('parcours.nom', DB::raw('COUNT(*) as n'))
             ->groupBy('parcours.id', 'parcours.nom')
             ->orderByDesc('n')->limit(10)->pluck('n', 'nom')->all();
 
-        /* ── Par semestre + saison ─────────────────────────── */
         $parSemestre = $this->base($request)
             ->whereNotNull('semestre')
             ->select('semestre', DB::raw('COUNT(*) as n'))
-            ->groupBy('semestre')->orderBy('semestre')->pluck('n', 'semestre')->all();
+            ->groupBy('semestre')->orderBy('semestre')->pluck('n', 'semestre')
+            ->mapWithKeys(fn ($n, $code) => [(Parcours::libelleNiveau($code) ?? $code) => $n])
+            ->all();
 
-        $parSaison = ['Harmattan' => 0, 'Mousson' => 0];
-        foreach ($parSemestre as $sem => $n) {
-            $s = StudentRequest::saison($sem);
-            if ($s) {
-                $parSaison[$s] += $n;
-            }
-        }
-
-        /* ── Par sexe / type d'étudiant ────────────────────── */
         $parSexe = $this->base($request)
             ->join('students', 'students.id', '=', 'student_requests.student_id')
             ->select('students.sexe', DB::raw('COUNT(*) as n'))
@@ -111,52 +143,157 @@ class StatistiqueController extends Controller
             ->select('users.type_etudiant', DB::raw('COUNT(*) as n'))
             ->groupBy('users.type_etudiant')->pluck('n', 'type_etudiant')->all();
 
-        /* ── Pièces jointes ────────────────────────────────── */
         $ids = $this->base($request)->pluck('student_requests.id');
         $nbPieces   = RequestFile::whereIn('student_request_id', $ids)->count();
         $nbTamponne = RequestFile::whereIn('student_request_id', $ids)->where('is_stamped', true)->count();
 
-        /* ── Délai moyen de traitement (soumission → validation) ── */
         $delaiHeures = $this->base($request)
             ->whereNotNull('submitted_at')->whereNotNull('validated_at')
             ->avg(DB::raw('TIMESTAMPDIFF(HOUR, submitted_at, validated_at)'));
-        $delaiJours = $delaiHeures ? round($delaiHeures / 24, 1) : null;
 
-        /* ── Évolution : soumissions par mois ──────────────── */
         $parMois = $this->base($request)
             ->whereNotNull('submitted_at')
             ->select(DB::raw("DATE_FORMAT(submitted_at, '%Y-%m') as mois"), DB::raw('COUNT(*) as n'))
             ->groupBy('mois')->orderBy('mois')->pluck('n', 'mois')->all();
 
-        /* ── Candidatures (année de contexte) ──────────────── */
+        return [
+            'parStatut'      => $parStatut,
+            'total'          => array_sum($parStatut),
+            'parCatStatut'   => $parCatStatut,
+            'parCategorie'   => $parCategorie,
+            'parFaculte'     => $parFaculte,
+            'parDepartement' => $parDepartement,
+            'parParcours'    => $parParcours,
+            'parSemestre'    => $parSemestre,
+            'parSexe'        => $parSexe,
+            'parType'        => $parType,
+            'nbPieces'       => $nbPieces,
+            'nbTamponne'     => $nbTamponne,
+            'delaiJours'     => $delaiHeures ? round($delaiHeures / 24, 1) : null,
+            'parMois'        => $parMois,
+        ];
+    }
+
+    /** Description lisible des filtres appliqués (affichée sur les exports). */
+    private function filtresLisibles(Request $request): array
+    {
+        $f = [];
+        if ($request->input('annee_id') === 'all') {
+            $f['Année'] = 'Toutes les années (cumul)';
+        } elseif ($request->filled('annee_id')) {
+            $f['Année'] = AnneeAcademique::find((int) $request->annee_id)?->libelle ?? $request->annee_id;
+        } else {
+            $f['Année'] = AnneeAcademique::context()?->libelle ?? '—';
+        }
+        if ($request->filled('date_du'))   $f['Du'] = $request->date('date_du')->format('d/m/Y');
+        if ($request->filled('date_au'))   $f['Au'] = $request->date('date_au')->format('d/m/Y');
+        if ($request->filled('category'))  $f['Procédure'] = \App\Models\Procedure::labels()[$request->category] ?? $request->category;
+        if ($request->filled('status'))    $f['Statut'] = self::$statutsLabels[$request->status] ?? $request->status;
+        if ($request->filled('faculte_id')) $f['Faculté'] = Faculte::find($request->faculte_id)?->nom;
+        if ($request->filled('departement_id')) $f['Département'] = \App\Models\Departement::find($request->departement_id)?->nom;
+        if ($request->filled('parcours_id')) $f['Parcours'] = Parcours::find($request->parcours_id)?->nom;
+        if ($request->filled('grade'))     $f['Grade'] = Parcours::$grades[$request->grade]['label'] ?? $request->grade;
+        if ($request->filled('semestre'))  $f['Niveau'] = Parcours::libelleNiveau($request->semestre) ?? $request->semestre;
+        if ($request->filled('type_etudiant')) $f['Profil'] = $request->type_etudiant === 'nouveau' ? 'Nouveaux' : 'Anciens';
+        if ($request->filled('sexe'))      $f['Sexe'] = $request->sexe;
+
+        return $f;
+    }
+
+    public function index(Request $request)
+    {
+        $annee = AnneeAcademique::context();
+        $agg = $this->aggregats($request);
+
+        /* ── Candidatures (année de contexte / filtrée) ─────── */
         $candQ = Candidature::query();
-        if ($annee) {
+        $anneeId = $request->input('annee_id');
+        if ($anneeId && $anneeId !== 'all') {
+            $candQ->where('annee_academique_id', (int) $anneeId);
+        } elseif (!$anneeId && $annee) {
             $candQ->where('annee_academique_id', $annee->id);
         }
-        $candParStatut = (clone $candQ)->select('status', DB::raw('COUNT(*) as n'))
+        $candParStatut = $candQ->select('status', DB::raw('COUNT(*) as n'))
             ->groupBy('status')->pluck('n', 'status')->all();
         $candTotal = array_sum($candParStatut);
 
         /* ── Listes pour les filtres ───────────────────────── */
         $facultes = Faculte::where('is_active', true)->orderBy('nom')->get();
+        $departements = \App\Models\Departement::where('is_active', true)
+            ->when($request->filled('faculte_id'), fn ($q) => $q->where('faculte_id', $request->faculte_id))
+            ->orderBy('nom')->get();
         $parcoursList = Parcours::where('is_active', true)
             ->when($request->filled('faculte_id'), fn ($q) => $q->whereHas('departement',
                 fn ($d) => $d->where('faculte_id', $request->faculte_id)))
             ->orderBy('nom')->get();
+        $annees = AnneeAcademique::where('statut', '<>', 'archivee')->orderByDesc('libelle')->get();
 
         $categories = RequestType::categories();
-        $statutsLabels = [
-            'brouillon' => 'Brouillon', 'soumis' => 'En attente', 'en_correction' => 'À corriger',
-            'validé' => 'Validé', 'rejeté' => 'Rejeté',
-        ];
+        $grades = Parcours::$grades;
+        $statutsLabels = self::$statutsLabels;
 
-        return view('admin.statistiques.index', compact(
-            'annee', 'total', 'enAttente', 'aCorriger', 'validees', 'rejetees', 'brouillon',
-            'parStatut', 'parCategorie', 'parCatStatut', 'parFaculte', 'parParcours',
-            'parSemestre', 'parSaison', 'parSexe', 'parType',
-            'nbPieces', 'nbTamponne', 'delaiJours', 'parMois',
-            'candParStatut', 'candTotal',
-            'facultes', 'parcoursList', 'categories', 'statutsLabels'
-        ));
+        return view('admin.statistiques.index', array_merge($agg, compact(
+            'annee', 'candParStatut', 'candTotal',
+            'facultes', 'departements', 'parcoursList', 'annees', 'categories', 'grades', 'statutsLabels'
+        ), [
+            'enAttente' => $agg['parStatut']['soumis'] ?? 0,
+            'aCorriger' => $agg['parStatut']['en_correction'] ?? 0,
+            'validees'  => $agg['parStatut']['validé'] ?? 0,
+            'rejetees'  => $agg['parStatut']['rejeté'] ?? 0,
+            'brouillon' => $agg['parStatut']['brouillon'] ?? 0,
+        ]));
+    }
+
+    /* ════════════════════════════════════════════════════════
+     |  EXPORTS EN UN CLIC — mêmes filtres que la page
+     |  excel = synthèse + détail (2 feuilles) | csv = détail | pdf = synthèse
+     ════════════════════════════════════════════════════════ */
+
+    public function export(Request $request, string $format)
+    {
+        abort_unless(in_array($format, ['excel', 'csv', 'pdf']), 404);
+
+        $horodatage = now()->format('Ymd-His');
+
+        if ($format === 'pdf') {
+            $pdf = app(\App\Services\StatsPdfService::class)->build(
+                $this->aggregats($request),
+                $this->filtresLisibles($request)
+            );
+            \App\Models\AuditLog::record('stats.export', null, "Export statistiques PDF", $this->filtresLisibles($request));
+
+            return response($pdf, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="statistiques-' . $horodatage . '.pdf"',
+            ]);
+        }
+
+        // Détail : toutes les demandes filtrées, colonnes complètes
+        $rows = $this->base($request)->with([
+            'student.user', 'student.bachelier', 'student.ancienEtudiant',
+            'parcours.departement.faculte', 'anneeAcademique', 'validator', 'files',
+        ])->orderBy('annee_academique_id')->orderBy('parcours_id')->orderBy('semestre')->get();
+
+        \App\Models\AuditLog::record('stats.export', null,
+            'Export statistiques ' . strtoupper($format) . " — {$rows->count()} ligne(s)",
+            $this->filtresLisibles($request));
+
+        if ($format === 'csv') {
+            return \Maatwebsite\Excel\Facades\Excel::download(
+                new \App\Exports\DemandesDetailExport($rows),
+                'statistiques-detail-' . $horodatage . '.csv',
+                \Maatwebsite\Excel\Excel::CSV
+            );
+        }
+
+        // Excel : 2 feuilles (Synthèse + Détail)
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\StatistiquesExport(
+                $this->aggregats($request),
+                $this->filtresLisibles($request),
+                $rows
+            ),
+            'statistiques-' . $horodatage . '.xlsx'
+        );
     }
 }

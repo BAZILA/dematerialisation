@@ -28,6 +28,7 @@ class AnneeController extends Controller
         $annee = AnneeAcademique::create(collect($data)->except('cloner_de')->all());
 
         $msg = 'Année académique ajoutée.';
+        $msg .= $this->messageChevauchement($annee);
 
         // Clonage des paramètres depuis une année source
         if (!empty($data['cloner_de'])) {
@@ -85,18 +86,86 @@ class AnneeController extends Controller
         ]);
         $annee->update($data);
 
-        return back()->with('success', 'Année académique mise à jour.');
+        return back()->with('success', 'Année académique mise à jour.' . $this->messageChevauchement($annee));
+    }
+
+    /**
+     * Message personnalisé si les dates de l'année chevauchent une autre
+     * année existante (informatif — ne bloque pas).
+     */
+    private function messageChevauchement(AnneeAcademique $annee): string
+    {
+        if (!$annee->date_debut || !$annee->date_fin) {
+            return '';
+        }
+
+        $conflits = AnneeAcademique::where('id', '<>', $annee->id)
+            ->whereNotNull('date_debut')->whereNotNull('date_fin')
+            ->where('date_debut', '<=', $annee->date_fin)
+            ->where('date_fin', '>=', $annee->date_debut)
+            ->get();
+
+        if ($conflits->isEmpty()) {
+            return '';
+        }
+
+        $détail = $conflits->map(fn ($a) => "{$a->libelle} ({$a->date_debut->format('d/m/Y')} – {$a->date_fin->format('d/m/Y')})")
+            ->implode(', ');
+
+        return " ⚠ Attention : ses dates chevauchent " . ($conflits->count() > 1 ? 'les années ' : "l'année ")
+            . $détail . '. Vérifiez que ce recouvrement est voulu.';
     }
 
     /** Définit l'année de contexte courante (une seule active). */
     public function activate(AnneeAcademique $annee)
     {
         AnneeAcademique::query()->update(['is_active' => false]);
-        $annee->update(['is_active' => true]);
+        // Via le query builder : le modèle en mémoire peut déjà porter
+        // is_active=true (ré-activation) et l'update Eloquent serait ignoré.
+        AnneeAcademique::whereKey($annee->id)->update(['is_active' => true]);
+        $annee->refresh();
+        AnneeAcademique::flushMemo();
 
         \App\Models\AuditLog::record('annee.activee', $annee, "Année active : {$annee->libelle}");
 
-        return back()->with('success', "Année active : {$annee->libelle}.");
+        // ── BASCULE AUTOMATIQUE NOUVEAU → ANCIEN ──
+        // Modèle opérationnel : les anciens ne sont chargés qu'au démarrage ;
+        // ensuite seuls les nouveaux bacheliers sont importés chaque année.
+        // Au passage à la nouvelle année, tout « nouveau » ayant un dépôt
+        // VALIDÉ d'une année antérieure devient « ancien » (compte, historique
+        // et n° de suivi conservés — le suivi reste la clé pivot).
+        $n = $this->basculerNouveauxVersAnciens($annee);
+
+        $msg = "Année active : {$annee->libelle}.";
+        if ($n > 0) {
+            $msg .= " {$n} étudiant(s) « nouveau » basculé(s) en « ancien » (dépôt validé d'une année antérieure).";
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    /** Bascule les nouveaux ayant un dépôt validé AVANT l'année active. */
+    private function basculerNouveauxVersAnciens(AnneeAcademique $active): int
+    {
+        $users = \App\Models\User::where('type_etudiant', 'nouveau')
+            ->whereHas('student.requests', fn ($q) => $q
+                ->where('category', 'depot')
+                ->where('status', 'validé')
+                ->where('annee_academique_id', '<>', $active->id))
+            ->get();
+
+        foreach ($users as $u) {
+            $u->type_etudiant = 'ancien';
+            $u->save();
+        }
+
+        if ($users->isNotEmpty()) {
+            \App\Models\AuditLog::record('etudiants.bascule_anciens', $active,
+                $users->count() . " nouveau(x) basculé(s) en ancien(s) à l'activation de {$active->libelle}",
+                ['identifiants' => $users->pluck('numero_identifiant')->all()]);
+        }
+
+        return $users->count();
     }
 
     public function destroy(AnneeAcademique $annee)
@@ -114,7 +183,8 @@ class AnneeController extends Controller
     public function savePeriode(Request $request, AnneeAcademique $annee)
     {
         $data = $request->validate([
-            'operation'  => 'required|in:candidature,depot,attestation,releve,diplome,duplicat,homologation',
+            // Toute procédure existante (y compris créées depuis l'interface)
+            'operation'  => ['required', \Illuminate\Validation\Rule::exists('procedures', 'code')],
             'date_debut' => 'nullable|date',
             'date_fin'   => 'nullable|date|after_or_equal:date_debut',
         ]);
@@ -128,7 +198,18 @@ class AnneeController extends Controller
             ]
         );
 
-        return back()->with('success', 'Fenêtre enregistrée.');
+        // Message personnalisé si la fenêtre déborde des dates de l'année
+        $msg = 'Fenêtre enregistrée.';
+        $debut = !empty($data['date_debut']) ? \Carbon\Carbon::parse($data['date_debut']) : null;
+        $fin   = !empty($data['date_fin']) ? \Carbon\Carbon::parse($data['date_fin']) : null;
+        if ($annee->date_debut && $debut && $debut->lt($annee->date_debut)) {
+            $msg .= " ⚠ Le début ({$debut->format('d/m/Y')}) est AVANT le début de l'année ({$annee->date_debut->format('d/m/Y')}).";
+        }
+        if ($annee->date_fin && $fin && $fin->gt($annee->date_fin)) {
+            $msg .= " ⚠ La fin ({$fin->format('d/m/Y')}) est APRÈS la fin de l'année ({$annee->date_fin->format('d/m/Y')}).";
+        }
+
+        return back()->with('success', $msg);
     }
 
     public function destroyPeriode(Periode $periode)

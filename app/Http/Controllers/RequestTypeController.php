@@ -19,11 +19,31 @@ class RequestTypeController extends Controller
 
     public function index()
     {
-        $types = RequestType::orderBy('category')->orderBy('order')->orderBy('id')
+        $types = RequestType::with('parcours')
+            ->orderBy('category')->orderBy('order')->orderBy('id')
             ->get()->groupBy('category');
         $categories = RequestType::categories();
 
-        return view('admin.request_types.index', compact('types', 'categories'));
+        // Pour la portée des pièces de candidature (commune / propre à un parcours)
+        $parcoursParFaculte = \App\Models\Parcours::with('departement.faculte')
+            ->where('is_active', true)->orderBy('nom')->get()
+            ->groupBy(fn ($p) => $p->departement?->faculte?->nom ?? 'Sans rattachement');
+
+        return view('admin.request_types.index', compact('types', 'categories', 'parcoursParFaculte'));
+    }
+
+    /** Portée : aucun parcours coché (ou « commune ») = pièce commune à tous. */
+    private function syncPortee(Request $request, RequestType $type): void
+    {
+        if ($type->category !== 'candidature') {
+            $type->parcours()->detach();
+
+            return;
+        }
+        $ids = $request->input('portee') === 'specifique'
+            ? array_filter((array) $request->input('parcours_ids', []))
+            : [];
+        $type->parcours()->sync($ids);
     }
 
     /* ── Store ─────────────────────────────────────────── */
@@ -39,13 +59,16 @@ class RequestTypeController extends Controller
             'has_stamp' => 'nullable|boolean',
             'fills_verso' => 'nullable|boolean',
             'order' => 'nullable|integer|min:0',
+            'portee' => 'nullable|in:commune,specifique',
+            'parcours_ids' => 'nullable|array',
+            'parcours_ids.*' => 'integer|exists:parcours,id',
         ]);
 
         if ($data['category'] !== 'depot') {
             $data['type_etudiant'] = 'ancien';
         }
 
-        RequestType::create([
+        $type = RequestType::create([
             'label' => $data['label'],
             'category' => $data['category'],
             'type_etudiant' => $data['type_etudiant'],
@@ -56,6 +79,8 @@ class RequestTypeController extends Controller
             'is_active' => true,
             'order' => $data['order'] ?? 99,
         ]);
+
+        $this->syncPortee($request, $type);
 
         return $this->backToTab($data['category'])
             ->with('success', "« {$data['label']} » ajouté avec succès.");
@@ -75,6 +100,9 @@ class RequestTypeController extends Controller
             'fills_verso' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
             'order' => 'nullable|integer|min:0',
+            'portee' => 'nullable|in:commune,specifique',
+            'parcours_ids' => 'nullable|array',
+            'parcours_ids.*' => 'integer|exists:parcours,id',
         ]);
 
         if ($data['category'] !== 'depot') {
@@ -92,6 +120,8 @@ class RequestTypeController extends Controller
             'is_active' => $request->boolean('is_active', true),
             'order' => $data['order'] ?? $requestType->order,
         ]);
+
+        $this->syncPortee($request, $requestType->refresh());
 
         return $this->backToTab($requestType->category)
             ->with('success', "« {$requestType->label} » mis à jour.");

@@ -32,7 +32,7 @@ class AuditController extends Controller
             $query->where('description', 'LIKE', '%' . $request->search . '%');
         }
 
-        $logs = $query->paginate(40)->withQueryString();
+        $logs = $query->paginate(\App\Models\Setting::perPage(40))->withQueryString();
 
         // Listes pour les filtres
         $actions = AuditLog::select('action')->distinct()->orderBy('action')->pluck('action');

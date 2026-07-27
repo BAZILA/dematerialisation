@@ -62,6 +62,16 @@
     </div>
 
     {{-- ════ Graphiques ════ --}}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="fas fa-chart-line"></i> Évolution des soumissions</span>
+            <small style="color:var(--t3);">Année {{ $annee?->libelle ?? '—' }} — par mois</small>
+        </div>
+        <div class="card-body">
+            <div style="position:relative;height:240px;"><canvas id="chartMois"></canvas></div>
+        </div>
+    </div>
+
     <div class="row g-4 mb-4">
         <div class="col-md-7">
             <div class="card h-100">
@@ -154,6 +164,53 @@
     <script>
         const catData = @json($chartData['by_category']);
         const statusData = @json($chartData['by_status']);
+        const moisData = @json($chartData['by_month'] ?? []);
+
+        /* ── Courbe pro : soumissions par mois (dégradé sous la courbe) ── */
+        (function () {
+            const el = document.getElementById('chartMois');
+            if (!el) return;
+            const labels = Object.keys(moisData);
+            const values = Object.values(moisData);
+            const fmt = m => { // « 2026-07 » → « Juil. 2026 »
+                const noms = ['Janv.','Févr.','Mars','Avr.','Mai','Juin','Juil.','Août','Sept.','Oct.','Nov.','Déc.'];
+                const [y, mm] = m.split('-');
+                return (noms[parseInt(mm, 10) - 1] || m) + ' ' + y;
+            };
+            const ctx = el.getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 0, 240);
+            grad.addColorStop(0, 'rgba(26,86,168,.28)');
+            grad.addColorStop(1, 'rgba(26,86,168,0)');
+            new Chart(el, {
+                type: 'line',
+                data: {
+                    labels: labels.map(fmt),
+                    datasets: [{
+                        label: 'Soumissions',
+                        data: values,
+                        borderColor: '#1A56A8',
+                        backgroundColor: grad,
+                        fill: true,
+                        tension: .4,
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#1A56A8',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#51607A' }, grid: { color: 'rgba(16,32,64,.07)' } },
+                        x: { grid: { display: false }, ticks: { color: '#51607A' } }
+                    }
+                }
+            });
+        })();
         const catBg = {
             depot: 'rgba(27,58,107,.85)',
             attestation: 'rgba(21,136,90,.82)',

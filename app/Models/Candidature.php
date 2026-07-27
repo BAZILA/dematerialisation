@@ -9,7 +9,7 @@ class Candidature extends Model
 {
     protected $fillable = [
         'reference', 'nom', 'prenom', 'sexe', 'date_naissance', 'lieu_naissance',
-        'email', 'telephone', 'parcours_id', 'annee_academique_id', 'status',
+        'email', 'telephone', 'parcours_id', 'parcours_admis_id', 'annee_academique_id', 'status',
         'admin_comment', 'traite_par', 'decision_at',
     ];
 
@@ -29,6 +29,18 @@ class Candidature extends Model
     public function parcours()
     {
         return $this->belongsTo(Parcours::class);
+    }
+
+    /** Choix de parcours classés par ordre de préférence (1 = premier choix). */
+    public function choix()
+    {
+        return $this->hasMany(CandidatureChoix::class)->orderBy('ordre');
+    }
+
+    /** Parcours retenu à l'admission. */
+    public function parcoursAdmis()
+    {
+        return $this->belongsTo(Parcours::class, 'parcours_admis_id');
     }
 
     public function anneeAcademique()

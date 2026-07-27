@@ -44,6 +44,8 @@ Route::prefix('candidature')->name('candidature.')->group(function () {
     Route::get('/confirmation/{reference}', [PublicCandidatureController::class, 'confirmation'])->name('confirmation');
     Route::get('/suivi', [PublicCandidatureController::class, 'suiviForm'])->name('suivi');
     Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->middleware('throttle:15,1')->name('suivi.post');
+    // Complétion du dossier (statut « À compléter ») : référence + date de naissance
+    Route::post('/completer', [PublicCandidatureController::class, 'completer'])->middleware('throttle:10,1')->name('completer');
 });
 
 /* ── Routes protégées ────────────────────────────────── */
@@ -55,8 +57,13 @@ Route::middleware('auth')->group(function () {
             : redirect()->route('student.dashboard');
     })->name('dashboard');
 
+    /* ─── 2FA : challenge après login (hors du garde 2FA lui-même) ── */
+    Route::get('/2fa/challenge', [\App\Http\Controllers\TwoFactorController::class, 'challenge'])->name('2fa.challenge');
+    Route::post('/2fa/challenge', [\App\Http\Controllers\TwoFactorController::class, 'verify'])
+        ->middleware('throttle:5,1')->name('2fa.verify');
+
     /* ─── SUPER-ADMIN ─────────────────────────────────── */
-    Route::middleware('role:super_admin')->prefix('super-admin')->name('superadmin.')->group(function () {
+    Route::middleware(['role:super_admin', \App\Http\Middleware\EnsureTwoFactor::class])->prefix('super-admin')->name('superadmin.')->group(function () {
         Route::get('/parametres', [SuperAdminController::class, 'settings'])->name('settings');
         Route::post('/parametres', [SuperAdminController::class, 'updateSettings'])->name('settings.update');
         Route::post('/cachet', [SuperAdminController::class, 'uploadCachet'])->name('cachet.upload');
@@ -71,26 +78,42 @@ Route::middleware('auth')->group(function () {
 
         // Assistant de dépôt (contexte académique + études antérieures)
         Route::get('/depot/nouveau', [StudentDepotController::class, 'start'])->name('depot.start');
-        Route::post('/depot/nouveau', [StudentDepotController::class, 'store'])->name('depot.store');
-        Route::post('/depot/{studentRequest}/etudes', [StudentDepotController::class, 'saveEtudes'])->name('depot.etudes');
-
-        // Demandes
-        Route::post('/requests/create', [StudentRequestController::class, 'create'])->name('requests.create');
-        Route::post('/requests/submit', [StudentRequestController::class, 'submit'])->name('requests.submit');
+        Route::post('/depot/nouveau', [StudentDepotController::class, 'store'])
+            ->middleware('throttle:10,1')->name('depot.store');
+        Route::post('/depot/{studentRequest}/etudes', [StudentDepotController::class, 'saveEtudes'])
+            ->middleware('throttle:60,1')->name('depot.etudes'); // auto-save : marge large
+        // Demandes (throttle anti-abus sur toutes les écritures)
+        Route::post('/requests/create', [StudentRequestController::class, 'create'])
+            ->middleware('throttle:10,1')->name('requests.create');
+        Route::post('/requests/submit', [StudentRequestController::class, 'submit'])
+            ->middleware('throttle:10,1')->name('requests.submit');
         // Annuler / recommencer un dépôt encore modifiable (avant validation)
-        Route::delete('/requests/{studentRequest}/cancel', [StudentRequestController::class, 'cancelRequest'])->name('requests.cancel');
-        Route::post('/requests/file/upload', [StudentRequestController::class, 'uploadFile'])->name('requests.file.upload');
-        Route::delete('/requests/file/{file}', [StudentRequestController::class, 'deleteFile'])->name('requests.file.delete');
+        Route::delete('/requests/{studentRequest}/cancel', [StudentRequestController::class, 'cancelRequest'])
+            ->middleware('throttle:10,1')->name('requests.cancel');
+        Route::post('/requests/file/upload', [StudentRequestController::class, 'uploadFile'])
+            ->middleware('throttle:30,1')->name('requests.file.upload');
+        Route::delete('/requests/file/{file}', [StudentRequestController::class, 'deleteFile'])
+            ->middleware('throttle:30,1')->name('requests.file.delete');
         Route::get('/requests/file/{file}/download', [StudentRequestController::class, 'downloadFile'])->name('requests.file.download');
     });
 
     /* ─── ADMINISTRATEUR ─────────────────────────────── */
-    Route::middleware('permission:acceder-backoffice')->prefix('admin')->name('admin.')->group(function () {
+    Route::middleware(['permission:acceder-backoffice', \App\Http\Middleware\EnsureTwoFactor::class])->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
         Route::post('/contexte/annee', [AdminController::class, 'switchAnnee'])->name('contexte.annee');
 
-        // Statistiques
-        Route::get('/statistiques', [StatistiqueController::class, 'index'])->name('statistiques.index');
+        // Sécurité du compte (2FA)
+        Route::get('/securite', [\App\Http\Controllers\TwoFactorController::class, 'show'])->name('securite');
+        Route::post('/securite/2fa/activer', [\App\Http\Controllers\TwoFactorController::class, 'enable'])
+            ->middleware('throttle:5,1')->name('securite.2fa.activer');
+        Route::post('/securite/2fa/desactiver', [\App\Http\Controllers\TwoFactorController::class, 'disable'])->name('securite.2fa.desactiver');
+
+        // Statistiques (réservées : permission dédiée) + exports en un clic
+        Route::middleware('permission:statistiques.consulter')->group(function () {
+            Route::get('/statistiques', [StatistiqueController::class, 'index'])->name('statistiques.index');
+            Route::get('/statistiques/export/{format}', [StatistiqueController::class, 'export'])
+                ->name('statistiques.export');
+        });
 
         // Journal d'audit (traçabilité)
         Route::middleware('permission:audit.consulter')->get('/audit', [AuditController::class, 'index'])->name('audit.index');
@@ -103,75 +126,123 @@ Route::middleware('auth')->group(function () {
             Route::match(['get', 'post'], '/lot', [ArchiveController::class, 'downloadLot'])->name('lot');
         });
 
+        /* ── Permissions par ACTION : chaque route exige la permission fine
+           |  correspondante OU l'ancienne permission « globale » du module
+           |  (compatibilité : les rôles existants continuent de fonctionner). */
+
         // CRUD types de documents
-        Route::get('/request-types', [RequestTypeController::class, 'index'])->name('request-types.index');
-        Route::post('/request-types', [RequestTypeController::class, 'store'])->name('request-types.store');
-        Route::put('/request-types/{requestType}', [RequestTypeController::class, 'update'])->name('request-types.update');
-        Route::delete('/request-types/{requestType}', [RequestTypeController::class, 'destroy'])->name('request-types.destroy');
-        Route::patch('/request-types/{requestType}/toggle', [RequestTypeController::class, 'toggleActive'])->name('request-types.toggle');
+        Route::prefix('request-types')->name('request-types.')->group(function () {
+            Route::middleware('permission:types.voir|parametres.gerer')
+                ->get('/', [RequestTypeController::class, 'index'])->name('index');
+            Route::middleware('permission:types.creer|parametres.gerer')
+                ->post('/', [RequestTypeController::class, 'store'])->name('store');
+            Route::middleware('permission:types.editer|parametres.gerer')->group(function () {
+                Route::put('/{requestType}', [RequestTypeController::class, 'update'])->name('update');
+                Route::patch('/{requestType}/toggle', [RequestTypeController::class, 'toggleActive'])->name('toggle');
+            });
+            Route::middleware('permission:types.supprimer|parametres.gerer')
+                ->delete('/{requestType}', [RequestTypeController::class, 'destroy'])->name('destroy');
+        });
 
         // Référentiel académique
-        Route::middleware('permission:academique.gerer')->prefix('academique')->name('academique.')->group(function () {
-            Route::get('/', [AcademicController::class, 'index'])->name('index');
-            Route::post('/facultes', [AcademicController::class, 'storeFaculte'])->name('facultes.store');
-            Route::put('/facultes/{faculte}', [AcademicController::class, 'updateFaculte'])->name('facultes.update');
-            Route::delete('/facultes/{faculte}', [AcademicController::class, 'destroyFaculte'])->name('facultes.destroy');
-            Route::post('/departements', [AcademicController::class, 'storeDepartement'])->name('departements.store');
-            Route::put('/departements/{departement}', [AcademicController::class, 'updateDepartement'])->name('departements.update');
-            Route::delete('/departements/{departement}', [AcademicController::class, 'destroyDepartement'])->name('departements.destroy');
-            Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
-            Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
-            Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
-            Route::post('/domaines', [AcademicController::class, 'storeDomaine'])->name('domaines.store');
-            Route::put('/domaines/{domaine}', [AcademicController::class, 'updateDomaine'])->name('domaines.update');
-            Route::delete('/domaines/{domaine}', [AcademicController::class, 'destroyDomaine'])->name('domaines.destroy');
+        Route::prefix('academique')->name('academique.')->group(function () {
+            Route::middleware('permission:academique.voir|academique.gerer')
+                ->get('/', [AcademicController::class, 'index'])->name('index');
+            Route::middleware('permission:academique.creer|academique.gerer')->group(function () {
+                Route::post('/facultes', [AcademicController::class, 'storeFaculte'])->name('facultes.store');
+                Route::post('/departements', [AcademicController::class, 'storeDepartement'])->name('departements.store');
+                Route::post('/parcours', [AcademicController::class, 'storeParcours'])->name('parcours.store');
+                Route::post('/domaines', [AcademicController::class, 'storeDomaine'])->name('domaines.store');
+            });
+            Route::middleware('permission:academique.editer|academique.gerer')->group(function () {
+                Route::put('/facultes/{faculte}', [AcademicController::class, 'updateFaculte'])->name('facultes.update');
+                Route::put('/departements/{departement}', [AcademicController::class, 'updateDepartement'])->name('departements.update');
+                Route::put('/parcours/{parcours}', [AcademicController::class, 'updateParcours'])->name('parcours.update');
+                Route::put('/domaines/{domaine}', [AcademicController::class, 'updateDomaine'])->name('domaines.update');
+            });
+            Route::middleware('permission:academique.supprimer|academique.gerer')->group(function () {
+                Route::delete('/facultes/{faculte}', [AcademicController::class, 'destroyFaculte'])->name('facultes.destroy');
+                Route::delete('/departements/{departement}', [AcademicController::class, 'destroyDepartement'])->name('departements.destroy');
+                Route::delete('/parcours/{parcours}', [AcademicController::class, 'destroyParcours'])->name('parcours.destroy');
+                Route::delete('/domaines/{domaine}', [AcademicController::class, 'destroyDomaine'])->name('domaines.destroy');
+            });
         });
 
         // Années académiques & fenêtres d'ouverture
-        Route::middleware('permission:annees.gerer')->prefix('annees')->name('annees.')->group(function () {
-            Route::get('/', [AnneeController::class, 'index'])->name('index');
-            Route::post('/', [AnneeController::class, 'store'])->name('store');
-            Route::put('/{annee}', [AnneeController::class, 'update'])->name('update');
-            Route::post('/{annee}/activer', [AnneeController::class, 'activate'])->name('activate');
-            Route::post('/{annee}/cloner', [AnneeController::class, 'cloner'])->name('cloner');
-            Route::delete('/{annee}', [AnneeController::class, 'destroy'])->name('destroy');
-            Route::post('/{annee}/periodes', [AnneeController::class, 'savePeriode'])->name('periodes.save');
-            Route::delete('/periodes/{periode}', [AnneeController::class, 'destroyPeriode'])->name('periodes.destroy');
+        Route::prefix('annees')->name('annees.')->group(function () {
+            Route::middleware('permission:annees.voir|annees.gerer')
+                ->get('/', [AnneeController::class, 'index'])->name('index');
+            Route::middleware('permission:annees.creer|annees.gerer')
+                ->post('/', [AnneeController::class, 'store'])->name('store');
+            Route::middleware('permission:annees.editer|annees.gerer')->group(function () {
+                Route::put('/{annee}', [AnneeController::class, 'update'])->name('update');
+                Route::post('/{annee}/activer', [AnneeController::class, 'activate'])->name('activate');
+                Route::post('/{annee}/cloner', [AnneeController::class, 'cloner'])->name('cloner');
+                Route::post('/{annee}/periodes', [AnneeController::class, 'savePeriode'])->name('periodes.save');
+            });
+            Route::middleware('permission:annees.supprimer|annees.gerer')->group(function () {
+                Route::delete('/{annee}', [AnneeController::class, 'destroy'])->name('destroy');
+                Route::delete('/periodes/{periode}', [AnneeController::class, 'destroyPeriode'])->name('periodes.destroy');
+            });
         });
 
-        // Identités — import / export
-        Route::middleware('permission:identites.importer')->prefix('identites')->name('identites.')->group(function () {
-            Route::get('/', [IdentityController::class, 'index'])->name('index');
-            Route::post('/bacheliers/import', [IdentityController::class, 'importBacheliers'])->name('bacheliers.import');
-            Route::get('/bacheliers/export', [IdentityController::class, 'exportBacheliers'])->name('bacheliers.export');
-            Route::get('/bacheliers/modele', [IdentityController::class, 'templateBacheliers'])->name('bacheliers.template');
-            Route::post('/anciens/import', [IdentityController::class, 'importAnciens'])->name('anciens.import');
-            Route::get('/anciens/export', [IdentityController::class, 'exportAnciens'])->name('anciens.export');
-            Route::get('/anciens/modele', [IdentityController::class, 'templateAnciens'])->name('anciens.template');
+        // Identités — consultation/export (voir) séparée de l'import (écriture)
+        Route::prefix('identites')->name('identites.')->group(function () {
+            Route::middleware('permission:identites.voir|identites.importer')->group(function () {
+                Route::get('/', [IdentityController::class, 'index'])->name('index');
+                Route::get('/bacheliers/export', [IdentityController::class, 'exportBacheliers'])->name('bacheliers.export');
+                Route::get('/bacheliers/modele', [IdentityController::class, 'templateBacheliers'])->name('bacheliers.template');
+                Route::get('/anciens/export', [IdentityController::class, 'exportAnciens'])->name('anciens.export');
+                Route::get('/anciens/modele', [IdentityController::class, 'templateAnciens'])->name('anciens.template');
+            });
+            Route::middleware('permission:identites.importer')->group(function () {
+                Route::post('/bacheliers/import', [IdentityController::class, 'importBacheliers'])->name('bacheliers.import');
+                Route::post('/anciens/import', [IdentityController::class, 'importAnciens'])->name('anciens.import');
+                // Ajout manuel : un étudiant absent du fichier doit pouvoir déposer
+                Route::post('/bacheliers', [IdentityController::class, 'storeBachelier'])->name('bacheliers.store');
+                Route::post('/anciens', [IdentityController::class, 'storeAncien'])->name('anciens.store');
+                Route::delete('/bacheliers/{bachelier}', [IdentityController::class, 'destroyBachelier'])->name('bacheliers.destroy');
+                Route::delete('/anciens/{ancien}', [IdentityController::class, 'destroyAncien'])->name('anciens.destroy');
+            });
         });
 
         // Gestion des utilisateurs (personnel)
-        Route::middleware('permission:utilisateurs.gerer')->prefix('utilisateurs')->name('utilisateurs.')->group(function () {
-            Route::get('/', [UserController::class, 'index'])->name('index');
-            Route::post('/', [UserController::class, 'store'])->name('store');
-            Route::put('/{user}', [UserController::class, 'update'])->name('update');
-            Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
-            Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
+        Route::prefix('utilisateurs')->name('utilisateurs.')->group(function () {
+            Route::middleware('permission:utilisateurs.voir|utilisateurs.gerer')->group(function () {
+                Route::get('/', [UserController::class, 'index'])->name('index');
+                Route::get('/{user}/signature', [UserController::class, 'signature'])->name('signature');
+            });
+            Route::middleware('permission:utilisateurs.creer|utilisateurs.gerer')
+                ->post('/', [UserController::class, 'store'])->name('store');
+            Route::middleware('permission:utilisateurs.editer|utilisateurs.gerer')->group(function () {
+                Route::put('/{user}', [UserController::class, 'update'])->name('update');
+                // Réinitialiser la 2FA d'un compte (téléphone perdu, etc.)
+                Route::post('/{user}/2fa-reset', [\App\Http\Controllers\TwoFactorController::class, 'reset'])->name('2fa-reset');
+            });
+            Route::middleware('permission:utilisateurs.supprimer|utilisateurs.gerer')
+                ->delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
         });
 
-        // Affectation des périmètres (agent ↔ parcours × semestre)
-        Route::middleware('permission:utilisateurs.gerer')->prefix('perimetres')->name('perimetres.')->group(function () {
-            Route::get('/', [PerimetreController::class, 'index'])->name('index');
-            Route::post('/', [PerimetreController::class, 'store'])->name('store');
-            Route::delete('/{perimetre}', [PerimetreController::class, 'destroy'])->name('destroy');
+        // Affectation des périmètres (agent ↔ parcours × année d'études)
+        Route::prefix('perimetres')->name('perimetres.')->group(function () {
+            Route::middleware('permission:perimetres.voir|perimetres.affecter|utilisateurs.gerer')
+                ->get('/', [PerimetreController::class, 'index'])->name('index');
+            Route::middleware('permission:perimetres.affecter|utilisateurs.gerer')->group(function () {
+                Route::post('/', [PerimetreController::class, 'store'])->name('store');
+                Route::delete('/{perimetre}', [PerimetreController::class, 'destroy'])->name('destroy');
+            });
         });
 
-        // Procédures / opérations dématérialisées (super-admin)
-        Route::middleware('permission:parametres.gerer')->prefix('procedures')->name('procedures.')->group(function () {
-            Route::get('/', [ProcedureController::class, 'index'])->name('index');
-            Route::post('/', [ProcedureController::class, 'store'])->name('store');
-            Route::put('/{procedure}', [ProcedureController::class, 'update'])->name('update');
-            Route::delete('/{procedure}', [ProcedureController::class, 'destroy'])->name('destroy');
+        // Procédures / opérations dématérialisées
+        Route::prefix('procedures')->name('procedures.')->group(function () {
+            Route::middleware('permission:procedures.voir|parametres.gerer')
+                ->get('/', [ProcedureController::class, 'index'])->name('index');
+            Route::middleware('permission:procedures.creer|parametres.gerer')
+                ->post('/', [ProcedureController::class, 'store'])->name('store');
+            Route::middleware('permission:procedures.editer|parametres.gerer')
+                ->put('/{procedure}', [ProcedureController::class, 'update'])->name('update');
+            Route::middleware('permission:procedures.supprimer|parametres.gerer')
+                ->delete('/{procedure}', [ProcedureController::class, 'destroy'])->name('destroy');
         });
 
         // Candidatures (traitement par l'agent candidatures)
@@ -179,16 +250,21 @@ Route::middleware('auth')->group(function () {
             Route::get('/', [CandidatureController::class, 'index'])->name('index');
             Route::get('/file/{file}/preview', [CandidatureController::class, 'previewFile'])->name('file.preview');
             Route::get('/file/{file}/download', [CandidatureController::class, 'downloadFile'])->name('file.download');
+            Route::post('/file/{file}/revue', [CandidatureController::class, 'reviewFile'])->name('file.review');
             Route::get('/{candidature}', [CandidatureController::class, 'show'])->name('show');
             Route::post('/{candidature}/statut', [CandidatureController::class, 'updateStatus'])->name('status');
         });
 
         // Rôles & permissions
-        Route::middleware('permission:roles.gerer')->prefix('roles')->name('roles.')->group(function () {
-            Route::get('/', [RolePermissionController::class, 'index'])->name('index');
-            Route::post('/', [RolePermissionController::class, 'store'])->name('store');
-            Route::put('/{role}', [RolePermissionController::class, 'update'])->name('update');
-            Route::delete('/{role}', [RolePermissionController::class, 'destroy'])->name('destroy');
+        Route::prefix('roles')->name('roles.')->group(function () {
+            Route::middleware('permission:roles.voir|roles.gerer')
+                ->get('/', [RolePermissionController::class, 'index'])->name('index');
+            Route::middleware('permission:roles.creer|roles.gerer')
+                ->post('/', [RolePermissionController::class, 'store'])->name('store');
+            Route::middleware('permission:roles.editer|roles.gerer')
+                ->put('/{role}', [RolePermissionController::class, 'update'])->name('update');
+            Route::middleware('permission:roles.supprimer|roles.gerer')
+                ->delete('/{role}', [RolePermissionController::class, 'destroy'])->name('destroy');
         });
 
         // Demandes & dépôts
@@ -198,8 +274,10 @@ Route::middleware('auth')->group(function () {
         Route::post('/requests/{studentRequest}/validate', [AdminRequestController::class, 'validate'])->name('requests.validate');
         Route::post('/requests/{studentRequest}/reject', [AdminRequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{studentRequest}/reject-final', [AdminRequestController::class, 'rejectFinal'])->name('requests.reject-final');
-        // Annuler une validation : rouvre le dépôt pour que l'étudiant recommence
-        Route::post('/requests/{studentRequest}/reopen', [AdminRequestController::class, 'reopen'])->name('requests.reopen');
+        // Annuler une validation : réservé aux superviseurs (permission dédiée,
+        // JAMAIS donnée aux simples agents par défaut)
+        Route::middleware('permission:demandes.rouvrir')
+            ->post('/requests/{studentRequest}/reopen', [AdminRequestController::class, 'reopen'])->name('requests.reopen');
         Route::get('/requests/file/{file}/preview', [AdminRequestController::class, 'previewFile'])->name('requests.file.preview');
         Route::get('/requests/file/{file}/download', [AdminRequestController::class, 'downloadFile'])->name('requests.file.download');
     });

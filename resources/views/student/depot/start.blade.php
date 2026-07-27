@@ -19,9 +19,8 @@
             ])->values(),
         ])->values();
 
-        $gradeSemestres = collect($grades)->mapWithKeys(fn ($g, $k) => [$k => $g['semestres']]);
+        /* $gradeNiveaux fourni par le contrôleur : grade → niveaux (années d'études) */
     @endphp
-    @php /* $gradeAnnees fourni par le contrôleur : grade → groupes d'années */ @endphp
 
     <div class="row justify-content-center">
         <div class="col-lg-8">
@@ -48,68 +47,143 @@
                 </div>
                 <div class="card-body">
 
-                    <div class="alert alert-info small d-flex align-items-start gap-2 mb-4">
-                        <i class="fas fa-info-circle mt-1"></i>
-                        <span>Indiquez d'abord votre <strong>faculté / institut</strong>, votre
-                            <strong>parcours</strong> et votre <strong>semestre</strong> pour l'année
-                            <strong>{{ $annee->libelle }}</strong>. Vous ajouterez ensuite vos pièces.</span>
-                    </div>
-
-                    <form method="POST" action="{{ route('student.depot.store') }}">
-                        @csrf
-
-                        {{-- Année (fixée à l'année ouverte aux dépôts) --}}
-                        <div class="mb-3">
-                            <label class="form-label" style="color:var(--t2);">Année académique</label>
-                            <input type="text" class="form-control" value="{{ $annee->libelle }}" disabled>
-                            <small style="color:var(--t3);">Période de dépôt actuellement ouverte.</small>
+                    @if ($sit['mode'] === 'progression')
+                        {{-- ═══ PROGRESSION AUTOMATIQUE : parcours et année imposés ═══ --}}
+                        <div class="alert alert-info small d-flex align-items-start gap-2 mb-4">
+                            <i class="fas fa-forward mt-1"></i>
+                            <span>Votre <strong>{{ $sit['precedent'] }}</strong> a été validée —
+                                votre dépôt <strong>{{ $annee->libelle }}</strong> continue automatiquement
+                                dans le même parcours, en année suivante.</span>
                         </div>
 
-                        {{-- Faculté --}}
-                        <div class="mb-3">
-                            <label class="form-label" style="color:var(--t2);">Faculté / Institut <span class="text-danger">*</span></label>
-                            <select id="sel-faculte" class="form-select" required>
-                                <option value="">— Choisir —</option>
-                                @foreach ($tree as $f)
-                                    <option value="{{ $f['id'] }}">{{ $f['nom'] }}</option>
-                                @endforeach
-                            </select>
+                        <div class="p-3 rounded mb-4" style="background:var(--surface-2);border:1px solid var(--line);">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="small" style="color:var(--t3);">Parcours (inchangé)</div>
+                                    <div class="fw-bold" style="color:var(--t1);">{{ $sit['parcours']->nom }}
+                                        <span class="badge bg-secondary ms-1" style="font-size:10px;">{{ $sit['parcours']->grade_label }}</span></div>
+                                    <div class="small" style="color:var(--t2);">{{ $sit['parcours']->departement->faculte->nom ?? '' }}</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="small" style="color:var(--t3);">Année académique</div>
+                                    <div class="fw-bold" style="color:var(--t1);">{{ $annee->libelle }}</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="small" style="color:var(--t3);">Année d'études</div>
+                                    <div class="fw-bold" style="color:var(--t1);">{{ $sit['label'] }}</div>
+                                    @if ($sit['derogatoire'])
+                                        <span class="badge mt-1" style="background:rgba(245,158,11,.15);color:#B45309;border:1px solid rgba(245,158,11,.35);">
+                                            <i class="fas fa-triangle-exclamation"></i> Année dérogatoire
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        @if ($sit['derogatoire'])
+                            <div class="alert alert-warning small d-flex align-items-start gap-2 mb-4">
+                                <i class="fas fa-circle-info mt-1"></i>
+                                <span>Cette année d'études dépasse la durée normale du grade : votre dépôt sera
+                                    marqué <strong>dérogatoire</strong> et examiné comme tel par l'administration.</span>
+                            </div>
+                        @endif
+
+                        <form method="POST" action="{{ route('student.depot.store') }}">
+                            @csrf
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ route('student.dashboard', ['tab' => 'depot']) }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left"></i> Annuler
+                                </a>
+                                <button type="submit" class="btn btn-primary btn-lg" data-loading-text="Création…">
+                                    Continuer en {{ $sit['label'] }} <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                        </form>
+
+                    @else
+                        {{-- ═══ PREMIER DÉPÔT : cascade de choix ═══ --}}
+                        <div class="alert alert-info small d-flex align-items-start gap-2 mb-4">
+                            <i class="fas fa-info-circle mt-1"></i>
+                            <span>
+                                Indiquez votre <strong>faculté / institut / école</strong> et votre
+                                <strong>parcours</strong> pour l'année <strong>{{ $annee->libelle }}</strong>.
+                                @if ($sit['mode'] === 'auto_a1')
+                                    En tant que <strong>nouveau bachelier</strong>, la
+                                    <strong>1ère année</strong> vous est attribuée automatiquement.
+                                @else
+                                    Choisissez aussi votre <strong>année d'études actuelle</strong> —
+                                    ce choix (unique) servira de base : les années suivantes
+                                    avanceront automatiquement.
+                                @endif
+                            </span>
                         </div>
 
-                        {{-- Département --}}
-                        <div class="mb-3">
-                            <label class="form-label" style="color:var(--t2);">Département <span class="text-danger">*</span></label>
-                            <select id="sel-departement" class="form-select" required disabled>
-                                <option value="">— Choisir d'abord une faculté —</option>
-                            </select>
-                        </div>
+                        <form method="POST" action="{{ route('student.depot.store') }}">
+                            @csrf
 
-                        {{-- Parcours --}}
-                        <div class="mb-3">
-                            <label class="form-label" style="color:var(--t2);">Parcours <span class="text-danger">*</span></label>
-                            <select id="sel-parcours" name="parcours_id" class="form-select" required disabled>
-                                <option value="">— Choisir d'abord un département —</option>
-                            </select>
-                        </div>
+                            {{-- Année (fixée à l'année ouverte aux dépôts) --}}
+                            <div class="mb-3">
+                                <label class="form-label" style="color:var(--t2);">Année académique</label>
+                                <input type="text" class="form-control" value="{{ $annee->libelle }}" disabled>
+                                <small style="color:var(--t3);">Période de dépôt actuellement ouverte.</small>
+                            </div>
 
-                        {{-- Année d'études & semestre --}}
-                        <div class="mb-4">
-                            <label class="form-label" style="color:var(--t2);">Année d'études & semestre <span class="text-danger">*</span></label>
-                            <select id="sel-semestre" name="semestre" class="form-select" required disabled>
-                                <option value="">— Choisir d'abord un parcours —</option>
-                            </select>
-                            <small id="saison-hint" style="color:var(--blue);"></small>
-                        </div>
+                            {{-- Faculté --}}
+                            <div class="mb-3">
+                                <label class="form-label" style="color:var(--t2);">Faculté / Institut / École <span class="text-danger">*</span></label>
+                                <select id="sel-faculte" class="form-select" required>
+                                    <option value="">— Choisir —</option>
+                                    @foreach ($tree as $f)
+                                        <option value="{{ $f['id'] }}">{{ $f['nom'] }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
 
-                        <div class="d-flex justify-content-between align-items-center">
-                            <a href="{{ route('student.dashboard', ['tab' => 'depot']) }}" class="btn btn-outline-secondary">
-                                <i class="fas fa-arrow-left"></i> Annuler
-                            </a>
-                            <button type="submit" class="btn btn-primary btn-lg" data-loading-text="Création…">
-                                Continuer <i class="fas fa-arrow-right"></i>
-                            </button>
-                        </div>
-                    </form>
+                            {{-- Département --}}
+                            <div class="mb-3">
+                                <label class="form-label" style="color:var(--t2);">Département <span class="text-danger">*</span></label>
+                                <select id="sel-departement" class="form-select" required disabled>
+                                    <option value="">— Choisir d'abord une faculté —</option>
+                                </select>
+                            </div>
+
+                            {{-- Parcours --}}
+                            <div class="mb-3">
+                                <label class="form-label" style="color:var(--t2);">Parcours <span class="text-danger">*</span></label>
+                                <select id="sel-parcours" name="parcours_id" class="form-select" required disabled>
+                                    <option value="">— Choisir d'abord un département —</option>
+                                </select>
+                            </div>
+
+                            @if ($sit['mode'] === 'auto_a1')
+                                {{-- Nouveau bachelier : 1ère année imposée --}}
+                                <div class="mb-4">
+                                    <label class="form-label" style="color:var(--t2);">Année d'études</label>
+                                    <input type="text" class="form-control" id="niveau-fixe"
+                                        value="1ère année — attribuée automatiquement" disabled>
+                                    <small style="color:var(--t3);"><i class="fas fa-lock"></i>
+                                        Les nouveaux bacheliers commencent en 1ère année.</small>
+                                </div>
+                            @else
+                                {{-- Ancien : choix UNIQUE (dérogatoires incluses) --}}
+                                <div class="mb-4">
+                                    <label class="form-label" style="color:var(--t2);">Année d'études actuelle <span class="text-danger">*</span></label>
+                                    <select id="sel-semestre" name="semestre" class="form-select" required disabled>
+                                        <option value="">— Choisir d'abord un parcours —</option>
+                                    </select>
+                                    <small id="saison-hint" style="color:var(--t3);"></small>
+                                </div>
+                            @endif
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ route('student.dashboard', ['tab' => 'depot']) }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left"></i> Annuler
+                                </a>
+                                <button type="submit" class="btn btn-primary btn-lg" data-loading-text="Création…">
+                                    Continuer <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                        </form>
+                    @endif
                 </div>
             </div>
         </div>
@@ -120,16 +194,18 @@
     <script>
         (function () {
             const TREE = @json($tree);
-            const SEM  = @json($gradeSemestres);
-            const ANNEES = @json($gradeAnnees);
+            const NIVEAUX = @json($gradeNiveaux);
 
             const selF = document.getElementById('sel-faculte');
             const selD = document.getElementById('sel-departement');
             const selP = document.getElementById('sel-parcours');
-            const selS = document.getElementById('sel-semestre');
+            const selS = document.getElementById('sel-semestre'); // absent en mode auto/progression
             const hint = document.getElementById('saison-hint');
 
+            if (!selF) return; // mode progression : aucun choix à faire
+
             const reset = (sel, placeholder) => {
+                if (!sel) return;
                 sel.innerHTML = '<option value="">' + placeholder + '</option>';
                 sel.disabled = true;
             };
@@ -138,7 +214,7 @@
                 reset(selD, '— Choisir un département —');
                 reset(selP, '— Choisir d\'abord un département —');
                 reset(selS, '— Choisir d\'abord un parcours —');
-                hint.textContent = '';
+                if (hint) hint.textContent = '';
                 const fac = TREE.find(f => f.id == this.value);
                 if (!fac) return;
                 fac.departements.forEach(d => {
@@ -150,7 +226,7 @@
             selD.addEventListener('change', function () {
                 reset(selP, '— Choisir un parcours —');
                 reset(selS, '— Choisir d\'abord un parcours —');
-                hint.textContent = '';
+                if (hint) hint.textContent = '';
                 const fac = TREE.find(f => f.id == selF.value);
                 const dep = fac?.departements.find(d => d.id == this.value);
                 if (!dep) return;
@@ -165,32 +241,30 @@
             });
 
             selP.addEventListener('change', function () {
-                reset(selS, '— Choisir une année / un semestre —');
-                hint.textContent = '';
+                if (!selS) return; // nouveau bachelier : A1 imposé, rien à choisir
+                reset(selS, '— Choisir votre année d\'études —');
+                if (hint) hint.textContent = '';
                 const grade = this.selectedOptions[0]?.dataset.grade;
-                const groupes = ANNEES[grade] || [];
-                if (!groupes.length) return;
-                // Un optgroup par année d'études : « 1ère année (S1 & S2) »
-                groupes.forEach(g => {
-                    const sems = g.semestres || [];
-                    if (sems.length > 1) {
-                        let html = `<optgroup label="${g.label}">`;
-                        sems.forEach(s => { html += `<option value="${s}">${s}</option>`; });
-                        html += `</optgroup>`;
-                        selS.insertAdjacentHTML('beforeend', html);
-                    } else if (sems.length === 1) {
-                        // Année à un seul palier (ex. doctorat) : option simple
-                        selS.insertAdjacentHTML('beforeend', `<option value="${sems[0]}">${g.annee}</option>`);
-                    }
+                const niveaux = NIVEAUX[grade] || {};
+                const codes = Object.keys(niveaux);
+                if (!codes.length) return;
+                // Une option par année d'études — les dérogatoires sont signalées
+                codes.forEach(code => {
+                    const n = niveaux[code];
+                    selS.insertAdjacentHTML('beforeend',
+                        `<option value="${code}">${n.label}${n.derogatoire ? ' ⚠' : ''}</option>`);
                 });
                 selS.disabled = false;
             });
 
-            selS.addEventListener('change', function () {
-                const m = this.value.match(/(\d+)/);
-                if (!m) { hint.textContent = ''; return; }
-                const saison = (parseInt(m[1], 10) % 2 === 1) ? 'Harmattan' : 'Mousson';
-                hint.innerHTML = '<i class="fas fa-leaf"></i> Session ' + saison;
+            selS?.addEventListener('change', function () {
+                const g = NIVEAUX[selP.selectedOptions[0]?.dataset.grade]?.[this.value];
+                if (!hint || !g) { if (hint) hint.textContent = ''; return; }
+                hint.innerHTML = g.derogatoire
+                    ? '<i class="fas fa-triangle-exclamation" style="color:#B45309;"></i> Année dérogatoire : au-delà de la durée normale du grade — ce choix servira de base pour les années suivantes.'
+                    : (g.semestres.length > 1
+                        ? '<i class="fas fa-circle-info"></i> Le dépôt couvre les deux semestres (' + g.semestres.join(' et ') + '). Ce choix (unique) servira de base pour la suite.'
+                        : '');
             });
         })();
     </script>

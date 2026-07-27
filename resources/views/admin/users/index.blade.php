@@ -17,9 +17,11 @@
 
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="text-muted small"><i class="fas fa-circle-info"></i> Les <strong>noms réels</strong> et <strong>signatures</strong> apparaissent sur les fiches validées (verso).</div>
-        <button class="btn btn-primary" onclick="openUser('create')" data-bs-toggle="modal" data-bs-target="#modalUser">
-            <i class="fas fa-user-plus"></i> Ajouter un utilisateur
-        </button>
+        @canany(['utilisateurs.creer', 'utilisateurs.gerer'])
+            <button class="btn btn-primary" onclick="openUser('create')" data-bs-toggle="modal" data-bs-target="#modalUser">
+                <i class="fas fa-user-plus"></i> Ajouter un utilisateur
+            </button>
+        @endcanany
     </div>
 
     <div class="card">
@@ -44,15 +46,30 @@
                             </td>
                             <td>
                                 @if ($u->is_active)<span class="badge bg-success">Actif</span>@else<span class="badge bg-secondary">Inactif</span>@endif
+                                @if ($u->hasTwoFactor())
+                                    <span class="badge" style="background:rgba(47,158,51,.12);color:#1f7a24;border:1px solid rgba(47,158,51,.3);"
+                                        title="Double authentification active"><i class="fas fa-shield-halved"></i> 2FA</span>
+                                @endif
                             </td>
                             <td class="text-end" style="white-space:nowrap;">
-                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalUser"
-                                    onclick="openUser('edit', this)" data-url="{{ route('admin.utilisateurs.update', $u) }}"
-                                    data-nom="{{ $u->nom }}" data-prenom="{{ $u->prenom }}" data-email="{{ $u->email }}"
-                                    data-role="{{ $u->role }}" data-active="{{ $u->is_active ? 1 : 0 }}">
-                                    <i class="fas fa-pen"></i>
-                                </button>
-                                @if ($u->id !== auth()->id())
+                                @canany(['utilisateurs.editer', 'utilisateurs.gerer'])
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalUser"
+                                        onclick="openUser('edit', this)" data-url="{{ route('admin.utilisateurs.update', $u) }}"
+                                        data-nom="{{ $u->nom }}" data-prenom="{{ $u->prenom }}" data-email="{{ $u->email }}"
+                                        data-role="{{ $u->role }}" data-active="{{ $u->is_active ? 1 : 0 }}">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                @endcanany
+                                @if ($u->hasTwoFactor() && $u->id !== auth()->id() && auth()->user()->canAny(['utilisateurs.editer', 'utilisateurs.gerer']))
+                                    <form method="POST" action="{{ route('admin.utilisateurs.2fa-reset', $u) }}" class="d-inline"
+                                        onsubmit="return confirm('Réinitialiser la 2FA de {{ $u->staff_name }} ? Le compte se connectera à nouveau sans code.')">
+                                        @csrf
+                                        <button class="btn btn-sm btn-outline-warning" title="Réinitialiser la 2FA (téléphone perdu)">
+                                            <i class="fas fa-shield-halved"></i>
+                                        </button>
+                                    </form>
+                                @endif
+                                @if ($u->id !== auth()->id() && auth()->user()->canAny(['utilisateurs.supprimer', 'utilisateurs.gerer']))
                                     <form method="POST" action="{{ route('admin.utilisateurs.destroy', $u) }}" class="d-inline" onsubmit="return confirm('Supprimer ce compte ?')">
                                         @csrf @method('DELETE')
                                         <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
@@ -67,6 +84,8 @@
             </table>
         </div>
     </div>
+
+    <div class="d-flex justify-content-center mt-4">{{ $users->links('pagination::bootstrap-5') }}</div>
 
     {{-- ═══ Modal Utilisateur ═══ --}}
     <div class="modal fade" id="modalUser" tabindex="-1">

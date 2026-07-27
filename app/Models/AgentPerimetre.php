@@ -5,7 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Affectation d'un agent à un périmètre (parcours × semestre).
+ * Affectation d'un agent à un périmètre (parcours × année d'études).
+ * La colonne `semestre` stocke un code niveau (A1, A2, …) — null = toutes.
  * Un agent SANS aucune ligne couvre TOUT par défaut ; dès qu'il a au
  * moins une affectation, il est restreint à celles-ci (surtout côté dépôt).
  */
@@ -27,6 +28,10 @@ class AgentPerimetre extends Model
 
     public function getSemestreLabelAttribute(): string
     {
-        return $this->semestre ?: 'Tous les semestres';
+        if (!$this->semestre) {
+            return 'Toutes les années';
+        }
+
+        return Parcours::libelleNiveau($this->semestre, $this->parcours?->grade) ?? $this->semestre;
     }
 }

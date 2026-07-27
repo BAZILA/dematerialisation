@@ -15,6 +15,7 @@ class Faculte extends Model
     public static array $types = [
         'faculte'  => 'Faculté',
         'institut' => 'Institut',
+        'ecole'    => 'École',
     ];
 
     public function departements()

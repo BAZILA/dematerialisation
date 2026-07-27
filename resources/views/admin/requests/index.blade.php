@@ -44,16 +44,30 @@
     </div>
 
     {{-- Filtres --}}
+    @php
+        // Périmètre restreint = l'agent ne voit dans ses filtres que ce qu'il couvre
+        $restreint = auth()->user()->perimeterParcoursIds() !== null;
+        $anneeChoisie = request('annee_id', $anneeContext?->id);
+        // Facultés / instituts / écoles regroupés par type
+        $facParType = $facultes->groupBy(fn($f) => \App\Models\Faculte::$types[$f->type] ?? 'Autre');
+        $nbFiltres = collect(['faculte_id', 'parcours_id', 'niveau', 'status', 'search'])->filter(
+            fn($k) => request()->filled($k),
+        )->count();
+    @endphp
+
     <div class="card mb-4">
         <div class="card-body py-3">
             <form method="GET" action="{{ route('admin.requests.index', $category) }}" class="row g-2 align-items-end">
-                <div class="col-md-5">
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">Recherche</label>
                     <input type="text" name="search" class="form-control form-control-sm"
                         placeholder="Nom, prénom, numéro identifiant…" value="{{ request('search') }}">
                 </div>
-                <div class="col-md-4">
+
+                <div class="col-lg-2 col-md-3 col-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">Statut</label>
                     <select name="status" class="form-select form-select-sm">
-                        <option value="">Tous les statuts</option>
+                        <option value="">Tous</option>
                         @foreach ($statusLabels as $k => $l)
                             <option value="{{ $k }}" {{ request('status') === $k ? 'selected' : '' }}>
                                 {{ $l }}
@@ -61,15 +75,86 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+
+                <div class="col-lg-2 col-md-3 col-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">Année académique</label>
+                    <select name="annee_id" class="form-select form-select-sm">
+                        @foreach ($annees as $a)
+                            <option value="{{ $a->id }}" {{ (string) $anneeChoisie === (string) $a->id ? 'selected' : '' }}>
+                                {{ $a->libelle }}{{ $a->is_active ? ' (en cours)' : '' }}
+                            </option>
+                        @endforeach
+                        <option value="all" {{ request('annee_id') === 'all' ? 'selected' : '' }}>Toutes les années
+                        </option>
+                    </select>
+                </div>
+
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">
+                        Faculté / Institut / École
+                        @if ($restreint)
+                            <i class="fas fa-user-shield ms-1" title="Limité à votre périmètre"></i>
+                        @endif
+                    </label>
+                    <select name="faculte_id" class="form-select form-select-sm" onchange="this.form.parcours_id.value=''">
+                        <option value="">Toutes</option>
+                        @foreach ($facParType as $typeLabel => $liste)
+                            <optgroup label="{{ $typeLabel }}">
+                                @foreach ($liste as $f)
+                                    <option value="{{ $f->id }}"
+                                        {{ (string) request('faculte_id') === (string) $f->id ? 'selected' : '' }}>
+                                        {{ $f->nom }}
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">Parcours</label>
+                    <select name="parcours_id" class="form-select form-select-sm">
+                        <option value="">Tous les parcours</option>
+                        @foreach ($parcoursList as $p)
+                            <option value="{{ $p->id }}"
+                                {{ (string) request('parcours_id') === (string) $p->id ? 'selected' : '' }}>
+                                {{ $p->nom }} ({{ \App\Models\Parcours::$grades[$p->grade]['label'] ?? $p->grade }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small mb-1" style="color:var(--t2);">Année d'études</label>
+                    <select name="niveau" class="form-select form-select-sm">
+                        <option value="">Toutes les années</option>
+                        @foreach ($niveaux as $code => $label)
+                            <option value="{{ $code }}" {{ request('niveau') === $code ? 'selected' : '' }}>
+                                {{ $label }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-lg-5 col-md-6 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
                         <i class="fas fa-search"></i> Filtrer
                     </button>
-                    <a href="{{ route('admin.requests.index', $category) }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fas fa-times"></i>
-                    </a>
+                    @if ($nbFiltres)
+                        <a href="{{ route('admin.requests.index', $category) }}"
+                            class="btn btn-outline-secondary btn-sm" title="Réinitialiser les filtres">
+                            <i class="fas fa-times"></i> {{ $nbFiltres }}
+                        </a>
+                    @endif
                 </div>
             </form>
+
+            @if ($restreint)
+                <div class="small mt-2" style="color:var(--t3);">
+                    <i class="fas fa-user-shield"></i>
+                    Les filtres sont limités à votre périmètre d'affectation.
+                </div>
+            @endif
         </div>
     </div>
 
@@ -93,6 +178,7 @@
                     <tr>
                         <th>Étudiant</th>
                         <th>Catégorie</th>
+                        <th>Parcours / Année</th>
                         <th>Profil</th>
                         <th>Fichiers</th>
                         <th>Soumis le</th>
@@ -111,6 +197,22 @@
                                 <span class="badge bg-{{ $catColors[$req->category] ?? 'secondary' }}">
                                     {{ $cats[$req->category] ?? $req->category }}
                                 </span>
+                            </td>
+                            <td>
+                                @if ($req->parcours)
+                                    <span style="color:var(--t1);">{{ $req->parcours->nom }}</span><br>
+                                    <small style="color:var(--t2);">
+                                        {{ $req->parcours->departement?->faculte?->nom ?? '—' }}
+                                        @if ($req->semestre)
+                                            @php $derog = \App\Models\Parcours::estDerogatoire($req->semestre, $req->parcours->grade); @endphp
+                                            · <span class="{{ $derog ? 'text-warning fw-semibold' : '' }}">
+                                                {{ \App\Models\Parcours::libelleNiveau($req->semestre, $req->parcours->grade) }}
+                                            </span>
+                                        @endif
+                                    </small>
+                                @else
+                                    <span style="color:var(--t3);">—</span>
+                                @endif
                             </td>
                             <td>
                                 <span
@@ -143,7 +245,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center py-5" style="color:var(--t3);">
+                            <td colspan="8" class="text-center py-5" style="color:var(--t3);">
                                 <i class="fas fa-inbox d-block fs-2 mb-2"></i>
                                 Aucune demande trouvée
                             </td>

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AnneeAcademique;
+use App\Models\Faculte;
+use App\Models\Parcours;
 use App\Models\RequestFile;
 use App\Models\RequestType;
 use App\Models\Setting;
@@ -38,15 +41,7 @@ class AdminRequestController extends Controller
             abort(403, "Aucune catégorie de demandes ne vous est attribuée.");
         }
 
-        $query = StudentRequest::with('student.user', 'files');
-
-        // Isolation par année : on ne voit que l'année de contexte
-        if ($annee = \App\Models\AnneeAcademique::context()) {
-            $query->where('annee_academique_id', $annee->id);
-        }
-
-        // Périmètre de l'agent : par défaut tout, sinon restreint aux parcours affectés
-        $request->user()->applyPerimeterFilter($query);
+        $query = StudentRequest::with('student.user', 'parcours.departement.faculte', 'files');
 
         if ($category !== 'all') {
             $query->where('category', $category);
@@ -55,24 +50,8 @@ class AdminRequestController extends Controller
             $query->whereIn('category', $treatable);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('search')) {
-            $s = $request->search;
-            $query->where(function ($q) use ($s) {
-                $q->whereHas(
-                    'student',
-                    fn($sq) =>
-                    $sq->where('nom', 'LIKE', "%{$s}%")->orWhere('prenom', 'LIKE', "%{$s}%")
-                )->orWhereHas(
-                        'student.user',
-                        fn($sq) =>
-                        $sq->where('numero_identifiant', 'LIKE', "%{$s}%")
-                    );
-            });
-        }
+        // Périmètre + filtres académiques (année, faculté/école, parcours, niveau)
+        $this->appliquerFiltres($request, $query);
 
         $requests = $query
             ->orderByRaw("CASE status
@@ -83,10 +62,88 @@ class AdminRequestController extends Controller
                 WHEN 'rejeté'        THEN 4
                 ELSE 5 END")
             ->orderBy('submitted_at', 'desc')
-            ->paginate(20)
+            ->paginate(Setting::perPage())
             ->withQueryString();
 
-        return view('admin.requests.index', compact('requests', 'category', 'treatable'));
+        return view('admin.requests.index', array_merge(
+            compact('requests', 'category', 'treatable'),
+            $this->optionsFiltres($request)
+        ));
+    }
+
+    /* ── Filtres partagés liste / export ─────────────────── */
+
+    /**
+     * Applique le périmètre de l'agent puis les filtres de la barre de
+     * recherche. L'année académique est celle du contexte par défaut ;
+     * « all » permet de remonter dans les années précédentes.
+     */
+    private function appliquerFiltres(Request $request, $query): void
+    {
+        $courante = AnneeAcademique::context();
+        $anneeId  = $request->input('annee_id', $courante?->id);
+        if (filled($anneeId) && $anneeId !== 'all') {
+            $query->where('annee_academique_id', (int) $anneeId);
+        }
+
+        // Périmètre de l'agent : par défaut tout, sinon restreint aux parcours affectés
+        $request->user()->applyPerimeterFilter($query);
+
+        if ($request->filled('faculte_id')) {
+            $fid = (int) $request->faculte_id;
+            $query->whereHas('parcours.departement', fn ($d) => $d->where('faculte_id', $fid));
+        }
+        if ($request->filled('parcours_id')) {
+            $query->where('parcours_id', (int) $request->parcours_id);
+        }
+        if ($request->filled('niveau')) {
+            $query->where('semestre', $request->niveau);
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->whereHas('student', fn ($sq) => $sq->where('nom', 'LIKE', "%{$s}%")
+                        ->orWhere('prenom', 'LIKE', "%{$s}%"))
+                  ->orWhereHas('student.user', fn ($sq) => $sq->where('numero_identifiant', 'LIKE', "%{$s}%"));
+            });
+        }
+    }
+
+    /**
+     * Options des listes déroulantes, BORNÉES au périmètre : un agent
+     * restreint ne voit dans ses filtres que ce qu'il couvre réellement.
+     */
+    private function optionsFiltres(Request $request): array
+    {
+        $user = $request->user();
+        $pIds = $user->perimeterParcoursIds();   // null = couvre tout
+        $pNiv = $user->perimeterNiveaux();       // null = tous les niveaux
+
+        // Facultés / instituts / écoles ayant au moins un parcours couvert
+        $facultes = Faculte::where('is_active', true)
+            ->when($pIds !== null, fn ($q) => $q->whereHas('departements.parcours',
+                fn ($p) => $p->whereIn('parcours.id', $pIds)))
+            ->orderBy('type')->orderBy('nom')->get();
+
+        $parcoursList = Parcours::with('departement.faculte')
+            ->where('is_active', true)
+            ->when($pIds !== null, fn ($q) => $q->whereIn('id', $pIds))
+            ->when($request->filled('faculte_id'), fn ($q) => $q->whereHas('departement',
+                fn ($d) => $d->where('faculte_id', (int) $request->faculte_id)))
+            ->orderBy('nom')->get();
+
+        $niveaux = Parcours::tousLesNiveaux();
+        if ($pNiv !== null) {
+            $niveaux = array_intersect_key($niveaux, array_flip($pNiv));
+        }
+
+        $annees       = AnneeAcademique::orderByDesc('libelle')->get();
+        $anneeContext = AnneeAcademique::context();
+
+        return compact('facultes', 'parcoursList', 'niveaux', 'annees', 'anneeContext');
     }
 
     /* ── Export Excel des demandes (reprise logiciel d'inscription) ── */
@@ -108,25 +165,12 @@ class AdminRequestController extends Controller
             'files',
         ]);
 
-        // Isolation par année (même contexte que la liste)
-        if ($annee = \App\Models\AnneeAcademique::context()) {
-            $query->where('annee_academique_id', $annee->id);
-        }
-
-        // Même périmètre + filtres que la liste
-        $request->user()->applyPerimeterFilter($query);
-
         if ($category !== 'all') {
             $query->where('category', $category);
         }
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-        if ($request->filled('search')) {
-            $s = $request->search;
-            $query->whereHas('student', fn ($sq) =>
-                $sq->where('nom', 'LIKE', "%{$s}%")->orWhere('prenom', 'LIKE', "%{$s}%"));
-        }
+
+        // Exactement le même périmètre + les mêmes filtres que la liste
+        $this->appliquerFiltres($request, $query);
 
         $rows = $query->orderBy('parcours_id')->orderBy('semestre')->orderBy('created_at')->get();
 
@@ -309,8 +353,14 @@ class AdminRequestController extends Controller
         \App\Models\AuditLog::record(
             $isDepot ? 'depot.valide' : 'demande.validee',
             $studentRequest,
-            "Demande #{$studentRequest->id} ({$studentRequest->category}) validée",
-            ['category' => $studentRequest->category, 'fichiers_tamponnes' => $stampedCount]
+            "Demande #{$studentRequest->id} ({$studentRequest->category}) validée — "
+                . ($studentRequest->student->full_name ?? '—')
+                . ' (' . ($studentRequest->student->user->numero_identifiant ?? '—') . ')',
+            [
+                'category' => $studentRequest->category,
+                'etudiant' => $studentRequest->student->full_name ?? null,
+                'fichiers_tamponnes' => $stampedCount,
+            ]
         );
 
         // Message de retour
@@ -371,7 +421,9 @@ class AdminRequestController extends Controller
         ]);
 
         \App\Models\AuditLog::record('demande.correction', $studentRequest,
-            "Demande #{$studentRequest->id} renvoyée en correction");
+            "Demande #{$studentRequest->id} renvoyée en correction — "
+                . ($studentRequest->student->full_name ?? '—'),
+            ['etudiant' => $studentRequest->student->full_name ?? null]);
 
         return redirect()
             ->route('admin.requests.index', ['category' => $studentRequest->category])
@@ -397,7 +449,9 @@ class AdminRequestController extends Controller
         ]);
 
         \App\Models\AuditLog::record('demande.rejetee', $studentRequest,
-            "Demande #{$studentRequest->id} rejetée définitivement");
+            "Demande #{$studentRequest->id} rejetée définitivement — "
+                . ($studentRequest->student->full_name ?? '—'),
+            ['etudiant' => $studentRequest->student->full_name ?? null]);
 
         return redirect()
             ->route('admin.requests.index', ['category' => $studentRequest->category])
@@ -445,8 +499,9 @@ class AdminRequestController extends Controller
         ]);
 
         \App\Models\AuditLog::record('demande.rouverte', $studentRequest,
-            "Demande #{$studentRequest->id} rouverte (validation annulée)",
-            ['motif' => $request->reopen_message]);
+            "Demande #{$studentRequest->id} rouverte (validation annulée) — "
+                . ($studentRequest->student->full_name ?? '—'),
+            ['etudiant' => $studentRequest->student->full_name ?? null, 'motif' => $request->reopen_message]);
 
         return redirect()
             ->route('admin.requests.index', ['category' => $studentRequest->category])

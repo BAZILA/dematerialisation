@@ -26,6 +26,13 @@ class StudentRequestController extends Controller
         $typeEtudiant = Auth::user()->type_etudiant;
         $category = $request->category;
 
+        // ── Fenêtre d'ouverture : TOUTE création exige que l'opération soit ouverte ──
+        if (!\App\Models\AnneeAcademique::operationOuverte($category)) {
+            $label = \App\Models\Procedure::labels()[$category] ?? $category;
+            return $this->tabRedirect($category)
+                ->withErrors("« {$label} » est actuellement fermé. Cette opération n'est possible que pendant la période d'ouverture définie par l'administration.");
+        }
+
         // Le dépôt passe désormais par l'assistant (choix Faculté → Parcours → Année → Semestre)
         if ($category === 'depot') {
             return redirect()->route('student.depot.start');
@@ -96,7 +103,8 @@ class StudentRequestController extends Controller
         }
 
         $file = $request->file('file');
-        $storedName = time() . '_' . $file->getClientOriginalName();
+        // Nom de stockage assaini : jamais le nom client brut dans un chemin
+        $storedName = time() . '_' . $this->safeFilename($file->getClientOriginalName());
         $path = $file->storeAs('requests/' . $sr->id, $storedName, 'local');
 
         RequestFile::create([
@@ -110,6 +118,19 @@ class StudentRequestController extends Controller
         ]);
 
         return $this->ajaxOrBack($request, true, "« {$type->label} » ajouté.", $tab);
+    }
+
+    /**
+     * Assainit un nom de fichier client : lettres/chiffres/._- uniquement
+     * (bloque traversée de chemin, caractères de contrôle, etc.).
+     */
+    private function safeFilename(string $name): string
+    {
+        $base = pathinfo($name, PATHINFO_FILENAME);
+        $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', $base) ?: 'document';
+
+        return substr($base, 0, 100) . ($ext ? '.' . preg_replace('/[^a-z0-9]/', '', $ext) : '');
     }
 
     /** Réponse JSON si AJAX, sinon redirection classique avec message. */
@@ -186,6 +207,16 @@ class StudentRequestController extends Controller
         if (!$sr->canEdit()) {
             return $this->tabRedirect($tab)->withErrors('Cette demande ne peut pas être soumise.');
         }
+
+        // ── Fenêtre d'ouverture : une PREMIÈRE soumission exige l'opération ouverte.
+        //    (Une demande renvoyée « en correction » par l'administration reste
+        //    soumissible : le dossier était déjà entré pendant la période ouverte.)
+        if ($sr->status === 'brouillon' && !\App\Models\AnneeAcademique::operationOuverte($sr->category)) {
+            $label = \App\Models\Procedure::labels()[$sr->category] ?? $sr->category;
+            return $this->tabRedirect($tab)
+                ->withErrors("« {$label} » est actuellement fermé : la soumission n'est plus possible. Contactez l'administration si la période doit être prolongée.");
+        }
+
         if (!$sr->allRequiredFilesUploaded()) {
             return $this->tabRedirect($tab)->withErrors('Uploadez tous les documents obligatoires avant de soumettre.');
         }

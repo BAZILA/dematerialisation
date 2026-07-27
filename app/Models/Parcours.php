@@ -78,8 +78,135 @@ class Parcours extends Model
             $groupes[$annee]['semestres'][] = $s;
         }
         return array_values(array_map(function ($g) {
-            $g['label'] = $g['annee'] . ' (' . implode(' & ', $g['semestres']) . ')';
+            // « Année 2 (Année 2) » serait redondant (doctorat) → libellé simple
+            $g['label'] = (count($g['semestres']) === 1 && $g['semestres'][0] === $g['annee'])
+                ? $g['annee']
+                : $g['annee'] . ' (' . implode(' & ', $g['semestres']) . ')';
             return $g;
         }, $groupes));
+    }
+
+    /* ══════════════════════════════════════════════════════════
+     |  NIVEAUX (années d'études) — l'étudiant dépose pour UNE
+     |  année, pas pour un semestre. Codes canoniques A1, A2, …
+     ══════════════════════════════════════════════════════════ */
+
+    /** Nombre d'années DÉROGATOIRES autorisées au-delà du grade (paramétrable). */
+    public static function anneesDerogatoires(): int
+    {
+        return max(0, min(6, (int) Setting::get('depot.annees_derogatoires', 2)));
+    }
+
+    /** Nombre d'années normales d'un grade (licence = 3, master = 2…). */
+    public static function nbAnneesNormales(string $grade): int
+    {
+        return count(self::semestresParAnnee($grade));
+    }
+
+    /**
+     * Niveaux d'un grade : ['A1' => ['annee','label','semestres','derogatoire'], …]
+     * Ex. licence → A1 = « 1ère année (S1 & S2) », A2 = « 2e année (S3 & S4) »…
+     * Avec $avecDerogatoires : ajoute A4, A5… (redoublement / retard) jusqu'au
+     * seuil paramétré — libellées « 4e année — dérogatoire ».
+     */
+    public static function niveauxParGrade(string $grade, bool $avecDerogatoires = false): array
+    {
+        $out = [];
+        foreach (self::semestresParAnnee($grade) as $i => $g) {
+            $g['derogatoire'] = false;
+            $out['A' . ($i + 1)] = $g;
+        }
+
+        if ($avecDerogatoires && $out) {
+            $n = count($out);
+            for ($d = 1; $d <= self::anneesDerogatoires(); $d++) {
+                $num = $n + $d;
+                $out['A' . $num] = [
+                    'annee'       => self::ordinalAnnee($num),
+                    'semestres'   => [],
+                    'label'       => self::ordinalAnnee($num) . ' — dérogatoire',
+                    'derogatoire' => true,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Niveaux du grade de ce parcours. */
+    public function niveaux(bool $avecDerogatoires = false): array
+    {
+        return self::niveauxParGrade($this->grade, $avecDerogatoires);
+    }
+
+    /** Un code niveau est-il dérogatoire pour un grade donné ? */
+    public static function estDerogatoire(?string $code, ?string $grade): bool
+    {
+        if (!$code || !$grade || !preg_match('/^A(\d+)$/', $code, $m)) {
+            return false;
+        }
+
+        return (int) $m[1] > self::nbAnneesNormales($grade);
+    }
+
+    /**
+     * Liste GÉNÉRIQUE de tous les niveaux possibles (filtres archives/demandes) :
+     * A1..Amax tous grades confondus, dérogatoires marqués.
+     */
+    public static function tousLesNiveaux(): array
+    {
+        $maxNormal = max(array_map(
+            fn ($g) => count(self::semestresParAnnee($g)),
+            array_keys(self::$grades)
+        ) ?: [3]);
+        $out = [];
+        for ($i = 1; $i <= $maxNormal + self::anneesDerogatoires(); $i++) {
+            $out['A' . $i] = self::ordinalAnnee($i) . ($i > $maxNormal ? ' (dérogatoire)' : '');
+        }
+
+        return $out;
+    }
+
+    /**
+     * Libellé d'un niveau stocké — gère aussi les ANCIENNES valeurs
+     * (« S3 » → « 2e année (S3) », « Année 2 » → « Année 2 »).
+     */
+    public static function libelleNiveau(?string $code, ?string $grade = null): ?string
+    {
+        if (!$code) {
+            return null;
+        }
+        if (preg_match('/^A(\d+)$/', $code, $m)) {
+            $n = (int) $m[1];
+            if ($grade && ($niv = self::niveauxParGrade($grade)['A' . $n] ?? null)) {
+                return $niv['label'];
+            }
+            if ($grade && self::estDerogatoire($code, $grade)) {
+                return self::ordinalAnnee($n) . ' — dérogatoire';
+            }
+            return self::ordinalAnnee($n);
+        }
+        // Valeur héritée (semestre brut ou « Année N »)
+        $annee = self::anneeDuSemestre($code);
+
+        return $annee === $code ? $code : $annee . ' (' . $code . ')';
+    }
+
+    /** Convertit une ancienne valeur semestre en code niveau (S3 → A2, Année 2 → A2). */
+    public static function niveauDepuisSemestre(?string $semestre): ?string
+    {
+        if (!$semestre) {
+            return null;
+        }
+        if (preg_match('/^A\d+$/', $semestre)) {
+            return $semestre; // déjà un code niveau
+        }
+        if (preg_match('/S\s*(\d+)/i', $semestre, $m)) {
+            return 'A' . (int) ceil(((int) $m[1]) / 2);
+        }
+        if (preg_match('/(\d+)/', $semestre, $m)) {
+            return 'A' . (int) $m[1]; // « Année 2 » → A2
+        }
+        return null;
     }
 }

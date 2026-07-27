@@ -9,11 +9,45 @@ class CandidatureFile extends Model
     protected $fillable = [
         'candidature_id', 'request_type_id',
         'original_filename', 'stored_filename', 'file_path', 'mime_type', 'file_size',
+        'statut', 'motif_rejet', 'verifie_par', 'verifie_at',
     ];
+
+    protected $casts = ['verifie_at' => 'datetime'];
+
+    /** fourni = non encore examinée ; valide = acceptée ; rejete = à refaire. */
+    public static array $statuts = [
+        'fourni' => 'Non examinée',
+        'valide' => 'Validée',
+        'rejete' => 'À corriger',
+    ];
+
+    public function estValidee(): bool
+    {
+        return $this->statut === 'valide';
+    }
+
+    public function estRejetee(): bool
+    {
+        return $this->statut === 'rejete';
+    }
+
+    public function getStatutBadgeAttribute(): string
+    {
+        return match ($this->statut) {
+            'valide' => 'success',
+            'rejete' => 'danger',
+            default  => 'secondary',
+        };
+    }
 
     public function candidature()
     {
         return $this->belongsTo(Candidature::class);
+    }
+
+    public function verificateur()
+    {
+        return $this->belongsTo(User::class, 'verifie_par');
     }
 
     public function requestType()

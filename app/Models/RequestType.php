@@ -55,6 +55,58 @@ class RequestType extends Model
         return $this->hasMany(RequestFile::class);
     }
 
+    /**
+     * Parcours auxquels cette pièce est PROPRE.
+     * Relation vide = pièce COMMUNE, réclamée à tout le monde.
+     */
+    public function parcours(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Parcours::class, 'parcours_request_type');
+    }
+
+    /* ── Portée : commune ou propre à des parcours ──────── */
+
+    /** Pièce demandée à tous les candidats, quel que soit le parcours ? */
+    public function estCommune(): bool
+    {
+        return $this->relationLoaded('parcours')
+            ? $this->parcours->isEmpty()
+            : !$this->parcours()->exists();
+    }
+
+    public function getPorteeLabelAttribute(): string
+    {
+        if ($this->estCommune()) {
+            return 'Commune à tous les parcours';
+        }
+        $noms = $this->parcours->pluck('nom');
+
+        return 'Propre à : ' . $noms->implode(', ');
+    }
+
+    /**
+     * Pièces à fournir pour une candidature, selon les parcours choisis :
+     * les pièces communes + celles propres aux parcours retenus.
+     *
+     * @param  array<int>  $parcoursIds  vide = uniquement les pièces communes
+     */
+    public static function pourCandidature(array $parcoursIds = []): \Illuminate\Database\Eloquent\Collection
+    {
+        $ids = array_values(array_filter(array_map('intval', $parcoursIds)));
+
+        return static::with('parcours')
+            ->where('category', 'candidature')
+            ->where('is_active', true)
+            ->where(function ($q) use ($ids) {
+                $q->whereDoesntHave('parcours');
+                if ($ids) {
+                    $q->orWhereHas('parcours', fn ($p) => $p->whereIn('parcours.id', $ids));
+                }
+            })
+            ->orderBy('order')->orderBy('id')
+            ->get();
+    }
+
     /* ── Scopes / helpers ──────────────────────────────── */
 
     /**

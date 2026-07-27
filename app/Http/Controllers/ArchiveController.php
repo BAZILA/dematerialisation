@@ -18,15 +18,20 @@ use Illuminate\Support\Str;
  */
 class ArchiveController extends Controller
 {
-    /** Dossiers archivables = dépôts validés de l'année de contexte. */
+    /**
+     * Dossiers archivables = dépôts validés, TOUTES ANNÉES CONFONDUES par
+     * défaut (l'archive est cumulative : chaque nouvelle année s'ajoute à
+     * l'existant). Filtre « annee_id » optionnel pour ne voir qu'une année.
+     */
     private function base(Request $request): \Illuminate\Database\Eloquent\Builder
     {
         $q = StudentRequest::query()
             ->where('category', 'depot')
             ->where('status', 'validé');
 
-        if ($annee = AnneeAcademique::context()) {
-            $q->where('annee_academique_id', $annee->id);
+        // Une année précise uniquement si demandée (défaut = cumul de toutes)
+        if ($request->filled('annee_id') && $request->annee_id !== 'all') {
+            $q->where('annee_academique_id', (int) $request->annee_id);
         }
         $request->user()->applyPerimeterFilter($q);
 
@@ -64,9 +69,10 @@ class ArchiveController extends Controller
 
         $dossiers = $this->base($request)
             ->with(['student.user', 'student.bachelier', 'student.ancienEtudiant',
-                    'parcours.departement.faculte', 'files', 'validator'])
+                    'parcours.departement.faculte', 'files', 'validator', 'anneeAcademique'])
+            ->orderByDesc('annee_academique_id')
             ->orderBy('parcours_id')->orderBy('semestre')
-            ->paginate(25)->withQueryString();
+            ->paginate(\App\Models\Setting::perPage(25))->withQueryString();
 
         $facultes = Faculte::where('is_active', true)->orderBy('nom')->get();
         $parcoursList = Parcours::where('is_active', true)
@@ -76,8 +82,14 @@ class ArchiveController extends Controller
         $grades = Parcours::$grades;
         $total = $this->base($request)->count();
 
+        // Années disponibles dans l'archive (pour le filtre) + cumul par année
+        $annees = AnneeAcademique::orderByDesc('libelle')->get();
+        $parAnnee = StudentRequest::where('category', 'depot')->where('status', 'validé')
+            ->selectRaw('annee_academique_id, COUNT(*) as n')
+            ->groupBy('annee_academique_id')->pluck('n', 'annee_academique_id');
+
         return view('admin.archives.index', compact(
-            'dossiers', 'annee', 'facultes', 'parcoursList', 'grades', 'total'
+            'dossiers', 'annee', 'facultes', 'parcoursList', 'grades', 'total', 'annees', 'parAnnee'
         ));
     }
 
@@ -95,7 +107,9 @@ class ArchiveController extends Controller
         abort_unless(Storage::disk('local')->exists($path), 404, 'Fichier introuvable.');
 
         \App\Models\AuditLog::record('archive.fiche', $sr,
-            "Fiche « {$file->original_filename} » téléchargée (demande #{$sr->id})");
+            "Fiche « {$file->original_filename} » téléchargée — "
+                . ($sr->student->full_name ?? '—') . " (demande #{$sr->id})",
+            ['etudiant' => $sr->student->full_name ?? null]);
 
         return Storage::disk('local')->download($path, $this->nomFichier($file));
     }
@@ -121,7 +135,7 @@ class ArchiveController extends Controller
     {
         $ids = array_filter((array) $request->input('ids', []));
 
-        $q = $this->base($request)->with('student.user', 'files.requestType', 'parcours');
+        $q = $this->base($request)->with('student.user', 'files.requestType', 'parcours', 'anneeAcademique');
         if ($ids) {
             $q->whereIn('student_requests.id', $ids);
         }
@@ -129,13 +143,15 @@ class ArchiveController extends Controller
 
         abort_if($dossiers->isEmpty(), 404, 'Aucun dossier à archiver pour cette sélection.');
 
-        $annee = AnneeAcademique::context();
+        // Libellé du lot : l'année filtrée, sinon « cumul » (toutes années)
+        $anneeFiltre = $request->filled('annee_id') && $request->annee_id !== 'all'
+            ? AnneeAcademique::find((int) $request->annee_id) : null;
 
         \App\Models\AuditLog::record('archive.lot', null,
             "Lot d'archives téléchargé : {$dossiers->count()} dossier(s)",
-            ['annee' => $annee?->libelle, 'nb' => $dossiers->count(), 'selection' => (bool) $ids]);
+            ['annee' => $anneeFiltre?->libelle ?? 'toutes', 'nb' => $dossiers->count(), 'selection' => (bool) $ids]);
 
-        $zipName = 'Archive-' . ($annee?->libelle ?? 'tous') . '-' . now()->format('Ymd-His') . '.zip';
+        $zipName = 'Archive-' . ($anneeFiltre?->libelle ?? 'cumul') . '-' . now()->format('Ymd-His') . '.zip';
 
         return $this->zipDossiers($dossiers, $zipName, true);
     }
@@ -161,7 +177,10 @@ class ArchiveController extends Controller
 
         $nb = 0;
         foreach ($dossiers as $sr) {
-            $dossier = $parEtudiant ? $this->slugEtudiant($sr) . '/' : '';
+            // Archive cumulative : un dossier par année académique, puis par étudiant
+            $dossier = $parEtudiant
+                ? ($sr->anneeAcademique?->libelle ?? 'annee-inconnue') . '/' . $this->slugEtudiant($sr) . '/'
+                : '';
             foreach ($sr->files as $f) {
                 $path = $f->stamped_file_path && Storage::disk('local')->exists($f->stamped_file_path)
                     ? $f->stamped_file_path
@@ -183,19 +202,22 @@ class ArchiveController extends Controller
 
     private function indexTexte($dossiers, int $nb): string
     {
-        $annee = AnneeAcademique::context();
-        $l = ["Archive numérique — dossiers de dépôt validés"];
-        $l[] = 'Année : ' . ($annee?->libelle ?? '—');
+        $anneesConcernees = $dossiers->map(fn ($sr) => $sr->anneeAcademique?->libelle)
+            ->filter()->unique()->sort()->implode(', ');
+
+        $l = ["Archive numérique — dossiers de dépôt validés (cumulative)"];
+        $l[] = 'Année(s) : ' . ($anneesConcernees ?: '—');
         $l[] = 'Généré le : ' . now()->format('d/m/Y à H:i');
         $l[] = 'Dossiers : ' . $dossiers->count() . ' — Fichiers : ' . $nb;
         $l[] = str_repeat('-', 60);
         foreach ($dossiers as $sr) {
             $l[] = sprintf(
-                '%s | %s %s | %s | %s | %d pièce(s)',
+                '%s | %s | %s %s | %s | %s | %d pièce(s)',
+                $sr->anneeAcademique?->libelle ?? '—',
                 $sr->student?->numero_suivi ?: ($sr->student?->user?->numero_identifiant ?? '—'),
                 $sr->student?->nom, $sr->student?->prenom,
                 $sr->parcours?->nom ?? '—',
-                $sr->semestre ?? '—',
+                \App\Models\Parcours::libelleNiveau($sr->semestre, $sr->parcours?->grade) ?? '—',
                 $sr->files->count()
             );
         }

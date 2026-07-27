@@ -28,6 +28,14 @@ class Setting extends Model
         return $s ? static::castValue($s->value, $s->type) : $default;
     }
 
+    /** Nombre d'éléments par page des listes (réglage « affichage.per_page », borné 5-200). */
+    public static function perPage(int $default = 20): int
+    {
+        $n = (int) static::get('affichage.per_page', $default);
+
+        return max(5, min(200, $n ?: $default));
+    }
+
     /** Définit (ou crée) un réglage. */
     public static function set(string $key, $value): void
     {

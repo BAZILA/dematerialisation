@@ -35,6 +35,66 @@ class StudentDepotController extends Controller
             ->first();
     }
 
+    /** Dépôt déjà TERMINÉ (validé/rejeté) pour une année donnée : 1 dépôt / année. */
+    private function depotTermineCetteAnnee(int $studentId, int $anneeId): ?StudentRequest
+    {
+        return StudentRequest::where('student_id', $studentId)
+            ->where('category', 'depot')
+            ->where('annee_academique_id', $anneeId)
+            ->whereIn('status', ['validé', 'rejeté'])
+            ->latest()->first();
+    }
+
+    /** Dernier dépôt VALIDÉ (toutes années) : base de la PROGRESSION automatique. */
+    private function dernierDepotValide(int $studentId): ?StudentRequest
+    {
+        return StudentRequest::with('parcours')
+            ->where('student_id', $studentId)
+            ->where('category', 'depot')
+            ->where('status', 'validé')
+            ->orderByDesc('annee_academique_id')->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * SITUATION de dépôt de l'étudiant (cœur de la progression) :
+     *  - 'progression'  : un dépôt validé existe → MÊME parcours, année suivante
+     *                     automatique (badge dérogatoire au-delà du grade,
+     *                     refus au-delà du seuil paramétré) ;
+     *  - 'auto_a1'      : nouveau bachelier, premier dépôt → 1ère année imposée ;
+     *  - 'choix_ancien' : ancien sans historique sur la plateforme → il choisit
+     *                     son année une seule fois (dérogatoires proposées),
+     *                     la suite sera automatique.
+     */
+    private function situation($student): array
+    {
+        $dernier = $this->dernierDepotValide($student->id);
+
+        if ($dernier && $dernier->parcours) {
+            $p = $dernier->parcours;
+            $actuel = Parcours::niveauDepuisSemestre($dernier->semestre) ?? 'A1';
+            $n = ((int) substr($actuel, 1)) + 1;
+            $normales = Parcours::nbAnneesNormales($p->grade);
+            $max = $normales + Parcours::anneesDerogatoires();
+
+            return [
+                'mode'        => 'progression',
+                'parcours'    => $p,
+                'niveau'      => 'A' . $n,
+                'label'       => Parcours::libelleNiveau('A' . $n, $p->grade),
+                'derogatoire' => $n > $normales,
+                'depasse'     => $n > $max,
+                'precedent'   => Parcours::libelleNiveau($actuel, $p->grade),
+            ];
+        }
+
+        if (Auth::user()->type_etudiant === 'nouveau') {
+            return ['mode' => 'auto_a1', 'niveau' => 'A1'];
+        }
+
+        return ['mode' => 'choix_ancien'];
+    }
+
     /* ─────────────────────────────────────────────────────────
      |  Étape 1 — choix du contexte académique
      ───────────────────────────────────────────────────────── */
@@ -43,7 +103,7 @@ class StudentDepotController extends Controller
         $student = Auth::user()->student;
 
         // Un dépôt est déjà en cours → on retourne au tableau de bord
-        if ($existing = $this->depotEnCours($student->id)) {
+        if ($this->depotEnCours($student->id)) {
             return redirect()
                 ->route('student.dashboard', ['tab' => 'depot'])
                 ->with('info', 'Vous avez déjà un dépôt en cours.');
@@ -56,6 +116,21 @@ class StudentDepotController extends Controller
                 ->withErrors("Les dépôts ne sont pas ouverts pour le moment. Réessayez lorsque la période sera ouverte.");
         }
 
+        // UN SEUL dépôt par année académique
+        if ($termine = $this->depotTermineCetteAnnee($student->id, $annee->id)) {
+            return redirect()->route('student.dashboard', ['tab' => 'depot'])
+                ->withErrors($termine->status === 'validé'
+                    ? "Votre dépôt {$annee->libelle} est déjà validé — un seul dépôt par année académique."
+                    : "Votre dépôt {$annee->libelle} a été rejeté définitivement. Contactez l'administration si une reprise doit être autorisée.");
+        }
+
+        // Situation de progression (parcours/année imposés ou choix)
+        $sit = $this->situation($student);
+        if ($sit['mode'] === 'progression' && $sit['depasse']) {
+            return redirect()->route('student.dashboard', ['tab' => 'depot'])
+                ->withErrors("Le seuil d'années dérogatoires est atteint pour votre parcours ({$sit['precedent']} déjà validée). Rapprochez-vous de l'administration (dérogation exceptionnelle).");
+        }
+
         // Arbre Faculté → Département → Parcours (actifs) pour la cascade
         $facultes = Faculte::where('is_active', true)
             ->with(['departements' => fn ($q) => $q->where('is_active', true)
@@ -64,15 +139,17 @@ class StudentDepotController extends Controller
             ->orderBy('nom')
             ->get();
 
-        // Semestres regroupés par année d'études, par grade (pour l'affichage « 1ère année (S1 & S2) »)
-        $gradeAnnees = collect(Parcours::$grades)
-            ->mapWithKeys(fn ($g, $code) => [$code => Parcours::semestresParAnnee($code)]);
+        // Niveaux par grade — l'ancien qui choisit voit AUSSI les années dérogatoires
+        $avecDerog = ($sit['mode'] === 'choix_ancien');
+        $gradeNiveaux = collect(Parcours::$grades)
+            ->mapWithKeys(fn ($g, $code) => [$code => Parcours::niveauxParGrade($code, $avecDerog)]);
 
         return view('student.depot.start', [
-            'facultes'    => $facultes,
-            'annee'       => $annee,
-            'grades'      => Parcours::$grades,
-            'gradeAnnees' => $gradeAnnees,
+            'facultes'     => $facultes,
+            'annee'        => $annee,
+            'grades'       => Parcours::$grades,
+            'gradeNiveaux' => $gradeNiveaux,
+            'sit'          => $sit,
         ]);
     }
 
@@ -94,21 +171,47 @@ class StudentDepotController extends Controller
                 ->withErrors("Les dépôts ne sont pas ouverts pour le moment.");
         }
 
-        $data = $request->validate([
-            'parcours_id' => 'required|exists:parcours,id',
-            'semestre'    => 'required|string|max:20',
-        ], [], [
-            'parcours_id' => 'parcours',
-            'semestre'    => 'semestre',
-        ]);
+        // UN SEUL dépôt par année académique
+        if ($this->depotTermineCetteAnnee($student->id, $annee->id)) {
+            return redirect()->route('student.dashboard', ['tab' => 'depot'])
+                ->withErrors("Un dépôt existe déjà pour {$annee->libelle} — un seul dépôt par année académique.");
+        }
 
-        $parcours = Parcours::with('domaine', 'departement.faculte')
-            ->where('is_active', true)->findOrFail($data['parcours_id']);
+        /* ── La SITUATION fait foi (jamais le formulaire seul) ── */
+        $sit = $this->situation($student);
 
-        // Le semestre doit appartenir au grade du parcours choisi
-        if (!in_array($data['semestre'], $parcours->semestres(), true)) {
-            return back()->withInput()
-                ->withErrors(['semestre' => 'Semestre invalide pour ce parcours.']);
+        if ($sit['mode'] === 'progression') {
+            if ($sit['depasse']) {
+                return redirect()->route('student.dashboard', ['tab' => 'depot'])
+                    ->withErrors("Le seuil d'années dérogatoires est atteint. Rapprochez-vous de l'administration.");
+            }
+            // Parcours et année IMPOSÉS par l'historique
+            $parcours = $sit['parcours']->load('domaine', 'departement.faculte');
+            $niveau   = $sit['niveau'];
+        } else {
+            $data = $request->validate([
+                'parcours_id' => 'required|exists:parcours,id',
+                'semestre'    => $sit['mode'] === 'auto_a1' ? 'nullable|string|max:20' : 'required|string|max:20',
+            ], [], [
+                'parcours_id' => 'parcours',
+                'semestre'    => "année d'études",
+            ]);
+
+            $parcours = Parcours::with('domaine', 'departement.faculte')
+                ->where('is_active', true)->findOrFail($data['parcours_id']);
+
+            if ($sit['mode'] === 'auto_a1') {
+                // Nouveau bachelier : la 1ère année est IMPOSÉE
+                $niveau = 'A1';
+            } else {
+                // Ancien sans historique : choix unique parmi les niveaux du grade
+                // (années dérogatoires incluses) — la suite sera automatique.
+                $niveau = $data['semestre'];
+                if (!array_key_exists($niveau, $parcours->niveaux(avecDerogatoires: true))) {
+                    return back()->withInput()
+                        ->withErrors(['semestre' => "Année d'études invalide pour ce parcours."]);
+                }
+            }
         }
 
         $sr = StudentRequest::create([
@@ -116,7 +219,7 @@ class StudentDepotController extends Controller
             'category'            => 'depot',
             'parcours_id'         => $parcours->id,
             'annee_academique_id' => $annee->id,
-            'semestre'            => $data['semestre'],
+            'semestre'            => $niveau,
             'engagement_accepte'  => false,
             'status'              => 'brouillon',
             'version'             => 1,

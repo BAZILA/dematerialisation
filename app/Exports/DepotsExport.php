@@ -28,7 +28,7 @@ class DepotsExport implements FromCollection, WithHeadings, WithMapping
         return [
             'numero_suivi', 'identifiant', 'reference', 'nom', 'prenom', 'sexe',
             'telephone', 'email',
-            'faculte', 'departement', 'parcours', 'grade', 'semestre', 'saison', 'annee_academique',
+            'faculte', 'departement', 'parcours', 'grade', 'annee_etudes', 'semestres', 'annee_academique',
             'statut', 'date_soumission', 'date_validation', 'valide_par',
             'nb_pieces', 'nb_pieces_tamponnees',
         ];
@@ -55,8 +55,8 @@ class DepotsExport implements FromCollection, WithHeadings, WithMapping
             $parcours?->departement?->nom,
             $parcours?->nom,
             $parcours?->grade_label,
-            $r->semestre,
-            StudentRequest::saison($r->semestre),
+            \App\Models\Parcours::libelleNiveau($r->semestre, $parcours?->grade),
+            implode(' & ', \App\Models\Parcours::niveauxParGrade($parcours?->grade ?? '')[$r->semestre]['semestres'] ?? []),
             $r->anneeAcademique?->libelle,
             $r->status_label,
             optional($r->submitted_at)->format('Y-m-d H:i'),

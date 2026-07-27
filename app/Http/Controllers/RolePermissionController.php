@@ -33,7 +33,9 @@ class RolePermissionController extends Controller
             'name.regex' => 'Le nom technique doit être en minuscules_avec_underscores.',
         ]);
 
-        Role::create(['name' => $data['name'], 'guard_name' => 'web']);
+        $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
+
+        \App\Models\AuditLog::record('role.cree', null, "Rôle créé : {$role->name}");
 
         return back()->with('success', "Rôle « {$data['name']} » créé. Cochez ses permissions puis enregistrez.");
     }
@@ -45,11 +47,25 @@ class RolePermissionController extends Controller
             return back()->withErrors('Le rôle super_admin possède toujours toutes les permissions.');
         }
 
+        $avant = $role->permissions->pluck('name')->sort()->values();
+
         $perms = array_keys($request->input('perms', []));
         $valid = Permission::whereIn('name', $perms)->pluck('name')->toArray();
         $role->syncPermissions($valid);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Audit : quelles permissions ont été ajoutées / retirées
+        $apres    = collect($valid)->sort()->values();
+        $ajoutees = $apres->diff($avant)->values();
+        $retirees = $avant->diff($apres)->values();
+        if ($ajoutees->isNotEmpty() || $retirees->isNotEmpty()) {
+            \App\Models\AuditLog::record('role.modifie', null,
+                "Permissions du rôle {$role->name} modifiées"
+                    . ($ajoutees->isNotEmpty() ? ' — ajout : ' . $ajoutees->implode(', ') : '')
+                    . ($retirees->isNotEmpty() ? ' — retrait : ' . $retirees->implode(', ') : ''),
+                ['role' => $role->name, 'ajoutees' => $ajoutees->all(), 'retirees' => $retirees->all()]);
+        }
 
         return back()->with('success', "Permissions du rôle « {$role->name} » mises à jour.");
     }
@@ -62,6 +78,8 @@ class RolePermissionController extends Controller
         if ($role->users()->count() > 0) {
             return back()->withErrors("Impossible : {$role->users()->count()} utilisateur(s) portent encore ce rôle.");
         }
+        \App\Models\AuditLog::record('role.supprime', null, "Rôle supprimé : {$role->name}");
+
         $role->delete();
 
         return back()->with('success', 'Rôle supprimé.');

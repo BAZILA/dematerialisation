@@ -15,14 +15,28 @@
                 ])->values(),
             ])->values(),
         ])->values();
-        $gradeSemestres = collect($grades)->mapWithKeys(fn ($g, $k) => [$k => $g['semestres']]);
+        // Niveaux par grade — AVEC les années dérogatoires (un agent peut être
+        // affecté aux dépôts 4e/5e année, redoublants et retardataires)
+        $gradeNiveaux = collect($grades)->mapWithKeys(
+            fn ($g, $k) => [$k => collect(\App\Models\Parcours::niveauxParGrade($k, avecDerogatoires: true))->map(fn ($n) => $n['label'])]
+        );
     @endphp
 
     <div class="alert alert-info small d-flex align-items-start gap-2">
         <i class="fas fa-info-circle mt-1"></i>
-        <span>Un agent <strong>sans aucune affectation couvre TOUT</strong>. Dès qu'on lui affecte un
-            ou plusieurs parcours, il ne voit et ne traite plus que les dépôts de ces parcours
-            (× semestres précisés). Utile surtout pour les <strong>agents de dépôt</strong>.</span>
+        <span>
+            Un agent <strong>sans aucune affectation couvre TOUT</strong>. Dès qu'on lui affecte un
+            ou plusieurs parcours, il ne voit et ne traite plus que ces parcours.
+            <br>
+            <strong>Le périmètre s'applique à toutes les procédures</strong>, pas seulement aux dépôts :
+            <ul class="mb-0 mt-1">
+                <li><strong>Dépôts et autres demandes étudiantes</strong> : filtrage par
+                    <em>parcours × année d'études</em> (années dérogatoires incluses).</li>
+                <li><strong>Candidatures</strong> : filtrage <em>par parcours uniquement</em> — un candidat
+                    n'a pas encore d'année d'études, les niveaux cochés ci-dessous y sont donc ignorés.
+                    Une candidature reste visible dès qu'<em>un de ses vœux</em> tombe dans le périmètre.</li>
+            </ul>
+        </span>
     </div>
 
     <div class="accordion" id="accPerim">
@@ -48,7 +62,7 @@
                         @if ($agent->perimetres->isNotEmpty())
                             <div class="table-responsive mb-3">
                                 <table class="table table-sm align-middle mb-0">
-                                    <thead><tr style="font-size:12px;color:var(--t2);"><th>Faculté</th><th>Parcours</th><th>Semestre</th><th></th></tr></thead>
+                                    <thead><tr style="font-size:12px;color:var(--t2);"><th>Faculté</th><th>Parcours</th><th>Année d'études</th><th></th></tr></thead>
                                     <tbody>
                                         @foreach ($agent->perimetres as $p)
                                             <tr>
@@ -97,7 +111,7 @@
                             <div class="mt-3 p-3 rounded sem-box" style="background:var(--surface-2);border:1px solid var(--line);display:none;">
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                                     <label class="form-label small mb-0">
-                                        Semestres <span class="text-muted">(plusieurs possibles — aucun coché = tous)</span>
+                                        Années d'études <span class="text-muted">(plusieurs possibles — aucune cochée = toutes)</span>
                                     </label>
                                     <div class="d-flex gap-2">
                                         <button type="button" class="btn btn-sm btn-outline-secondary sem-all">Tout cocher</button>
@@ -118,13 +132,15 @@
             </div>
         @endforeach
     </div>
+
+    <div class="d-flex justify-content-center mt-4">{{ $agents->links('pagination::bootstrap-5') }}</div>
 @endsection
 
 @section('js')
     <script>
         (function () {
             const TREE = @json($tree);
-            const SEM  = @json($gradeSemestres);
+            const NIV  = @json($gradeNiveaux);
 
             document.querySelectorAll('.perim-form').forEach(form => {
                 const selF = form.querySelector('.sel-fac');
@@ -151,14 +167,15 @@
                 selP.addEventListener('change', function () {
                     list.innerHTML = '';
                     const grade = this.selectedOptions[0]?.dataset.grade;
-                    const sems = SEM[grade] || [];
-                    if (!sems.length) { hideSem(); return; }
-                    sems.forEach((s, i) => {
-                        const id = `sem-${form.querySelector('[name="user_id"]').value}-${i}`;
+                    const niveaux = NIV[grade] || {};
+                    const codes = Object.keys(niveaux);
+                    if (!codes.length) { hideSem(); return; }
+                    codes.forEach((code, i) => {
+                        const id = `niv-${form.querySelector('[name="user_id"]').value}-${i}`;
                         list.insertAdjacentHTML('beforeend',
                             `<div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="semestres[]" value="${s}" id="${id}">
-                                <label class="form-check-label small" for="${id}">${s}</label>
+                                <input class="form-check-input" type="checkbox" name="semestres[]" value="${code}" id="${id}">
+                                <label class="form-check-label small" for="${id}">${niveaux[code]}</label>
                              </div>`);
                     });
                     box.style.display = '';

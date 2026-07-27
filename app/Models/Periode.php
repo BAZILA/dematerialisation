@@ -14,6 +14,7 @@ class Periode extends Model
         'is_open'    => 'boolean',
     ];
 
+    /** Anciens libellés (fallback si la procédure a disparu de la table). */
     public static array $operations = [
         'candidature'  => 'Candidatures',
         'depot'        => 'Dépôts définitifs',
@@ -24,6 +25,17 @@ class Periode extends Model
         'homologation' => 'Homologations',
     ];
 
+    /**
+     * Liste DYNAMIQUE des opérations paramétrables : toutes les procédures
+     * actives (y compris celles créées depuis l'interface). [code => nom]
+     */
+    public static function operations(): array
+    {
+        $procs = Procedure::labels();
+
+        return $procs ?: self::$operations;
+    }
+
     public function annee()
     {
         return $this->belongsTo(AnneeAcademique::class, 'annee_academique_id');
@@ -31,6 +43,8 @@ class Periode extends Model
 
     public function getOperationLabelAttribute(): string
     {
-        return self::$operations[$this->operation] ?? $this->operation;
+        return self::operations()[$this->operation]
+            ?? self::$operations[$this->operation]
+            ?? $this->operation;
     }
 }

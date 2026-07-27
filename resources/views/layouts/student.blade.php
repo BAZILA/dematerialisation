@@ -67,7 +67,7 @@
             position: sticky; top: 0; z-index: 100;
         }
         .st-nav-inner {
-            max-width: 1000px; margin: 0 auto; padding: 0 22px;
+            max-width: 1120px; margin: 0 auto; padding: 0 22px;
             height: 66px; display: flex; align-items: center; gap: 16px;
         }
         .st-brand { display: flex; align-items: center; text-decoration: none; }
@@ -90,7 +90,7 @@
         }
         .st-logout:hover { background: var(--red-dim); color: var(--red); border-color: transparent; }
 
-        .st-main { max-width: 1000px; margin: 0 auto; padding: 30px 22px 60px; }
+        .st-main { max-width: 1120px; margin: 0 auto; padding: 30px 22px 60px; }
         .st-hello { margin-bottom: 22px; }
         .st-hello h1 { font-family: var(--font-head); font-size: 25px; font-weight: 800; letter-spacing: -.02em; color: var(--t1); }
         .st-hello p { color: var(--t2); font-size: 14px; margin-top: 3px; }
@@ -182,8 +182,25 @@
         .toast-x { background: none; border: none; color: var(--t3); cursor: pointer; padding: 3px; }
         @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* ── Onglets : défilement horizontal à TOUTES les tailles (l'actif est
+               recentré par JS ; jamais d'empilement sur 2 lignes) ── */
+        .nav-tabs { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden;
+            scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .nav-tabs .nav-link { white-space: nowrap; flex-shrink: 0; }
+
+        @media (max-width: 767px) {
+            .nav-tabs .nav-link { padding: 10px 14px; font-size: 13.5px; }
+            .card-body { padding: 16px !important; }
+            .card-header { padding: 13px 16px !important; }
+            .modal-body { padding: 16px !important; }
+            .table { font-size: 13px; }
+        }
+
         @media (max-width: 640px) {
             .st-nav-inner, .st-main { padding-left: 15px; padding-right: 15px; }
+            .st-main { padding-top: 20px; }
             .st-user-meta { display: none; }
             .st-hello h1 { font-size: 21px; }
         }

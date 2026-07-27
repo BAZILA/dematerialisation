@@ -94,8 +94,26 @@
                                         <td class="text-muted  small">{{ $type->order }}</td>
                                         <td>
                                             <strong class="text-white">{{ $type->label }}</strong>
+                                            @if ($key === 'candidature')
+                                                @if ($type->parcours->isEmpty())
+                                                    <span class="badge bg-info ms-1" title="Demandée à tous les candidats">
+                                                        <i class="fas fa-globe"></i> Commune
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-warning text-dark ms-1"
+                                                        title="{{ $type->parcours->pluck('nom')->implode(', ') }}">
+                                                        <i class="fas fa-code-branch"></i>
+                                                        {{ $type->parcours->count() }} parcours
+                                                    </span>
+                                                @endif
+                                            @endif
                                             @if ($type->description)
                                                 <br><small class="text-muted ">{{ $type->description }}</small>
+                                            @endif
+                                            @if ($key === 'candidature' && $type->parcours->isNotEmpty())
+                                                <br><small class="text-muted ">
+                                                    {{ $type->parcours->pluck('nom')->implode(' · ') }}
+                                                </small>
                                             @endif
                                         </td>
                                         @if ($isDepot)

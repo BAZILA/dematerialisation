@@ -42,21 +42,35 @@
         .sect-label { font-family:var(--font-head); font-weight:700; font-size:13px; letter-spacing:.04em;
             text-transform:uppercase; color:var(--t3); margin:26px 0 12px; }
 
-        /* Sélecteur d'année dans le hero */
+        /* Sélecteur d'année dans le hero — TOUTE la zone est le select (100 % cliquable) */
         .year-switch { position:relative; flex-shrink:0; }
-        .year-label { display:block; font-size:11px; font-weight:600; opacity:.85; margin-bottom:5px; letter-spacing:.03em; }
+        .year-label {
+            position:absolute; top:9px; left:15px; z-index:2; pointer-events:none;
+            font-size:10.5px; font-weight:600; opacity:.85; letter-spacing:.04em; text-transform:uppercase;
+        }
         .year-select {
             background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35);
-            color:#fff; font-weight:600; font-size:13px; border-radius:10px;
-            padding:8px 12px; cursor:pointer; outline:none; min-width:180px;
+            color:#fff; font-weight:700; font-size:14px; border-radius:12px;
+            padding:26px 40px 10px 14px; cursor:pointer; outline:none; min-width:210px; width:100%;
             -webkit-appearance:none; appearance:none;
             background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
-            background-repeat:no-repeat; background-position:right 10px center; background-size:14px; padding-right:32px;
+            background-repeat:no-repeat; background-position:right 13px center; background-size:15px;
         }
+        .year-select:hover { background-color:rgba(255,255,255,.24); border-color:rgba(255,255,255,.6); }
         .year-select:focus { border-color:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.18); }
-        .year-select option { color:#14243B; background:#fff; }
+        .year-select option { color:#14243B; background:#fff; font-weight:600; }
 
-        @media(max-width:720px){ .stat-grid{grid-template-columns:repeat(2,1fr);} .dash-hero h1{font-size:21px;} }
+        @media(max-width:720px){
+            .stat-grid{grid-template-columns:repeat(2,1fr);}
+            .dash-hero{padding:20px 18px;}
+            .dash-hero h1{font-size:21px;}
+            .dash-hero .d-flex.justify-content-between{flex-direction:column;align-items:stretch !important;gap:14px;}
+            .year-switch{width:100%;}
+            .year-select{width:100%;min-width:0;}
+            .stat-tile{padding:13px 14px;gap:10px;}
+            .stat-ic{width:40px;height:40px;font-size:1rem;}
+            .stat-n{font-size:20px;}
+        }
 
         /* Études antérieures — cartes responsives */
         .etu-card { border:1px solid var(--line); border-radius:14px; padding:14px 14px 6px; margin-bottom:12px;
@@ -69,7 +83,7 @@
         .c-2 { grid-column:span 2; } .c-3 { grid-column:span 3; } .c-4 { grid-column:span 4; } .c-6 { grid-column:span 6; }
         .etu-card .form-control, .etu-card .form-select { padding:8px 10px !important; font-size:13px; }
         .etu-hors { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--t2); white-space:nowrap; }
-        @media(max-width:640px){ .c-2,.c-3,.c-4,.c-6{ grid-column:span 6; } }
+        @media(max-width:640px){ .c-2,.c-3{ grid-column:span 6; } .c-4,.c-6{ grid-column:span 12; } }
 
         /* Toasts (feedback AJAX sans rechargement) */
         #toastShelf { position:fixed; right:18px; bottom:18px; z-index:1080; display:flex; flex-direction:column; gap:10px; max-width:min(360px,calc(100vw - 36px)); }
@@ -148,8 +162,9 @@
             @if ($annees->count() > 0)
                 <form method="POST" action="{{ route('student.contexte.annee') }}" class="year-switch" data-no-loading>
                     @csrf
-                    <label class="year-label"><i class="fas fa-calendar-days me-1"></i>Année académique</label>
-                    <select name="annee_academique_id" class="year-select" onchange="this.form.submit()">
+                    <span class="year-label"><i class="fas fa-calendar-days me-1"></i>Année académique</span>
+                    <select name="annee_academique_id" class="year-select" onchange="this.form.submit()"
+                        title="Changer l'année consultée">
                         @foreach ($annees as $a)
                             <option value="{{ $a->id }}" @selected($anneeContexte && $anneeContexte->id === $a->id)>
                                 {{ $a->libelle }}{{ $a->is_active ? ' (en cours)' : '' }}
@@ -269,6 +284,23 @@
                                             <span class="badge bg-secondary py-2 px-3">
                                                 <i class="fas fa-lock"></i> Année clôturée — aucun dépôt pour cette année
                                             </span>
+                                        @elseif (!($openCats['depot'] ?? false))
+                                            @php $f = $fenetres['depot'] ?? null; @endphp
+                                            <div class="d-inline-block p-3 rounded text-start"
+                                                style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);max-width:420px;">
+                                                <div class="fw-semibold small" style="color:var(--amber,#b45309);">
+                                                    <i class="fas fa-door-closed"></i> Dépôts actuellement fermés
+                                                </div>
+                                                <div class="small mt-1" style="color:var(--t2);">
+                                                    @if ($f && $f->date_debut && now()->startOfDay()->lt($f->date_debut))
+                                                        La période ouvrira le <strong>{{ $f->date_debut->format('d/m/Y') }}</strong>@if($f->date_fin) et se fermera le <strong>{{ $f->date_fin->format('d/m/Y') }}</strong>@endif.
+                                                    @elseif ($f && $f->date_fin && now()->gt($f->date_fin->copy()->endOfDay()))
+                                                        La période s'est terminée le <strong>{{ $f->date_fin->format('d/m/Y') }}</strong>.
+                                                    @else
+                                                        Revenez lorsque l'administration ouvrira la période de dépôt.
+                                                    @endif
+                                                </div>
+                                            </div>
                                         @else
                                             <a href="{{ route('student.depot.start') }}" class="btn btn-primary btn-lg">
                                                 <i class="fas fa-folder-plus"></i> Créer mon dossier
@@ -278,7 +310,6 @@
                                 </div>
                             @else
                                 {{-- ─── Contexte académique du dépôt ─── --}}
-                                @php $saison = \App\Models\StudentRequest::saison($req->semestre); @endphp
                                 <div class="card mb-4">
                                     <div class="card-body py-3">
                                         <div class="d-flex flex-wrap gap-4 align-items-center">
@@ -299,10 +330,7 @@
                                             <div>
                                                 <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);">Année d'études</div>
                                                 <div style="font-weight:600;color:var(--t1);">
-                                                    @php $anneeEtude = \App\Models\Parcours::anneeDuSemestre($req->semestre); @endphp
-                                                    {{ $anneeEtude ?? '—' }}
-                                                    @if ($req->semestre)<span style="color:var(--t3);font-weight:500;">· {{ $req->semestre }}</span>@endif
-                                                    @if ($saison)<span class="ms-1" style="color:var(--blue);font-size:12px;"><i class="fas fa-leaf"></i> {{ $saison }}</span>@endif
+                                                    {{ \App\Models\Parcours::libelleNiveau($req->semestre, $req->parcours?->grade) ?? '—' }}
                                                 </div>
                                             </div>
                                         </div>
@@ -645,6 +673,23 @@
                                             <span class="badge bg-secondary py-2 px-3">
                                                 <i class="fas fa-lock"></i> Année clôturée — aucune demande pour cette année
                                             </span>
+                                        @elseif (!($openCats[$key] ?? false))
+                                            @php $f = $fenetres[$key] ?? null; @endphp
+                                            <div class="d-inline-block p-3 rounded text-start"
+                                                style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);max-width:420px;">
+                                                <div class="fw-semibold small" style="color:var(--amber,#b45309);">
+                                                    <i class="fas fa-door-closed"></i> Cette opération est actuellement fermée
+                                                </div>
+                                                <div class="small mt-1" style="color:var(--t2);">
+                                                    @if ($f && $f->date_debut && now()->startOfDay()->lt($f->date_debut))
+                                                        La période ouvrira le <strong>{{ $f->date_debut->format('d/m/Y') }}</strong>@if($f->date_fin) et se fermera le <strong>{{ $f->date_fin->format('d/m/Y') }}</strong>@endif.
+                                                    @elseif ($f && $f->date_fin && now()->gt($f->date_fin->copy()->endOfDay()))
+                                                        La période s'est terminée le <strong>{{ $f->date_fin->format('d/m/Y') }}</strong>.
+                                                    @else
+                                                        Revenez lorsque l'administration ouvrira la période.
+                                                    @endif
+                                                </div>
+                                            </div>
                                         @else
                                             <form method="POST"
                                                 action="{{ route('student.requests.create') }}?tab={{ $key }}">
@@ -943,13 +988,12 @@
                                         </form>
                                     @endif
                                     @if ($isDepot && $types->where('has_stamp', true)->isNotEmpty())
-                                        <div class="mt-3 pt-3" style="border-top:1px solid var(--line);">
-                                            <small class="d-flex align-items-start gap-2" style="color:var(--t2);">
-                                                <i class="fas fa-stamp mt-1" style="color:var(--blue);flex-shrink:0;"></i>
-                                                Les documents <i class="fas fa-stamp mx-1"
-                                                    style="color:var(--blue);font-size:10px;"></i>
-                                                reçoivent un <strong style="color:var(--t1);">cachet officiel</strong>.
-                                                Téléchargeables après validation.
+                                        <div class="mt-3 pt-3 d-flex align-items-start gap-2" style="border-top:1px solid var(--line);">
+                                            <i class="fas fa-stamp mt-1" style="color:var(--blue);flex-shrink:0;font-size:13px;"></i>
+                                            <small style="color:var(--t2);line-height:1.5;">
+                                                Les documents marqués reçoivent un
+                                                <strong style="color:var(--t1);">cachet officiel</strong>
+                                                et deviennent téléchargeables après validation.
                                             </small>
                                         </div>
                                     @endif
@@ -1081,6 +1125,13 @@
                 });
                 const app = document.getElementById('etudesApp');
                 if (app) initEtudes(app);
+
+                // Rendre l'onglet ACTIF visible dans la barre (défilement horizontal)
+                const tabs = document.getElementById('stTabs');
+                const actif = tabs?.querySelector('.nav-link.active');
+                if (tabs && actif) {
+                    tabs.scrollLeft = Math.max(0, actif.offsetLeft - tabs.clientWidth / 2 + actif.clientWidth / 2);
+                }
             }
 
             function initEtudes(root) {
@@ -1228,7 +1279,11 @@
                 const y = window.scrollY;
                 const root = document.getElementById('dashRoot');
                 const url = new URL(root.dataset.url, window.location.origin);
-                url.searchParams.set('tab', 'depot');
+                // Rester sur l'ONGLET COURANT (bug : revenait toujours au 1er onglet)
+                const tabCourant = new URLSearchParams(window.location.search).get('tab')
+                    || document.querySelector('#stTabs .nav-link.active')?.dataset.tab
+                    || 'depot';
+                url.searchParams.set('tab', tabCourant);
                 try {
                     const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                     const html = await res.text();

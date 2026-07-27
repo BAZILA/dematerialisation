@@ -70,6 +70,64 @@
         </small>
     </div>
 
+    {{-- Portée (candidatures uniquement) : commune ou propre à des parcours --}}
+    @php
+        $uid = $item?->id ?? 'new';
+        $porteeActuelle = old(
+            'portee',
+            $item && $item->parcours->isNotEmpty() ? 'specifique' : 'commune',
+        );
+        $parcoursCoches = collect(old('parcours_ids', $item?->parcours->pluck('id')->all() ?? []))
+            ->map(fn($v) => (int) $v)
+            ->all();
+    @endphp
+    <div class="col-12" id="portee-row-{{ $uid }}"
+        style="display: {{ old('category', $item?->category) === 'candidature' ? '' : 'none' }};">
+        <label class="form-label">Portée de la pièce <span class="text-danger">*</span></label>
+        <div class="d-flex gap-3 flex-wrap mb-2">
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="portee" value="commune"
+                    id="portee-com-{{ $uid }}" {{ $porteeActuelle === 'commune' ? 'checked' : '' }}
+                    onchange="togglePortee(this)">
+                <label class="form-check-label" for="portee-com-{{ $uid }}">
+                    <strong>Commune</strong> — demandée à tous les candidats
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="portee" value="specifique"
+                    id="portee-spe-{{ $uid }}" {{ $porteeActuelle === 'specifique' ? 'checked' : '' }}
+                    onchange="togglePortee(this)">
+                <label class="form-check-label" for="portee-spe-{{ $uid }}">
+                    <strong>Propre à certains parcours</strong>
+                </label>
+            </div>
+        </div>
+
+        <div id="portee-list-{{ $uid }}" style="display: {{ $porteeActuelle === 'specifique' ? '' : 'none' }};">
+            <div class="border rounded p-2" style="max-height:220px;overflow-y:auto;">
+                @forelse ($parcoursParFaculte ?? [] as $facNom => $liste)
+                    <div class="small fw-semibold mt-2 mb-1" style="color:var(--t2);">{{ $facNom }}</div>
+                    @foreach ($liste as $p)
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="parcours_ids[]"
+                                value="{{ $p->id }}" id="pp-{{ $uid }}-{{ $p->id }}"
+                                {{ in_array($p->id, $parcoursCoches, true) ? 'checked' : '' }}>
+                            <label class="form-check-label small" for="pp-{{ $uid }}-{{ $p->id }}">
+                                {{ $p->nom }}
+                                <span class="text-muted">({{ \App\Models\Parcours::$grades[$p->grade]['label'] ?? $p->grade }})</span>
+                            </label>
+                        </div>
+                    @endforeach
+                @empty
+                    <div class="small text-muted">Aucun parcours actif.</div>
+                @endforelse
+            </div>
+            <small class="text-muted">
+                Le candidat ne verra cette pièce que s'il choisit l'un des parcours cochés.
+            </small>
+        </div>
+    </div>
+
     {{-- Description --}}
     <div class="col-12">
         <label class="form-label">Description / consigne <small class="text-muted ">(optionnel)</small></label>
@@ -141,6 +199,19 @@
         const profileRow = modal?.querySelector('[id^="profile-row"]');
         if (profileRow) {
             profileRow.style.display = selectEl.value === 'depot' ? '' : 'none';
+        }
+        // La portée (commune / propre à un parcours) ne concerne que les candidatures
+        const porteeRow = modal?.querySelector('[id^="portee-row"]');
+        if (porteeRow) {
+            porteeRow.style.display = selectEl.value === 'candidature' ? '' : 'none';
+        }
+    }
+
+    function togglePortee(radioEl) {
+        const modal = radioEl.closest('.modal-body, .card-body, form');
+        const list = modal?.querySelector('[id^="portee-list"]');
+        if (list) {
+            list.style.display = radioEl.value === 'specifique' ? '' : 'none';
         }
     }
 </script>

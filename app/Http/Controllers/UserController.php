@@ -19,7 +19,8 @@ class UserController extends Controller
     public function index()
     {
         $users = User::whereNotIn('role', ['etudiant', 'candidat'])
-            ->orderBy('nom')->orderBy('numero_identifiant')->get();
+            ->orderBy('nom')->orderBy('numero_identifiant')
+            ->paginate(\App\Models\Setting::perPage())->withQueryString();
         $roles = $this->staffRoles();
 
         return view('admin.users.index', compact('users', 'roles'));
@@ -53,6 +54,10 @@ class UserController extends Controller
             $user->update(['signature_path' => $request->file('signature')->store('signatures', 'local')]);
         }
 
+        \App\Models\AuditLog::record('utilisateur.cree', $user,
+            "Compte créé : {$user->staff_name} ({$user->numero_identifiant}) — rôle {$data['role']}",
+            ['role' => $data['role']]);
+
         return back()->with('success', "Compte « {$user->staff_name} » créé.");
     }
 
@@ -85,8 +90,18 @@ class UserController extends Controller
             }
             $update['signature_path'] = $request->file('signature')->store('signatures', 'local');
         }
+        $ancienRole = $user->role;
         $user->update($update);
         $user->syncRoles([$data['role']]);
+
+        \App\Models\AuditLog::record('utilisateur.modifie', $user,
+            "Compte modifié : {$user->staff_name} ({$user->numero_identifiant})"
+                . ($ancienRole !== $data['role'] ? " — rôle {$ancienRole} → {$data['role']}" : ''),
+            [
+                'role' => $data['role'],
+                'mot_de_passe_change' => !empty($data['password']),
+                'desactive' => !$request->boolean('is_active'),
+            ]);
 
         return back()->with('success', 'Compte mis à jour.');
     }
@@ -99,6 +114,11 @@ class UserController extends Controller
         if ($user->signature_path) {
             Storage::disk('local')->delete($user->signature_path);
         }
+
+        \App\Models\AuditLog::record('utilisateur.supprime', null,
+            "Compte supprimé : {$user->staff_name} ({$user->numero_identifiant}) — rôle {$user->role}",
+            ['role' => $user->role, 'user_id_supprime' => $user->id]);
+
         $user->delete();
 
         return back()->with('success', 'Compte supprimé.');

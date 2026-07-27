@@ -27,16 +27,21 @@ class StudentController extends Controller
         return AnneeAcademique::active();
     }
 
-    /** Années consultables : celles où l'étudiant a des demandes + l'année active. */
+    /**
+     * Années consultables : celles où l'étudiant a des demandes + l'année active.
+     * Les années ARCHIVÉES sont exclues (clôturée = consultable en lecture
+     * seule ; archivée = retirée des sélecteurs, dossiers via l'administration).
+     */
     private function anneesDisponibles($student)
     {
         $ids = StudentRequest::where('student_id', $student->id)
             ->whereNotNull('annee_academique_id')
             ->distinct()->pluck('annee_academique_id')->all();
 
-        return AnneeAcademique::where(function ($q) use ($ids) {
-            $q->whereIn('id', $ids)->orWhere('is_active', true);
-        })->orderByDesc('date_debut')->get();
+        return AnneeAcademique::where('statut', '<>', 'archivee')
+            ->where(function ($q) use ($ids) {
+                $q->whereIn('id', $ids)->orWhere('is_active', true);
+            })->orderByDesc('date_debut')->get();
     }
 
     /** Bascule l'année de consultation de l'étudiant. */
@@ -67,10 +72,21 @@ class StudentController extends Controller
 
         $categories = array_keys(RequestType::categoriesFor($typeEtudiant));
 
+        // ── Fenêtres d'ouverture : état par catégorie (pour l'affichage) ──
+        $openCats = [];
+        $fenetres = [];
+        foreach ($categories as $cat) {
+            $openCats[$cat] = $anneeActive ? $anneeActive->operationOpen($cat) : false;
+            $fenetres[$cat] = $anneeActive?->periodes->firstWhere('operation', $cat);
+        }
+
         $requestsByCategory = [];
         foreach ($categories as $cat) {
             // Demandes de l'année consultée uniquement (tous statuts)
-            $requestsByCategory[$cat] = StudentRequest::with('files.requestType')
+            $requestsByCategory[$cat] = StudentRequest::with(
+                'files.requestType', 'validator', 'parcours.departement.faculte',
+                'anneeAcademique', 'etudesAnterieures'
+            )
                 ->where('student_id', $student->id)
                 ->where('category', $cat)
                 ->when($anneeContexte, fn ($q) => $q->where('annee_academique_id', $anneeContexte->id))
@@ -113,7 +129,9 @@ class StudentController extends Controller
             'annees',
             'anneeContexte',
             'isReadOnly',
-            'refEtudes'
+            'refEtudes',
+            'openCats',
+            'fenetres'
         ));
     }
 }

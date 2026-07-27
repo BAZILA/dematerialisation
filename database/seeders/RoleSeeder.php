@@ -23,12 +23,25 @@ class RoleSeeder extends Seeder
             // Transverses
             'demandes.controler', 'documents.valider', 'documents.signer',
             'paiements.confirmer', 'dossiers.consulter',
-            // Administration / configuration
+            // Annuler une validation / rouvrir un dossier (PAS les simples agents)
+            'demandes.rouvrir',
+            // Administration / configuration — permissions « globales » (tout le module)
             'identites.importer', 'academique.gerer', 'annees.gerer',
             'parametres.gerer', 'utilisateurs.gerer', 'roles.gerer',
             'perimetres.affecter', 'audit.consulter',
             // Archives numériques
             'archives.consulter',
+            // Statistiques (réservées : direction / supervision)
+            'statistiques.consulter',
+            // ── Permissions FINES par action (voir / créer / éditer / supprimer) ──
+            // Chaque route accepte la fine OU la globale du module.
+            'academique.voir', 'academique.creer', 'academique.editer', 'academique.supprimer',
+            'annees.voir', 'annees.creer', 'annees.editer', 'annees.supprimer',
+            'utilisateurs.voir', 'utilisateurs.creer', 'utilisateurs.editer', 'utilisateurs.supprimer',
+            'roles.voir', 'roles.creer', 'roles.editer', 'roles.supprimer',
+            'procedures.voir', 'procedures.creer', 'procedures.editer', 'procedures.supprimer',
+            'types.voir', 'types.creer', 'types.editer', 'types.supprimer',
+            'perimetres.voir', 'identites.voir',
         ];
         foreach ($permissions as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
@@ -45,7 +58,7 @@ class RoleSeeder extends Seeder
             'admin'                   => [
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'identites.importer',
                 'utilisateurs.gerer', 'perimetres.affecter', 'dossiers.consulter', 'audit.consulter',
-                'archives.consulter',
+                'archives.consulter', 'statistiques.consulter', 'demandes.rouvrir',
             ],
             // Archiviste : consultation et export de l'archive des dossiers validés
             'archiviste'              => [
@@ -55,16 +68,16 @@ class RoleSeeder extends Seeder
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'dossiers.consulter',
             ],
             'chef_scolarite'          => array_merge(
-                ['acceder-backoffice', 'demandes.controler', 'dossiers.consulter'],
+                ['acceder-backoffice', 'demandes.controler', 'dossiers.consulter', 'statistiques.consulter', 'demandes.rouvrir'],
                 $tousTraitements
             ),
             'directeur_daas'          => [
                 'acceder-backoffice', 'documents.valider', 'documents.signer',
-                'dossiers.consulter', 'audit.consulter',
+                'dossiers.consulter', 'audit.consulter', 'statistiques.consulter',
             ],
             'directeur_adjoint_daas'  => [
                 'acceder-backoffice', 'documents.valider', 'documents.signer',
-                'dossiers.consulter', 'audit.consulter',
+                'dossiers.consulter', 'audit.consulter', 'statistiques.consulter',
             ],
             'agent_depot'             => ['acceder-backoffice', 'depot.traiter', 'dossiers.consulter'],
             'agent_carte'             => ['acceder-backoffice', 'duplicat.traiter', 'dossiers.consulter'],

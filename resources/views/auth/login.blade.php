@@ -76,9 +76,15 @@
                     <a href="{{ route('register') }}" style="color:var(--brand);font-weight:600;text-decoration:none;"><i class="fas fa-user-plus"></i> S'inscrire</a>
                 </p>
 
-                <a href="{{ route('candidature.create') }}" class="btn btn-outline-primary w-100 mt-3">
-                    <i class="fas fa-file-signature"></i> Candidature en ligne <span class="text-muted">(sans compte)</span>
-                </a>
+                <div class="d-flex gap-2 mt-3">
+                    <a href="{{ route('candidature.create') }}" class="btn btn-outline-primary flex-grow-1">
+                        <i class="fas fa-file-signature"></i> Candidature en ligne
+                    </a>
+                    <a href="{{ route('candidature.suivi') }}" class="btn btn-outline-success flex-grow-1"
+                        title="Suivre l'état d'une candidature déjà soumise">
+                        <i class="fas fa-magnifying-glass-chart"></i> Suivre mon dossier
+                    </a>
+                </div>
 
                 <div class="alert alert-info mt-4 mb-0" style="font-size:12px;">
                     <strong><i class="fas fa-circle-info"></i> Démonstration</strong>

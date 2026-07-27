@@ -26,12 +26,21 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
     ];
 
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'is_active'         => 'boolean',
+        'email_verified_at'       => 'datetime',
+        'is_active'               => 'boolean',
+        'two_factor_secret'       => 'encrypted', // secret TOTP chiffré au repos
+        'two_factor_confirmed_at' => 'datetime',
     ];
+
+    /** 2FA active et confirmée sur ce compte ? */
+    public function hasTwoFactor(): bool
+    {
+        return !empty($this->two_factor_secret) && $this->two_factor_confirmed_at !== null;
+    }
 
     public function student()
     {
@@ -79,6 +88,71 @@ class User extends Authenticatable
                 });
             }
         });
+    }
+
+    /**
+     * Périmètre appliqué aux CANDIDATURES : par PARCOURS uniquement
+     * (un candidat n'a pas d'année d'études). Une candidature est visible
+     * dès qu'un de ses vœux tombe dans le périmètre de l'agent.
+     */
+    public function applyCandidaturePerimeter($query)
+    {
+        $ids = $this->perimeterParcoursIds();
+        if ($ids === null) {
+            return $query; // couvre tout
+        }
+
+        return $query->where(function ($q) use ($ids) {
+            $q->whereIn('parcours_id', $ids)
+              ->orWhereHas('choix', fn ($c) => $c->whereIn('parcours_id', $ids));
+        });
+    }
+
+    /** L'agent peut-il instruire cette candidature ? */
+    public function coversCandidature(Candidature $cand): bool
+    {
+        $ids = $this->perimeterParcoursIds();
+        if ($ids === null) {
+            return true;
+        }
+        $voeux = $cand->relationLoaded('choix')
+            ? $cand->choix->pluck('parcours_id')
+            : $cand->choix()->pluck('parcours_id');
+
+        return in_array($cand->parcours_id, $ids, true)
+            || $voeux->contains(fn ($p) => in_array((int) $p, $ids, true));
+    }
+
+    /**
+     * Parcours couverts par le périmètre.
+     * null = couvre TOUT (super-admin ou aucune affectation).
+     */
+    public function perimeterParcoursIds(): ?array
+    {
+        if ($this->isSuperAdmin()) {
+            return null;
+        }
+        $ids = $this->perimetres()->pluck('parcours_id')->filter()->unique()->values()->all();
+
+        return $ids ?: null;
+    }
+
+    /**
+     * Codes niveau (A1, A2, …) couverts par le périmètre.
+     * null = tous les niveaux (aucune affectation, ou au moins une
+     * affectation « toutes années » sur un parcours).
+     */
+    public function perimeterNiveaux(): ?array
+    {
+        if ($this->isSuperAdmin()) {
+            return null;
+        }
+        $perimetres = $this->perimetres()->get();
+        if ($perimetres->isEmpty() || $perimetres->contains(fn ($p) => blank($p->semestre))) {
+            return null;
+        }
+
+        return $perimetres->pluck('semestre')->unique()->values()->all();
     }
 
     /** Procédures (catégories) que l'utilisateur a le droit de traiter. */
