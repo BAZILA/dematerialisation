@@ -15,42 +15,21 @@ class StatsPdfService
     private const INK   = [20, 36, 59];
     private const MUTED = [110, 122, 140];
 
-    public function build(array $agg, array $filtres): string
+    /**
+     * @param  string  $genereePar  nom de l'agent, reporté en pied de chaque page
+     */
+    public function build(array $agg, array $filtres, string $genereePar = ''): string
     {
-        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8');
-        $pdf->SetCreator('Plateforme de dématérialisation');
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        $pdf->SetMargins(14, 12, 14);
-        $pdf->SetAutoPageBreak(true, 14);
+        $pdf = new \App\Support\RapportPdf('P');
+        $pdf->configurer(
+            'Rapport statistique — Demandes & dépôts dématérialisés',
+            'Synthèse',
+            $genereePar,
+            $filtres ? collect($filtres)->map(fn ($v, $k) => "$k : $v")->implode('   ·   ') : ''
+        );
         $pdf->AddPage();
 
-        /* ── En-tête ── */
-        $pdf->SetTextColor(...self::BRAND);
-        $pdf->SetFont('helvetica', 'B', 15);
-        $pdf->Cell(0, 8, Setting::get('app.university_name', 'Université de Kara'), 0, 1, 'C');
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->SetTextColor(...self::INK);
-        $pdf->Cell(0, 6, 'Rapport statistique — Demandes & dépôts dématérialisés', 0, 1, 'C');
-        $pdf->SetFont('helvetica', 'I', 8.5);
-        $pdf->SetTextColor(...self::MUTED);
-        $pdf->Cell(0, 5, 'Généré le ' . now()->format('d/m/Y à H:i'), 0, 1, 'C');
-        $pdf->Ln(2);
-        $pdf->SetDrawColor(...self::BRAND);
-        $pdf->SetLineWidth(.5);
-        $pdf->Line(14, $pdf->GetY(), 196, $pdf->GetY());
-        $pdf->Ln(3);
-
-        /* ── Filtres appliqués ── */
-        if ($filtres) {
-            $pdf->SetFont('helvetica', 'B', 9);
-            $pdf->SetTextColor(...self::INK);
-            $pdf->Cell(0, 5.5, 'Périmètre du rapport', 0, 1);
-            $pdf->SetFont('helvetica', '', 8.5);
-            $pdf->SetTextColor(...self::MUTED);
-            $pdf->MultiCell(0, 4.5, collect($filtres)->map(fn ($v, $k) => "$k : $v")->implode('   ·   '), 0, 'L');
-            $pdf->Ln(2);
-        }
+        $pdf->blocFiltres();
 
         /* ── KPI en bandeaux ── */
         $kpis = [
@@ -118,15 +97,13 @@ class StatsPdfService
         return $pdf->Output('stats.pdf', 'S');
     }
 
-    private function sectionTitle(\TCPDF $pdf, string $titre): void
+    private function sectionTitle(\App\Support\RapportPdf $pdf, string $titre): void
     {
-        $pdf->SetFont('helvetica', 'B', 9.5);
-        $pdf->SetTextColor(...self::BRAND);
-        $pdf->Cell(0, 6.5, $titre, 0, 1);
+        $pdf->titreSection($titre);
     }
 
     /** Petit tableau 2 colonnes (libellé / valeur). */
-    private function table(\TCPDF $pdf, string $titre, array $data): void
+    private function table(\App\Support\RapportPdf $pdf, string $titre, array $data): void
     {
         if (empty($data)) {
             return;

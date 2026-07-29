@@ -25,6 +25,7 @@ class ProcedureController extends Controller
             'nom'           => 'required|string|max:150',
             'description'   => 'nullable|string|max:500',
             'ordre'         => 'nullable|integer|min:0',
+            'frais_montant' => 'nullable|integer|min:0|max:10000000',
         ]);
 
         $code = Str::of($data['code'])->lower()->replace('-', '_')->toString();
@@ -38,6 +39,8 @@ class ProcedureController extends Controller
             'pour_anciens'  => $request->boolean('pour_anciens'),
             'is_active'     => true,
             'ordre'         => $data['ordre'] ?? 99,
+            'frais_actifs'  => $request->boolean('frais_actifs'),
+            'frais_montant' => (int) ($data['frais_montant'] ?? 0),
         ]);
 
         // Permission de traitement associée (assignable aux rôles depuis l'UI)
@@ -61,6 +64,7 @@ class ProcedureController extends Controller
             'nom'         => 'required|string|max:150',
             'description' => 'nullable|string|max:500',
             'ordre'       => 'nullable|integer|min:0',
+            'frais_montant' => 'nullable|integer|min:0|max:10000000',
         ]);
 
         $procedure->update([
@@ -70,6 +74,8 @@ class ProcedureController extends Controller
             'pour_nouveaux' => $request->boolean('pour_nouveaux'),
             'pour_anciens'  => $request->boolean('pour_anciens'),
             'is_active'     => $request->boolean('is_active'),
+            'frais_actifs'  => $request->boolean('frais_actifs'),
+            'frais_montant' => (int) ($data['frais_montant'] ?? 0),
             'ordre'         => $data['ordre'] ?? $procedure->ordre,
         ]);
 

@@ -11,6 +11,7 @@ class Procedure extends Model
         'code', 'nom', 'description',
         'requires_auth', 'pour_nouveaux', 'pour_anciens',
         'is_active', 'ordre',
+        'frais_actifs', 'frais_montant',
     ];
 
     protected $casts = [
@@ -18,7 +19,22 @@ class Procedure extends Model
         'pour_nouveaux' => 'boolean',
         'pour_anciens'  => 'boolean',
         'is_active'     => 'boolean',
+        'frais_actifs'  => 'boolean',
+        'frais_montant' => 'integer',
     ];
+
+    /** Frais exigés pour cette procédure (0 = gratuite). */
+    public function fraisDus(): int
+    {
+        return $this->frais_actifs ? max(0, (int) $this->frais_montant) : 0;
+    }
+
+    public function getFraisFormatesAttribute(): string
+    {
+        return $this->fraisDus() > 0
+            ? number_format($this->frais_montant, 0, ',', ' ') . ' FCFA'
+            : 'Gratuite';
+    }
 
     public function requestTypes()
     {

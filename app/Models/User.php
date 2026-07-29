@@ -108,6 +108,14 @@ class User extends Authenticatable
         });
     }
 
+    /** L'agent couvre-t-il ce parcours précis ? */
+    public function coversParcours(?int $parcoursId): bool
+    {
+        $ids = $this->perimeterParcoursIds();
+
+        return $ids === null || ($parcoursId !== null && in_array($parcoursId, $ids, true));
+    }
+
     /** L'agent peut-il instruire cette candidature ? */
     public function coversCandidature(Candidature $cand): bool
     {
@@ -121,6 +129,51 @@ class User extends Authenticatable
 
         return in_array($cand->parcours_id, $ids, true)
             || $voeux->contains(fn ($p) => in_array((int) $p, $ids, true));
+    }
+
+    /**
+     * Périmètre appliqué aux PAIEMENTS.
+     *
+     * Un paiement porte soit sur une section de candidature, soit sur une
+     * demande étudiante : dans les deux cas on remonte au parcours. Sans
+     * ce filtre, un agent restreint verrait la caisse entière — donc les
+     * noms et les reçus de candidats hors de son périmètre.
+     */
+    public function applyPaiementPerimeter($query)
+    {
+        $ids = $this->perimeterParcoursIds();
+        if ($ids === null) {
+            return $query;   // couvre tout (caissier central, super-admin)
+        }
+
+        return $query->where(function ($q) use ($ids) {
+            $q->where(function ($qq) use ($ids) {
+                $qq->where('payable_type', \App\Models\CandidatureChoix::class)
+                   ->whereIn('payable_id', \App\Models\CandidatureChoix::whereIn('parcours_id', $ids)->select('id'));
+            })->orWhere(function ($qq) use ($ids) {
+                $qq->where('payable_type', \App\Models\StudentRequest::class)
+                   ->whereIn('payable_id', \App\Models\StudentRequest::whereIn('parcours_id', $ids)->select('id'));
+            });
+        });
+    }
+
+    /** L'agent peut-il consulter ce paiement ? */
+    public function coversPaiement(\App\Models\Paiement $paiement): bool
+    {
+        $ids = $this->perimeterParcoursIds();
+        if ($ids === null) {
+            return true;
+        }
+        $payable = $paiement->payable;
+
+        $parcoursId = match (true) {
+            $payable instanceof \App\Models\CandidatureChoix => $payable->parcours_id,
+            $payable instanceof \App\Models\StudentRequest   => $payable->parcours_id,
+            default => null,
+        };
+
+        // Un paiement sans contexte académique reste visible
+        return $parcoursId === null || in_array((int) $parcoursId, $ids, true);
     }
 
     /**

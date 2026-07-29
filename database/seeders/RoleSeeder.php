@@ -23,8 +23,14 @@ class RoleSeeder extends Seeder
             // Transverses
             'demandes.controler', 'documents.valider', 'documents.signer',
             'paiements.confirmer', 'dossiers.consulter',
+            // Paiements : consultation seule, et dérogation au blocage impayé
+            'paiements.voir', 'paiements.forcer',
             // Annuler une validation / rouvrir un dossier (PAS les simples agents)
             'demandes.rouvrir',
+            // Refuser une pièce COMMUNE : elle vaut pour tous les parcours du
+            // candidat, donc un refus rejaillit sur les décisions des autres
+            // agents. Réservé à un superviseur.
+            'pieces.commune_refuser',
             // Administration / configuration — permissions « globales » (tout le module)
             'identites.importer', 'academique.gerer', 'annees.gerer',
             'parametres.gerer', 'utilisateurs.gerer', 'roles.gerer',
@@ -59,6 +65,7 @@ class RoleSeeder extends Seeder
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'identites.importer',
                 'utilisateurs.gerer', 'perimetres.affecter', 'dossiers.consulter', 'audit.consulter',
                 'archives.consulter', 'statistiques.consulter', 'demandes.rouvrir',
+                'paiements.voir', 'paiements.confirmer', 'pieces.commune_refuser',
             ],
             // Archiviste : consultation et export de l'archive des dossiers validés
             'archiviste'              => [
@@ -68,7 +75,8 @@ class RoleSeeder extends Seeder
                 'acceder-backoffice', 'academique.gerer', 'annees.gerer', 'dossiers.consulter',
             ],
             'chef_scolarite'          => array_merge(
-                ['acceder-backoffice', 'demandes.controler', 'dossiers.consulter', 'statistiques.consulter', 'demandes.rouvrir'],
+                ['acceder-backoffice', 'demandes.controler', 'dossiers.consulter', 'statistiques.consulter',
+                 'demandes.rouvrir', 'paiements.voir', 'pieces.commune_refuser'],
                 $tousTraitements
             ),
             'directeur_daas'          => [
@@ -86,7 +94,7 @@ class RoleSeeder extends Seeder
             'agent_homologation'      => ['acceder-backoffice', 'homologation.traiter', 'dossiers.consulter'],
             'agent_diplome'           => ['acceder-backoffice', 'diplome.traiter', 'dossiers.consulter'],
             'agent_candidature'       => ['acceder-backoffice', 'candidature.traiter', 'dossiers.consulter'],
-            'agent_financier'         => ['acceder-backoffice', 'paiements.confirmer', 'dossiers.consulter'],
+            'agent_financier'         => ['acceder-backoffice', 'paiements.confirmer', 'paiements.voir', 'dossiers.consulter'],
             'auditeur'                => ['acceder-backoffice', 'audit.consulter', 'dossiers.consulter'],
             // Usagers (aucune permission back-office)
             'etudiant'                => [],

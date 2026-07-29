@@ -21,6 +21,7 @@ class AdminRequestController extends Controller
     public function __construct(
         private StampService $stampService,
         private FicheVersoService $versoService,
+        private \App\Services\TamponnageService $tamponnageService,
     ) {
     }
 
@@ -150,9 +151,19 @@ class AdminRequestController extends Controller
 
     public function export(Request $request, string $category = 'depot')
     {
-        $allowed = ['all', 'depot', 'attestation', 'diplome', 'releve', 'duplicat'];
-        if (!in_array($category, $allowed)) {
+        $allowed = array_merge(['all'], \App\Models\Procedure::query()->pluck('code')->all());
+        if (!in_array($category, $allowed, true)) {
             abort(404);
+        }
+
+        // Mêmes garde-fous que la liste : sans eux, un agent d'une autre
+        // catégorie pouvait exporter l'intégralité des dépôts.
+        $treatable = $request->user()->treatableCategories();
+        if ($category !== 'all' && !in_array($category, $treatable, true)) {
+            abort(403, "Vous n'êtes pas autorisé à exporter cette catégorie de demandes.");
+        }
+        if (empty($treatable)) {
+            abort(403, "Aucune catégorie de demandes ne vous est attribuée.");
         }
 
         $query = StudentRequest::with([
@@ -167,6 +178,8 @@ class AdminRequestController extends Controller
 
         if ($category !== 'all') {
             $query->where('category', $category);
+        } else {
+            $query->whereIn('category', $treatable);
         }
 
         // Exactement le même périmètre + les mêmes filtres que la liste
@@ -174,7 +187,49 @@ class AdminRequestController extends Controller
 
         $rows = $query->orderBy('parcours_id')->orderBy('semestre')->orderBy('created_at')->get();
 
-        $filename = 'depots-' . $category . '-' . now()->format('Ymd-His') . '.xlsx';
+        // Nom de fichier lisible : catégorie + année + filtres actifs
+        $cats = \App\Models\Procedure::labels();
+        $anneeCtx = $request->filled('annee_id') && $request->input('annee_id') === 'all'
+            ? 'toutes-annees'
+            : (\App\Models\AnneeAcademique::find((int) $request->input('annee_id', \App\Models\AnneeAcademique::context()?->id))?->libelle);
+        $contexte = [
+            $anneeCtx,
+            $request->filled('niveau') ? $request->niveau : null,
+            $request->filled('status') ? $request->status : null,
+        ];
+
+        if ($request->input('format') === 'pdf') {
+            $entetes = ['Étudiant', 'Identifiant', 'Catégorie', 'Parcours', 'Faculté',
+                        'Année', 'Niveau', 'Statut', 'Soumis le'];
+            $lignes = $rows->map(fn ($r) => [
+                $r->student?->full_name ?? '—',
+                $r->student?->user?->numero_identifiant ?? '—',
+                $cats[$r->category] ?? $r->category,
+                $r->parcours?->nom ?? '—',
+                $r->parcours?->departement?->faculte?->sigle
+                    ?? $r->parcours?->departement?->faculte?->nom ?? '—',
+                $r->anneeAcademique?->libelle ?? '—',
+                \App\Models\Parcours::libelleNiveau($r->semestre, $r->parcours?->grade) ?? '—',
+                ucfirst($r->status),
+                $r->submitted_at?->format('d/m/Y') ?? '—',
+            ]);
+
+            $pdf = app(\App\Services\TableauPdfService::class)->build(
+                'Demandes — ' . ($cats[$category] ?? 'Toutes catégories'),
+                $entetes, $lignes, $request->user()->staff_name,
+                'Année : ' . (\App\Models\AnneeAcademique::context()?->libelle ?? '—'),
+                [1.4, 1, 1, 1.3, 1, .8, 1, .8, .8]
+            );
+
+            $nom = \App\Support\NomExport::build('demandes-' . $category, $contexte, 'pdf');
+
+            return response($pdf, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $nom . '"',
+            ]);
+        }
+
+        $filename = \App\Support\NomExport::build('demandes-' . $category, $contexte, 'xlsx');
 
         return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\DepotsExport($rows), $filename);
     }
@@ -204,7 +259,7 @@ class AdminRequestController extends Controller
     public function previewFile(Request $request, $fileId)
     {
         $file = RequestFile::with('studentRequest')->findOrFail($fileId);
-        $this->authorizeFileAccess($request, $file);
+        $this->authorizeFileAccess($request, $file, 'consultée');
 
         $path = Storage::path($file->file_path);
         abort_unless(file_exists($path), 404, 'Fichier introuvable.');
@@ -220,16 +275,62 @@ class AdminRequestController extends Controller
         $file = RequestFile::with('studentRequest')->findOrFail($fileId);
         $this->authorizeFileAccess($request, $file);
 
+        // Sans ce contrôle, une pièce absente du disque casse la page
+        // au lieu d'annoncer le problème à l'agent.
+        abort_unless(Storage::disk('local')->exists($file->file_path), 404,
+            "Le fichier « {$file->original_filename} » est introuvable sur le serveur. "
+            . "Demandez à l'étudiant de le redéposer.");
+
         return Storage::download($file->file_path, $file->original_filename);
     }
 
     /** Un agent ne peut accéder qu'aux pièces des demandes de son périmètre et de l'année de contexte. */
-    private function authorizeFileAccess(Request $request, RequestFile $file): void
+    /**
+     * Notifie l'étudiant d'un changement d'état de son dossier.
+     * Silencieux si le module de notifications est éteint.
+     */
+    private function notifierEtudiant(StudentRequest $sr, string $evenement, array $variables = []): void
+    {
+        if (!\App\Models\NotificationEnvoyee::moduleActif()) {
+            return;
+        }
+
+        $sr->loadMissing('student.user', 'anneeAcademique');
+        $etudiant = $sr->student;
+        $user     = $etudiant?->user;
+
+        app(\App\Services\NotificationService::class)->notifier($evenement, [
+            'nom'       => $etudiant?->full_name ?? '',
+            'email'     => $user?->email ?? null,
+            'telephone' => $etudiant?->telephone ?? null,
+        ], $variables + [
+            'procedure' => \App\Models\Procedure::labels()[$sr->category] ?? $sr->category,
+            'annee'     => $sr->anneeAcademique?->libelle ?? '',
+        ], $sr, $user?->id);
+    }
+
+    /**
+     * Autorise l'accès à une pièce ET journalise la consultation.
+     *
+     * Sur une plateforme qui stocke des actes de naissance et des diplômes,
+     * savoir QUI a ouvert le dossier de QUI est aussi important que de
+     * savoir qui l'a validé.
+     */
+    private function authorizeFileAccess(Request $request, RequestFile $file, string $action = 'consultée'): void
     {
         $sr = $file->studentRequest;
         abort_unless($sr, 404);
+        // La procédure d'abord : sans elle, un agent d'une autre catégorie
+        // pourrait lire les pièces d'un dépôt en devinant un identifiant.
+        abort_unless($request->user()->canTreatCategory($sr->category), 403,
+            "Vous n'êtes pas autorisé à consulter les pièces de cette catégorie.");
         abort_unless($request->user()->coversRequest($sr), 403,
             "Cette pièce est hors de votre périmètre d'affectation.");
+
+        \App\Models\AuditLog::record('dossier.piece_consultee', $sr,
+            "Pièce « {$file->original_filename} » {$action} — "
+                . ($sr->student->full_name ?? '—') . " (demande #{$sr->id})",
+            ['fichier_id' => $file->id, 'action' => $action, 'categorie' => $sr->category]);
     }
 
     /* ════════════════════════════════════════════════════════
@@ -249,6 +350,21 @@ class AdminRequestController extends Controller
             return back()->withErrors('Cette demande ne peut pas être validée dans son état actuel.');
         }
 
+        // Frais impayés : on ne valide pas un dossier non réglé, sauf dérogation explicite
+        $paiements = app(\App\Services\Paiement\PaiementService::class);
+        if (Setting::get('paiement.bloque_validation', true)
+            && !$paiements->enRegle($studentRequest, $studentRequest->category)
+            && !$request->user()->can('paiements.forcer')) {
+
+            $p = $paiements->pour($studentRequest);
+
+            return back()->withErrors(
+                "Les frais de ce dossier ne sont pas réglés"
+                . ($p ? " ({$p->montant_formate}, statut : {$p->statut_label})" : '')
+                . ". Faites valider le paiement avant d'accepter le dossier."
+            );
+        }
+
         $isDepot = ($studentRequest->category === 'depot');
 
         // Validation des champs selon la catégorie
@@ -262,77 +378,23 @@ class AdminRequestController extends Controller
         // Charger les fichiers avec leur type + le contexte du dépôt
         $studentRequest->load('files.requestType', 'etudesAnterieures');
 
+        $agent = $request->user();
+
+        /* ── Tamponnage ────────────────────────────────────────────────
+           Sur la connexion « sync », le travail s'exécute ici, exactement
+           comme avant. Avec une vraie file d'attente, l'agent n'attend pas
+           la génération des PDF : elle part dans un worker. */
+        // Hors dépôt il n'y a rien à tamponner : inutile de passer par la file
+        $enFile = $isDepot && config('queue.default') !== 'sync';
         $stampedCount = 0;
         $stampFailed = [];
-        $agent = $request->user();
-        $validatorName = $agent->staff_name;
 
-        // Ressources d'overlay (cachet + signature agent)
-        $cachetRel = Setting::get('cachet_path');
-        $cachetAbs = $cachetRel && Storage::disk('local')->exists($cachetRel)
-            ? Storage::disk('local')->path($cachetRel) : null;
-        $signAbs = $agent->signature_path && Storage::disk('local')->exists($agent->signature_path)
-            ? Storage::disk('local')->path($agent->signature_path) : null;
-
-        // Études antérieures déclarées (pour le verso)
-        $etudes = $studentRequest->etudesAnterieures->map(fn ($e) => [
-            'annee_debut'   => $e->annee_debut,
-            'annee_fin'     => $e->annee_fin,
-            'universite'    => $e->universite,
-            'domaine'       => $e->domaine,
-            'etablissement' => $e->etablissement,
-            'parcours'      => $e->parcours,
-            'credits'       => $e->credits,
-        ])->all();
-
-        foreach ($studentRequest->files as $file) {
-
-            // ── Traitement PDF : uniquement dépôt + has_stamp=true + PDF ──
-            if ($isDepot && $file->requestType?->has_stamp === true && $file->isPdf()) {
-
-                $dir = 'requests/' . $studentRequest->id . '/stamped';
-                $stampedName = 'TAMPONNE_' . $file->stored_filename;
-                $stampedPath = $dir . '/' . $stampedName;
-
-                $absIn = Storage::path($file->file_path);
-                $absOut = Storage::path($stampedPath);
-
-                // Créer le dossier de destination si nécessaire
-                $absDir = dirname($absOut);
-                if (!is_dir($absDir)) {
-                    mkdir($absDir, 0755, true);
-                }
-
-                // La FICHE (fills_verso) : verso auto-rempli ; sinon simple cachet
-                if ($file->requestType->fills_verso === true) {
-                    $ok = $this->versoService->fillVerso(
-                        $absIn, $absOut, $etudes, $cachetAbs, $signAbs, $validatorName,
-                        optional($studentRequest->submitted_at)->toDateTimeString(),
-                        'DEP-' . $studentRequest->id
-                    );
-                } else {
-                    $ok = $this->stampService->stampPdf($absIn, $absOut, $validatorName, $cachetAbs);
-                }
-
-                if ($ok) {
-                    $file->update([
-                        'is_stamped' => true,
-                        'stamped_file_path' => $stampedPath,
-                        'is_locked' => true,
-                        'is_valid' => true,
-                    ]);
-                    $stampedCount++;
-                    Log::info("Tampon OK : {$file->original_filename} → {$stampedPath}");
-                } else {
-                    $stampFailed[] = $file->original_filename;
-                    $file->update(['is_locked' => true, 'is_valid' => true]);
-                    Log::error("Tampon ÉCHEC : {$file->original_filename}");
-                }
-
-            } else {
-                // Pas de tampon : juste verrouiller et marquer valide
-                $file->update(['is_locked' => true, 'is_valid' => true]);
-            }
+        if ($enFile) {
+            \App\Jobs\TamponnerDossier::dispatch($studentRequest->id, $agent->id);
+        } else {
+            $r = $this->tamponnageService->traiter($studentRequest, $agent);
+            $stampedCount = $r['tamponnes'];
+            $stampFailed  = $r['echecs'];
         }
 
         // Mettre à jour la demande
@@ -363,11 +425,17 @@ class AdminRequestController extends Controller
             ]
         );
 
+        // Prévenir l'étudiant (rien ne part si le module est désactivé)
+        $this->notifierEtudiant($studentRequest, 'depot.valide');
+
         // Message de retour
         $msg = $isDepot
             ? "Dossier de dépôt validé."
             : "Demande validée. Rendez-vous fixé au " . \Carbon\Carbon::parse($request->rendez_vous_at)->format('d/m/Y') . ".";
 
+        if ($enFile && $isDepot) {
+            $msg .= " Le tamponnage des pièces se poursuit en arrière-plan.";
+        }
         if ($stampedCount > 0)
             $msg .= " {$stampedCount} fichier(s) tamponné(s).";
         if (!empty($stampFailed)) {

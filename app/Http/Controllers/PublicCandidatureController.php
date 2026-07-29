@@ -28,6 +28,208 @@ class PublicCandidatureController extends Controller
         return $annee ? $annee->operationOpen('candidature') : false;
     }
 
+    private function paiements(): \App\Services\Paiement\PaiementService
+    {
+        return app(\App\Services\Paiement\PaiementService::class);
+    }
+
+    /**
+     * Déclaration d'un versement par le candidat.
+     * Authentification légère : référence + date de naissance, comme pour
+     * la complétion du dossier.
+     */
+    public function declarerPaiement(Request $request)
+    {
+        $data = $request->validate([
+            'reference'      => 'required|string|max:50',
+            'date_naissance' => 'required|date',
+            'section_id'     => 'required|integer',
+            'transaction_id' => 'required|string|max:80',
+            'numero_payeur'  => 'nullable|string|max:30',
+            'operateur'      => 'nullable|in:' . implode(',', array_keys(\App\Models\Paiement::$operateurs)),
+        ], [], [
+            'date_naissance' => 'date de naissance',
+            'transaction_id' => 'identifiant de transaction',
+            'section_id'     => 'parcours concerné',
+        ]);
+
+        $cand = Candidature::where('reference', trim($data['reference']))->first();
+        if (!$cand || $cand->date_naissance?->format('Y-m-d') !== $request->date('date_naissance')->format('Y-m-d')) {
+            return back()->withErrors('Référence ou date de naissance incorrecte.');
+        }
+
+        $section = $cand->choix()->where('id', (int) $request->input('section_id'))->first();
+        $paiement = $section ? $this->paiements()->pour($section) : null;
+        if (!$paiement) {
+            return back()->withErrors("Aucun frais n'est attendu pour ce parcours.");
+        }
+
+        $r = $this->paiements()->declarer(
+            $paiement, trim($data['transaction_id']),
+            $data['numero_payeur'] ?? null, $data['operateur'] ?? null
+        );
+
+        return $r['ok']
+            ? back()->with('success', $r['message'])
+            : back()->withErrors($r['message']);
+    }
+
+    /**
+     * Section à laquelle rattacher une pièce.
+     * Pièce commune → null (partagée par toutes les sections).
+     *
+     * @param  array<int,\App\Models\CandidatureChoix>  $sections  indexées par parcours_id
+     */
+    private function sectionPour(?RequestType $type, array $sections): ?\App\Models\CandidatureChoix
+    {
+        if (!$type || $type->parcours->isEmpty()) {
+            return null;
+        }
+        foreach ($type->parcours as $p) {
+            if (isset($sections[$p->id])) {
+                return $sections[$p->id];
+            }
+        }
+
+        return null;
+    }
+
+    /** Stocke une pièce sur le disque privé et l'enregistre. */
+    private function rangerPiece(Candidature $cand, $file, int $rtId, ?\App\Models\CandidatureChoix $section): CandidatureFile
+    {
+        // Nom de stockage assaini (le nom client brut ne va jamais dans un chemin)
+        $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'document';
+        $ext  = preg_replace('/[^a-z0-9]/', '', strtolower($file->getClientOriginalExtension()));
+        $stored = time() . '_' . \Illuminate\Support\Str::random(6) . '_' . substr($base, 0, 90) . ($ext ? '.' . $ext : '');
+        $path = $file->storeAs('candidatures/' . $cand->id, $stored, 'local');
+
+        return CandidatureFile::create([
+            'candidature_id'       => $cand->id,
+            'candidature_choix_id' => $section?->id,
+            'request_type_id'      => $rtId,
+            'original_filename'    => $file->getClientOriginalName(),
+            'stored_filename'      => $stored,
+            'file_path'            => $path,
+            'mime_type'            => $file->getMimeType(),
+            'file_size'            => $file->getSize(),
+        ]);
+    }
+
+    /**
+     * Efface le fichier du disque, sauf si une autre pièce s'appuie encore
+     * dessus. Deux enregistrements peuvent partager un même chemin ; une
+     * suppression aveugle laisserait l'autre pointer dans le vide.
+     */
+    private function supprimerFichierPhysique(CandidatureFile $piece): void
+    {
+        $partage = CandidatureFile::where('file_path', $piece->file_path)
+            ->where('id', '!=', $piece->id)->exists();
+
+        if (!$partage) {
+            \Illuminate\Support\Facades\Storage::disk('local')->delete($piece->file_path);
+        }
+    }
+
+    /**
+     * Pièces d'un parcours réparties en deux : les COMMUNES (déjà au
+     * dossier, jamais redemandées) et les SPÉCIFIQUES à ce parcours.
+     */
+    public function piecesPourParcours(Candidature $cand, int $parcoursId): array
+    {
+        $docs = RequestType::pourCandidature([$parcoursId]);
+        $deja = $cand->files->keyBy('request_type_id');
+
+        $communes = $docs->filter(fn ($t) => $t->parcours->isEmpty())->values();
+        foreach ($communes as $t) {
+            $t->fichier_existant = $deja->get($t->id);
+        }
+
+        return [
+            'communes'    => $communes,
+            'specifiques' => $docs->filter(fn ($t) => $t->parcours->isNotEmpty())->values(),
+        ];
+    }
+
+    /**
+     * Postuler à un PARCOURS SUPPLÉMENTAIRE.
+     *
+     * Le candidat ne refournit que les pièces propres à ce parcours :
+     * les pièces communes déjà au dossier sont reprises telles quelles.
+     */
+    public function ajouterParcours(Request $request)
+    {
+        abort_unless($this->estOuverte(), 403, "Les candidatures ne sont pas ouvertes actuellement.");
+
+        $data = $request->validate([
+            'reference'      => 'required|string|max:50',
+            'date_naissance' => 'required|date',
+            'parcours_id'    => 'required|exists:parcours,id',
+            'files'          => 'array',
+            'files.*'        => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+        ], [], ['date_naissance' => 'date de naissance', 'parcours_id' => 'parcours']);
+
+        $cand = Candidature::with('choix', 'files')->where('reference', trim($data['reference']))->first();
+        if (!$cand || $cand->date_naissance?->format('Y-m-d') !== $request->date('date_naissance')->format('Y-m-d')) {
+            return back()->withErrors('Référence ou date de naissance incorrecte.');
+        }
+
+        $parcoursId = (int) $data['parcours_id'];
+        if ($cand->choix->contains('parcours_id', $parcoursId)) {
+            return back()->withErrors('Vous avez déjà postulé à ce parcours.');
+        }
+
+        // Seules les pièces PROPRES au nouveau parcours sont exigées
+        $pieces = $this->piecesPourParcours($cand, $parcoursId);
+        foreach ($pieces['specifiques']->where('is_required', true) as $type) {
+            if (!$request->hasFile("files.{$type->id}")) {
+                return back()->withErrors("La pièce « {$type->label} » est obligatoire pour ce parcours.");
+            }
+        }
+
+        $section = \App\Models\CandidatureChoix::create([
+            'candidature_id' => $cand->id,
+            'parcours_id'    => $parcoursId,
+            'ordre'          => ((int) $cand->choix->max('ordre')) + 1,
+            'soumis_at'      => now(),
+        ]);
+
+        $autorisees = $pieces['specifiques']->pluck('id')->all();
+        foreach ((array) $request->file('files', []) as $rtId => $file) {
+            if (!$file || !is_numeric($rtId) || !in_array((int) $rtId, $autorisees, true)) {
+                continue;
+            }
+            $this->rangerPiece($cand, $file, (int) $rtId, $section);
+        }
+
+        // Quittance propre à cette nouvelle section
+        app(\App\Services\Paiement\PaiementService::class)
+            ->creerPour($section, 'candidature', $cand->annee_academique_id);
+
+        // Un dossier encore en cours repart en instruction : il y a du nouveau
+        if (!in_array($cand->status, ['admis', 'refuse'], true)) {
+            $cand->update(['status' => 'soumise']);
+        }
+
+        \App\Models\AuditLog::record('candidature.parcours_ajoute', $cand,
+            "Parcours ajouté à la candidature {$cand->reference} : "
+                . (\App\Models\Parcours::find($parcoursId)?->nom ?? $parcoursId),
+            ['parcours_id' => $parcoursId]);
+
+        return back()->with('success',
+            "Votre candidature à ce parcours est enregistrée. Les pièces communes de votre dossier ont été reprises automatiquement.");
+    }
+
+    /** Parcours auxquels le candidat n'a pas encore postulé. */
+    private function parcoursDisponibles(Candidature $cand)
+    {
+        $deja = $cand->choix->pluck('parcours_id')->all();
+
+        return Faculte::where('is_active', true)
+            ->with(['departements.parcours' => fn ($q) => $q->where('is_active', true)
+                ->whereNotIn('id', $deja ?: [0])->orderBy('nom')])
+            ->orderBy('type')->orderBy('nom')->get();
+    }
+
     /** Toutes les pièces de candidature actives (avec leur portée). */
     private function candidatureDocs()
     {
@@ -80,36 +282,60 @@ class PublicCandidatureController extends Controller
             'nom'            => 'required|string|max:100',
             'prenom'         => 'required|string|max:100',
             'sexe'           => 'required|in:M,F',
-            'date_naissance' => 'required|date',
+            'date_naissance' => 'required|date|before:today|after:1940-01-01',
             'lieu_naissance' => 'required|string|max:150',
             'email'          => 'required|email|max:150',
             'telephone'      => 'nullable|string|max:30',
-            // Jusqu'à 3 parcours classés par préférence (le 1er est obligatoire)
-            'parcours_ids'   => 'required|array|min:1|max:3',
-            'parcours_ids.1' => 'required|exists:parcours,id',
-            'parcours_ids.*' => 'nullable|exists:parcours,id',
+            // Une SECTION par parcours visé — pas de classement, ce sont
+            // des candidatures parallèles instruites indépendamment.
+            'sections'                 => 'required|array|min:1|max:6',
+            'sections.*.parcours_id'   => 'required|exists:parcours,id',
+            'sections.*.files'         => 'array',
+            'sections.*.files.*'       => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            // Pièces du dossier commun
             'files'          => 'array',
             'files.*'        => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-        ], [], ['parcours_ids.1' => '1er choix de parcours']);
+        ], [
+            'date_naissance.before' => "La date de naissance doit être antérieure à aujourd'hui.",
+            'date_naissance.after'  => 'Vérifiez votre date de naissance.',
+        ], ['sections' => 'parcours visés', 'sections.*.parcours_id' => 'parcours']);
 
-        // Choix distincts, dans l'ordre saisi
-        $choix = collect($data['parcours_ids'])->filter()->map(fn ($v) => (int) $v)->values();
+        // Un même parcours ne peut pas faire l'objet de deux sections
+        $choix = collect($data['sections'])->pluck('parcours_id')->map(fn ($v) => (int) $v)->values();
         if ($choix->duplicates()->isNotEmpty()) {
-            return $this->echec($request, ['parcours_ids' => 'Chaque parcours ne peut être choisi qu\'une seule fois.']);
+            return $this->echec($request, ['sections' => 'Vous avez sélectionné deux fois le même parcours.']);
         }
 
-        // Pièces exigées = communes + celles propres aux parcours choisis
-        $docs = $this->docsPourChoix($choix->all());
+        $tousDocs = $this->docsPourChoix($choix->all());
         $manquantes = [];
-        foreach ($docs->where('is_required', true) as $type) {
+
+        // 1. Pièces COMMUNES : exigées une seule fois pour tout le dossier
+        $communes = $tousDocs->filter(fn ($t) => $t->parcours->isEmpty());
+        foreach ($communes->where('is_required', true) as $type) {
             if (!$request->hasFile("files.{$type->id}")) {
                 $manquantes["files.{$type->id}"] = "La pièce « {$type->label} » est obligatoire.";
             }
         }
+
+        // 2. Pièces PROPRES : exigées section par section
+        foreach ($data['sections'] as $i => $sectionSaisie) {
+            $pid = (int) $sectionSaisie['parcours_id'];
+            foreach (RequestType::pourCandidature([$pid]) as $type) {
+                if ($type->parcours->isEmpty() || !$type->is_required) {
+                    continue;
+                }
+                if (!$request->hasFile("sections.{$i}.files.{$type->id}")) {
+                    $nom = \App\Models\Parcours::find($pid)?->nom ?? 'ce parcours';
+                    $manquantes["sections.{$i}.files.{$type->id}"] =
+                        "La pièce « {$type->label} » est obligatoire pour {$nom}.";
+                }
+            }
+        }
+
         if ($manquantes) {
             return $this->echec($request, $manquantes);
         }
-        $docsAutorises = $docs->pluck('id')->all();
+        $docsAutorises = $communes->pluck('id')->all();
 
         $cand = Candidature::create([
             'reference'           => Candidature::generateReference(),
@@ -120,38 +346,52 @@ class PublicCandidatureController extends Controller
             'lieu_naissance'      => $data['lieu_naissance'],
             'email'               => $data['email'],
             'telephone'           => $data['telephone'] ?? null,
-            'parcours_id'         => $choix->first(), // 1er choix (compatibilité)
+            'parcours_id'         => $choix->first(), // 1re section (compatibilité des écrans)
             'annee_academique_id' => optional(AnneeAcademique::active())->id,
             'status'              => 'soumise',
         ]);
 
-        foreach ($choix as $i => $pid) {
-            \App\Models\CandidatureChoix::create([
+        // Une SECTION par parcours visé
+        $sections = [];
+        $ordre = 1;
+        foreach ($data['sections'] as $i => $sectionSaisie) {
+            $pid = (int) $sectionSaisie['parcours_id'];
+            $sections[$i] = \App\Models\CandidatureChoix::create([
                 'candidature_id' => $cand->id,
                 'parcours_id'    => $pid,
-                'ordre'          => $i + 1,
+                'ordre'          => $ordre++,
+                'soumis_at'      => now(),
             ]);
         }
 
+        // Pièces COMMUNES : rattachées au dossier, partagées par toutes les sections
         foreach ((array) $request->file('files', []) as $rtId => $file) {
-            // On n'accepte que les pièces réellement demandées à ce candidat
             if (!$file || !is_numeric($rtId) || !in_array((int) $rtId, $docsAutorises, true)) {
                 continue;
             }
-            // Nom de stockage assaini (le nom client brut ne va jamais dans un chemin)
-            $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'document';
-            $ext  = preg_replace('/[^a-z0-9]/', '', strtolower($file->getClientOriginalExtension()));
-            $stored = time() . '_' . substr($base, 0, 100) . ($ext ? '.' . $ext : '');
-            $path = $file->storeAs('candidatures/' . $cand->id, $stored, 'local');
-            CandidatureFile::create([
-                'candidature_id'    => $cand->id,
-                'request_type_id'   => (int) $rtId,
-                'original_filename' => $file->getClientOriginalName(),
-                'stored_filename'   => $stored,
-                'file_path'         => $path,
-                'mime_type'         => $file->getMimeType(),
-                'file_size'         => $file->getSize(),
-            ]);
+            $this->rangerPiece($cand, $file, (int) $rtId, null);
+        }
+
+        // Pièces PROPRES : rattachées à leur section
+        foreach ((array) $request->file('sections', []) as $i => $bloc) {
+            if (!isset($sections[$i]) || empty($bloc['files'])) {
+                continue;
+            }
+            $autorisees = RequestType::pourCandidature([$sections[$i]->parcours_id])
+                ->filter(fn ($t) => $t->parcours->isNotEmpty())->pluck('id')->all();
+
+            foreach ((array) $bloc['files'] as $rtId => $file) {
+                if (!$file || !is_numeric($rtId) || !in_array((int) $rtId, $autorisees, true)) {
+                    continue;
+                }
+                $this->rangerPiece($cand, $file, (int) $rtId, $sections[$i]);
+            }
+        }
+
+        // Frais : une quittance PAR SECTION (chaque parcours se paie séparément)
+        $paiements = app(\App\Services\Paiement\PaiementService::class);
+        foreach ($sections as $section) {
+            $paiements->creerPour($section, 'candidature', $cand->annee_academique_id);
         }
 
         $url = route('candidature.confirmation', $cand->reference);
@@ -188,19 +428,21 @@ class PublicCandidatureController extends Controller
 
     public function suiviForm()
     {
-        return view('public.candidature.suivi', ['candidature' => null, 'cherche' => false, 'types' => collect()]);
+        return view('public.candidature.suivi', ['candidature' => null, 'cherche' => false, 'types' => collect(), 'parcoursDispo' => collect()]);
     }
 
     public function suivi(Request $request)
     {
         $data = $request->validate(['reference' => 'required|string|max:50']);
-        $candidature = Candidature::with('choix.parcours.departement.faculte', 'parcoursAdmis', 'files.requestType')
+        $candidature = Candidature::with('choix.parcours.departement.faculte', 'choix.files.requestType',
+            'choix.paiement', 'parcoursAdmis', 'files.requestType')
             ->where('reference', trim($data['reference']))->first();
 
         return view('public.candidature.suivi', [
             'candidature' => $candidature,
             'cherche'     => true,
             'types'       => $candidature ? $this->docsPourCandidature($candidature) : collect(),
+            'parcoursDispo' => $candidature ? $this->parcoursDisponibles($candidature) : collect(),
         ]);
     }
 
@@ -243,25 +485,21 @@ class PublicCandidatureController extends Controller
                 $erreurs["files.{$rtId}"] = 'Cette pièce a déjà été validée : elle ne peut plus être modifiée.';
                 continue;
             }
-            // Remplace l'ancienne pièce du même type
-            $ancien = $cand->files()->where('request_type_id', (int) $rtId)->first();
+            // Remplace l'ancienne pièce du même type, en conservant la
+            // section d'origine : une pièce propre à un parcours ne doit
+            // pas devenir commune parce qu'elle a été renvoyée.
+            $ancien  = $cand->files()->where('request_type_id', (int) $rtId)->first();
+            $section = $ancien?->choix;
             if ($ancien) {
-                \Illuminate\Support\Facades\Storage::disk('local')->delete($ancien->file_path);
+                $this->supprimerFichierPhysique($ancien);
                 $ancien->delete();
             }
-            $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'document';
-            $ext  = preg_replace('/[^a-z0-9]/', '', strtolower($file->getClientOriginalExtension()));
-            $stored = time() . '_' . substr($base, 0, 100) . ($ext ? '.' . $ext : '');
-            $path = $file->storeAs('candidatures/' . $cand->id, $stored, 'local');
-            CandidatureFile::create([
-                'candidature_id'    => $cand->id,
-                'request_type_id'   => (int) $rtId,
-                'original_filename' => $file->getClientOriginalName(),
-                'stored_filename'   => $stored,
-                'file_path'         => $path,
-                'mime_type'         => $file->getMimeType(),
-                'file_size'         => $file->getSize(),
-            ]);
+            if (!$section) {
+                $type = RequestType::find((int) $rtId);
+                $section = $this->sectionPour($type, $cand->choix->keyBy('parcours_id')->all());
+            }
+
+            $this->rangerPiece($cand, $file, (int) $rtId, $section);
             $remplaces++;
         }
 
@@ -281,13 +519,15 @@ class PublicCandidatureController extends Controller
             ['pieces' => $remplaces]);
 
         // Ré-affiche le suivi à jour
-        $candidature = Candidature::with('choix.parcours.departement.faculte', 'parcoursAdmis', 'files.requestType')
+        $candidature = Candidature::with('choix.parcours.departement.faculte', 'choix.files.requestType',
+            'choix.paiement', 'parcoursAdmis', 'files.requestType')
             ->find($cand->id);
 
         return view('public.candidature.suivi', [
             'candidature' => $candidature,
             'cherche'     => true,
             'types'       => $this->docsPourCandidature($candidature),
+            'parcoursDispo' => $this->parcoursDisponibles($candidature),
             'complete'    => true,
         ]);
     }

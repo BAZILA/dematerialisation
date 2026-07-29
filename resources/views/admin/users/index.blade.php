@@ -56,7 +56,8 @@
                                     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalUser"
                                         onclick="openUser('edit', this)" data-url="{{ route('admin.utilisateurs.update', $u) }}"
                                         data-nom="{{ $u->nom }}" data-prenom="{{ $u->prenom }}" data-email="{{ $u->email }}"
-                                        data-role="{{ $u->role }}" data-active="{{ $u->is_active ? 1 : 0 }}">
+                                        data-role="{{ $u->role }}" data-roles="{{ $u->getRoleNames()->implode(',') }}"
+                                        data-active="{{ $u->is_active ? 1 : 0 }}">
                                         <i class="fas fa-pen"></i>
                                     </button>
                                 @endcanany
@@ -107,10 +108,27 @@
                             <input type="text" class="form-control" name="numero_identifiant" placeholder="Ex : DAAS01"></div>
                         <div class="mt-3"><label class="form-label">Email <span class="text-danger">*</span></label>
                             <input type="email" class="form-control" name="email" required></div>
-                        <div class="mt-3"><label class="form-label">Rôle <span class="text-danger">*</span></label>
-                            <select class="form-select" name="role" required>
-                                @foreach ($roles as $r)<option value="{{ $r->name }}">{{ $roleLabels[$r->name] ?? $r->name }}</option>@endforeach
-                            </select></div>
+                        <div class="mt-3">
+                            <label class="form-label">Rôles <span class="text-danger">*</span>
+                                <small class="text-muted">(plusieurs possibles — le premier coché sert de rôle principal)</small>
+                            </label>
+                            <div class="border rounded p-2" style="max-height:210px;overflow-y:auto;">
+                                @foreach ($roles as $r)
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="roles[]"
+                                            value="{{ $r->name }}" id="ur_{{ $r->id }}" data-role-case>
+                                        <label class="form-check-label small" for="ur_{{ $r->id }}">
+                                            {{ $roleLabels[$r->name] ?? $r->name }}
+                                            <code class="text-muted" style="font-size:10.5px;">{{ $r->name }}</code>
+                                        </label>
+                                    </div>
+                                @endforeach
+                            </div>
+                            <small class="text-muted">
+                                Cumuler les rôles additionne leurs permissions — utile pour un agent
+                                qui traite plusieurs procédures.
+                            </small>
+                        </div>
                         <div class="mt-3"><label class="form-label">Mot de passe <span id="u_pwd_req" class="text-danger">*</span>
                                 <small class="text-muted" id="u_pwd_hint" style="display:none;">(laisser vide = inchangé)</small></label>
                             <input type="password" class="form-control" name="password" minlength="8"></div>
@@ -149,10 +167,12 @@
                 f.prenom.value = el.dataset.prenom || '';
                 f.nom.value = el.dataset.nom || '';
                 f.email.value = el.dataset.email || '';
-                f.role.value = el.dataset.role || '';
+                const actuels = (el.dataset.roles || el.dataset.role || '').split(',').filter(Boolean);
+                f.querySelectorAll('[data-role-case]').forEach(c => { c.checked = actuels.includes(c.value); });
                 document.getElementById('u_active').checked = el.dataset.active === '1';
             } else {
                 f.action = U_STORE;
+                f.querySelectorAll('[data-role-case]').forEach(c => { c.checked = false; });
             }
         }
     </script>

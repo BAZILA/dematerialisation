@@ -136,13 +136,13 @@
                     </select>
                 </div>
 
-                <div class="col-lg-5 col-md-6 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                <div class="col-lg-5 col-md-6 filtre-actions">
+                    <button type="submit" class="btn btn-primary btn-filtrer">
                         <i class="fas fa-search"></i> Filtrer
                     </button>
                     @if ($nbFiltres)
                         <a href="{{ route('admin.requests.index', $category) }}"
-                            class="btn btn-outline-secondary btn-sm" title="Réinitialiser les filtres">
+                            class="btn btn-outline-secondary btn-reset" title="Réinitialiser les filtres">
                             <i class="fas fa-times"></i> {{ $nbFiltres }}
                         </a>
                     @endif
@@ -166,10 +166,21 @@
             </span>
             <div class="d-flex align-items-center gap-3">
                 <small style="color:var(--t2);">{{ $requests->total() }} demande(s)</small>
-                <a href="{{ route('admin.requests.export', $category) }}{{ request()->getQueryString() ? '?' . request()->getQueryString() : '' }}"
-                    class="btn btn-sm btn-success" title="Exporter la liste (Excel) pour le logiciel d'inscription">
-                    <i class="fas fa-file-excel"></i> Exporter
-                </a>
+                @php
+                    $qs = request()->getQueryString();
+                    $baseExport = route('admin.requests.export', $category) . ($qs ? '?' . $qs : '');
+                    $sepPdf = $qs ? '&' : '?';
+                @endphp
+                <div class="btn-group btn-group-sm">
+                    <a href="{{ $baseExport }}"
+                        class="btn btn-success" title="Exporter la liste (Excel) pour le logiciel d'inscription">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ $baseExport }}{{ $sepPdf }}format=pdf"
+                        class="btn btn-outline-danger" title="Rapport PDF avec en-tête de l'université">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                </div>
             </div>
         </div>
         <div class="table-responsive">

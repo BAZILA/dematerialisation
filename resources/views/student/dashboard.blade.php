@@ -416,6 +416,95 @@
                                     </div>
                                 @endif
 
+                                {{-- ─── Frais de dossier (module de paiement actif) ─── --}}
+                                @if (\App\Models\Paiement::moduleActif())
+                                    @php
+                                        $paiement = \App\Models\Paiement::where('payable_type', $req->getMorphClass())
+                                            ->where('payable_id', $req->id)->orderByDesc('id')->first();
+                                    @endphp
+                                    @if ($paiement)
+                                        @php
+                                            $consignes = app(\App\Services\Paiement\PasserelleOperateur::class)->instructions($paiement);
+                                        @endphp
+                                        <div class="card mb-3"
+                                            style="border-color:{{ $paiement->estPaye() ? 'rgba(47,158,51,.5)' : 'rgba(245,158,11,.5)' }};">
+                                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <span style="color:var(--t1);font-weight:600;">
+                                                    <i class="fas fa-money-bill-transfer"></i> Frais de dossier
+                                                </span>
+                                                <span class="badge bg-{{ $paiement->statut_badge }}">{{ $paiement->statut_label }}</span>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                                    <div class="fw-bold" style="font-size:1.4rem;color:var(--brand);">
+                                                        {{ $paiement->montant_formate }}
+                                                    </div>
+                                                    <code class="small">{{ $paiement->reference }}</code>
+                                                </div>
+
+                                                @if ($paiement->estPaye())
+                                                    <div class="alert alert-success small mb-0">
+                                                        <i class="fas fa-circle-check"></i> Paiement confirmé, merci.
+                                                    </div>
+                                                @else
+                                                    @if ($paiement->statut === 'soumis')
+                                                        <div class="alert alert-warning small">
+                                                            <i class="fas fa-hourglass-half"></i>
+                                                            Transaction <code>{{ $paiement->transaction_id }}</code> en cours
+                                                            de vérification. Vous n'avez rien d'autre à faire.
+                                                        </div>
+                                                    @endif
+                                                    @if ($paiement->statut === 'rejete' && $paiement->motif_rejet)
+                                                        <div class="alert alert-danger small">
+                                                            <i class="fas fa-circle-exclamation"></i>
+                                                            <strong>Versement non confirmé :</strong> {{ $paiement->motif_rejet }}
+                                                        </div>
+                                                    @endif
+
+                                                    <ol class="small ps-3" style="color:var(--t2);">
+                                                        @foreach ($consignes['etapes'] as $etape)
+                                                            <li class="mb-1">{{ $etape }}</li>
+                                                        @endforeach
+                                                    </ol>
+
+                                                    @if ($paiement->peutDeclarer())
+                                                        <form method="POST"
+                                                            action="{{ route('student.paiements.declarer', $paiement) }}"
+                                                            class="row g-2">
+                                                            @csrf
+                                                            <div class="col-md-4">
+                                                                <label class="form-label small">Opérateur</label>
+                                                                <select name="operateur" class="form-select form-select-sm">
+                                                                    @foreach (\App\Models\Paiement::$operateurs as $k => $l)
+                                                                        <option value="{{ $k }}" @selected($paiement->operateur === $k)>{{ $l }}</option>
+                                                                    @endforeach
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label small">
+                                                                    Identifiant de transaction <span class="text-danger">*</span>
+                                                                </label>
+                                                                <input name="transaction_id" class="form-control form-control-sm"
+                                                                    placeholder="Reçu par SMS" required maxlength="80">
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label small">Numéro utilisé</label>
+                                                                <input name="numero_payeur" class="form-control form-control-sm"
+                                                                    placeholder="90 00 00 00" maxlength="30">
+                                                            </div>
+                                                            <div class="col-12">
+                                                                <button class="btn btn-primary btn-sm w-100 mt-1">
+                                                                    <i class="fas fa-paper-plane"></i> Déclarer mon paiement
+                                                                </button>
+                                                            </div>
+                                                        </form>
+                                                    @endif
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endif
+                                @endif
+
                                 {{-- ─── Liste des documents ─── --}}
                                 <div class="card mb-0">
                                     <div

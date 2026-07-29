@@ -7,6 +7,7 @@ use App\Models\Domaine;
 use App\Models\Faculte;
 use App\Models\Parcours;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AcademicController extends Controller
 {
@@ -18,14 +19,14 @@ class AcademicController extends Controller
         return view('admin.academic.index', compact('facultes', 'domaines'));
     }
 
-    /* ── Facultés / Instituts ─────────────────────────────── */
+    /* ── Composantes : facultés / instituts / écoles ──────── */
 
     public function storeFaculte(Request $request)
     {
         $data = $request->validate([
             'nom'   => 'required|string|max:200',
             'sigle' => 'nullable|string|max:30',
-            'type'  => 'required|in:faculte,institut',
+            'type'  => ['required', Rule::in(array_keys(Faculte::$types))],
         ]);
         Faculte::create($data + ['is_active' => true]);
 
@@ -37,7 +38,7 @@ class AcademicController extends Controller
         $data = $request->validate([
             'nom'       => 'required|string|max:200',
             'sigle'     => 'nullable|string|max:30',
-            'type'      => 'required|in:faculte,institut',
+            'type'      => ['required', Rule::in(array_keys(Faculte::$types))],
             'is_active' => 'nullable|boolean',
         ]);
         $faculte->update($data + ['is_active' => $request->boolean('is_active')]);

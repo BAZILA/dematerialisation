@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->id();
             $table->string('nom');
             $table->string('sigle')->nullable();
-            $table->enum('type', ['faculte', 'institut'])->default('faculte');
+            $table->enum('type', ['faculte', 'institut', 'ecole'])->default('faculte');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

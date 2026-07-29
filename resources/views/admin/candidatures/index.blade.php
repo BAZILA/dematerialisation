@@ -35,10 +35,10 @@
                     <option value="all" @selected(request('annee_id') === 'all')>Toutes les années</option>
                 </select>
             </div>
-            <div class="col-lg-2 col-md-6 d-flex gap-2">
-                <button class="btn btn-primary btn-sm flex-grow-1"><i class="fas fa-search"></i> Filtrer</button>
+            <div class="col-lg-2 col-md-6 filtre-actions">
+                <button class="btn btn-primary btn-filtrer"><i class="fas fa-search"></i> Filtrer</button>
                 @if ($nbFiltres)
-                    <a href="{{ route('admin.candidatures.index') }}" class="btn btn-outline-secondary btn-sm" title="Réinitialiser"><i class="fas fa-times"></i> {{ $nbFiltres }}</a>
+                    <a href="{{ route('admin.candidatures.index') }}" class="btn btn-outline-secondary btn-reset" title="Réinitialiser"><i class="fas fa-times"></i> {{ $nbFiltres }}</a>
                 @endif
             </div>
 
@@ -81,9 +81,31 @@
     </div></div>
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span style="font-weight:600;color:var(--t1);"><i class="fas fa-file-signature"></i> Candidatures</span>
-            <small class="text-muted">{{ $candidatures->total() }} candidature(s)</small>
+            <div class="d-flex align-items-center gap-3">
+                <small class="text-muted">{{ $candidatures->total() }} candidature(s)</small>
+                @php $qs = request()->getQueryString(); $qs = $qs ? '?' . $qs : ''; @endphp
+                <div class="btn-group btn-group-sm">
+                    <a href="{{ route('admin.candidatures.export', 'excel') }}{{ $qs }}"
+                        class="btn btn-outline-success" title="Exporter les candidatures filtrées (une ligne par parcours)">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ route('admin.candidatures.export', 'csv') }}{{ $qs }}"
+                        class="btn btn-outline-secondary" title="Exporter au format CSV">
+                        <i class="fas fa-file-csv"></i> CSV
+                    </a>
+                    <a href="{{ route('admin.candidatures.export', 'pdf') }}{{ $qs }}"
+                        class="btn btn-outline-danger" title="Rapport PDF avec en-tête de l'université">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ route('admin.candidatures.telecharger.lot') }}{{ $qs }}"
+                        class="btn btn-outline-primary"
+                        title="Télécharger les pièces des candidatures filtrées (ZIP)">
+                        <i class="fas fa-file-zipper"></i> Pièces (ZIP)
+                    </a>
+                </div>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
@@ -103,7 +125,12 @@
                             <td><span class="badge bg-secondary"><i class="fas fa-paperclip"></i> {{ $c->files_count }}</span></td>
                             <td class="small">{{ $c->created_at->format('d/m/Y') }}</td>
                             <td><span class="badge bg-{{ $c->status_badge }}">{{ $c->statut_label }}</span></td>
-                            <td class="text-center"><a href="{{ route('admin.candidatures.show', $c) }}" class="btn btn-sm btn-primary"><i class="fas fa-eye"></i></a></td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ route('admin.candidatures.show', $c) }}" class="btn btn-primary" title="Ouvrir"><i class="fas fa-eye"></i></a>
+                                    <a href="{{ route('admin.candidatures.telecharger', $c) }}" class="btn btn-outline-primary" title="Télécharger le dossier (ZIP)"><i class="fas fa-file-zipper"></i></a>
+                                </div>
+                            </td>
                         </tr>
                     @empty
                         <tr><td colspan="8" class="text-center text-muted py-5"><i class="fas fa-inbox d-block fs-2 mb-2"></i>Aucune candidature.</td></tr>

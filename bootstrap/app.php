@@ -15,13 +15,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // en-têtes X-Forwarded-* pour que HTTPS/IP réelles soient détectés.
         $middleware->trustProxies(at: '*');
 
-        // En-têtes de sécurité sur toutes les réponses web
+        // En-têtes de sécurité sur toutes les réponses web + coupure
+        // immédiate des sessions dont le compte vient d'être désactivé
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\EnsureAccountActive::class,
         ]);
 
         // Alias de rôles/permissions (Spatie)
         $middleware->alias([
+            // Ferme les routes d'un module désactivé (ex. module:payments.enabled)
+            'module'             => \App\Http\Middleware\ModuleActif::class,
             'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,

@@ -53,6 +53,12 @@ class Candidature extends Model
         return $this->hasMany(CandidatureFile::class);
     }
 
+    /** Pièces COMMUNES : fournies une fois, valables pour tous les parcours. */
+    public function filesCommunes()
+    {
+        return $this->hasMany(CandidatureFile::class)->whereNull('candidature_choix_id');
+    }
+
     public function traiteur()
     {
         return $this->belongsTo(User::class, 'traite_par');
@@ -78,6 +84,47 @@ class Candidature extends Model
             'refuse'         => 'danger',
             default          => 'secondary',
         };
+    }
+
+    /**
+     * Recalcule le statut du dossier à partir de ses sections.
+     *
+     * Le dossier n'a plus de décision propre : il résume celles des
+     * parcours. Admis dès qu'un parcours l'accepte ; refusé seulement
+     * si tous refusent.
+     */
+    public function recalculerStatut(): void
+    {
+        $sections = $this->choix()->get();
+        if ($sections->isEmpty()) {
+            return;
+        }
+
+        $statuts = $sections->pluck('statut');
+
+        $global = match (true) {
+            $statuts->contains('admis')          => 'admis',
+            $statuts->every(fn ($s) => $s === 'refuse') => 'refuse',
+            $statuts->contains('en_correction')  => 'en_correction',
+            $statuts->contains('en_instruction') => 'en_instruction',
+            default                              => 'soumise',
+        };
+
+        // parcours_admis_id : conservé pour les écrans et exports existants
+        $premierAdmis = $sections->firstWhere('statut', 'admis');
+
+        $this->update([
+            'status'            => $global,
+            'parcours_admis_id' => $premierAdmis?->parcours_id,
+            'decision_at'       => in_array($global, ['admis', 'refuse'], true)
+                ? ($this->decision_at ?? now()) : null,
+        ]);
+    }
+
+    /** Parcours sur lesquels le candidat est admis. */
+    public function parcoursAdmisTous()
+    {
+        return $this->choix->where('statut', 'admis');
     }
 
     public static function generateReference(): string

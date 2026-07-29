@@ -147,9 +147,9 @@
                         </select>
                     </div>
                 </div>
-                <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Appliquer les filtres</button>
-                    <a href="{{ route('admin.statistiques.index') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-times"></i> Réinitialiser</a>
+                <div class="mt-3 filtre-actions">
+                    <button class="btn btn-primary btn-filtrer"><i class="fas fa-filter"></i> Appliquer les filtres</button>
+                    <a href="{{ route('admin.statistiques.index') }}" class="btn btn-outline-secondary"><i class="fas fa-times"></i> Réinitialiser</a>
                 </div>
             </form>
         </div>

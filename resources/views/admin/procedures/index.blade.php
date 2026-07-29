@@ -17,7 +17,7 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead>
-                    <tr><th style="width:50px;">#</th><th>Procédure</th><th>Accès</th><th>Public cible</th><th>Types doc.</th><th>Statut</th><th class="text-end">Actions</th></tr>
+                    <tr><th style="width:50px;">#</th><th>Procédure</th><th>Accès</th><th>Public cible</th><th>Types doc.</th>@if (\App\Models\Paiement::moduleActif())<th>Frais</th>@endif<th>Statut</th><th class="text-end">Actions</th></tr>
                 </thead>
                 <tbody>
                     @forelse ($procedures as $p)
@@ -40,6 +40,15 @@
                                 @if (!$p->pour_nouveaux && !$p->pour_anciens)<span class="text-muted">—</span>@endif
                             </td>
                             <td><span class="badge bg-secondary">{{ $p->request_types_count }}</span></td>
+                            @if (\App\Models\Paiement::moduleActif())
+                                <td>
+                                    @if ($p->fraisDus() > 0)
+                                        <span class="badge bg-warning text-dark">{{ $p->frais_formates }}</span>
+                                    @else
+                                        <span class="text-muted small">Gratuite</span>
+                                    @endif
+                                </td>
+                            @endif
                             <td>
                                 @if ($p->is_active)<span class="badge bg-success"><i class="fas fa-eye"></i> Active</span>
                                 @else<span class="badge bg-secondary"><i class="fas fa-eye-slash"></i> Inactive</span>@endif
@@ -49,7 +58,8 @@
                                     onclick="openProc('edit', this)" data-url="{{ route('admin.procedures.update', $p) }}"
                                     data-nom="{{ $p->nom }}" data-code="{{ $p->code }}" data-desc="{{ $p->description }}"
                                     data-auth="{{ $p->requires_auth ? 1 : 0 }}" data-nouv="{{ $p->pour_nouveaux ? 1 : 0 }}"
-                                    data-anc="{{ $p->pour_anciens ? 1 : 0 }}" data-active="{{ $p->is_active ? 1 : 0 }}" data-ordre="{{ $p->ordre }}">
+                                    data-anc="{{ $p->pour_anciens ? 1 : 0 }}" data-active="{{ $p->is_active ? 1 : 0 }}" data-ordre="{{ $p->ordre }}"
+                                    data-frais="{{ $p->frais_actifs ? 1 : 0 }}" data-montant="{{ $p->frais_montant }}">
                                     <i class="fas fa-pen"></i>
                                 </button>
                                 <form method="POST" action="{{ route('admin.procedures.destroy', $p) }}" class="d-inline" onsubmit="return confirm('Supprimer cette procédure ?')">
@@ -59,7 +69,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted py-5">Aucune procédure.</td></tr>
+                        <tr><td colspan="{{ \App\Models\Paiement::moduleActif() ? 8 : 7 }}" class="text-center text-muted py-5">Aucune procédure.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -98,6 +108,30 @@
                                 <input class="form-check-input" type="checkbox" name="pour_anciens" value="1" id="pr_anc" checked>
                                 <label class="form-check-label" for="pr_anc">Anciens étudiants</label></div>
                         </div>
+                        {{-- Frais de dossier propres à cette procédure (module de paiement actif) --}}
+                        @if (\App\Models\Paiement::moduleActif())
+                        <div class="mt-3 pt-3" style="border-top:1px solid var(--line);">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="frais_actifs" value="1" id="pr_frais"
+                                    onchange="document.getElementById('pr_montant_wrap').style.display = this.checked ? '' : 'none'">
+                                <label class="form-check-label" for="pr_frais">
+                                    <strong>Procédure payante</strong>
+                                    <br><small class="text-muted">L'usager doit régler des frais avant que son dossier soit validé.</small>
+                                </label>
+                            </div>
+                            <div class="mt-2" id="pr_montant_wrap" style="display:none;">
+                                <label class="form-label small">Montant des frais</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" name="frais_montant" min="0" step="100" value="0">
+                                    <span class="input-group-text">FCFA</span>
+                                </div>
+                                <small class="text-muted">
+                                    Montant réclamé à l'usager avant validation du dossier.
+                                </small>
+                            </div>
+                        </div>
+                        @endif
+
                         <div class="form-check form-switch mt-3" id="pr_active_wrap" style="display:none;">
                             <input class="form-check-input" type="checkbox" name="is_active" value="1" id="pr_active" checked>
                             <label class="form-check-label" for="pr_active">Active</label></div>
@@ -134,6 +168,14 @@
                 document.getElementById('pr_active').checked = el.dataset.active === '1';
             } else {
                 f.action = PR_STORE;
+            }
+
+            // Bloc « frais » absent quand le module de paiement est désactivé
+            const frais = document.getElementById('pr_frais');
+            if (frais) {
+                frais.checked = isEdit && el.dataset.frais === '1';
+                if (f.frais_montant) f.frais_montant.value = isEdit ? (el.dataset.montant || 0) : 0;
+                document.getElementById('pr_montant_wrap').style.display = frais.checked ? '' : 'none';
             }
         }
     </script>

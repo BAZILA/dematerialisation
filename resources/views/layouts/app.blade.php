@@ -286,6 +286,23 @@
         .card-body { padding: 20px !important; }
 
         .btn { font-family: var(--font-body); font-weight: 600; font-size: 13.5px; border-radius: 10px; transition: all var(--dur) var(--ease); }
+
+        /* ── Barres de filtres ───────────────────────────────────────
+           Les boutons d'action ne s'étirent plus sur toute la colonne :
+           un bouton large et bas paraissait écrasé. Hauteur alignée sur
+           celle des champs, largeur bornée. */
+        .filtre-actions { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+        .filtre-actions .btn {
+            min-height: 38px; padding: 0 20px; display: inline-flex;
+            align-items: center; justify-content: center; gap: 7px;
+            font-size: 13px; white-space: nowrap;
+        }
+        .filtre-actions .btn-filtrer { min-width: 130px; max-width: 190px; flex: 0 1 auto; }
+        .filtre-actions .btn-reset { min-width: 44px; padding: 0 14px; }
+        @media (max-width: 575.98px) {
+            .filtre-actions { width: 100%; }
+            .filtre-actions .btn-filtrer { flex: 1 1 auto; max-width: none; }
+        }
         .btn-primary { background: var(--brand) !important; border-color: var(--brand) !important; color: #fff !important; }
         .btn-primary:hover { background: var(--brand-600) !important; border-color: var(--brand-600) !important; box-shadow: 0 8px 20px var(--em-glow) !important; transform: translateY(-1px); }
         .btn-success { background: var(--green) !important; border-color: var(--green) !important; color: #fff !important; }
@@ -483,7 +500,24 @@
                         @endif
                     @endif
 
-                    <div class="sb-section">Configuration</div>
+                    @php
+                        // Un en-tête de section sans aucun lien en dessous fait
+                        // croire à l'agent qu'il lui manque quelque chose.
+                        $sectionConfig = auth()->user()->canAny([
+                            'procedures.voir', 'parametres.gerer', 'types.voir',
+                            'academique.voir', 'academique.gerer',
+                            'annees.voir', 'annees.gerer',
+                            'identites.voir', 'identites.importer',
+                            'utilisateurs.voir', 'utilisateurs.gerer',
+                            'perimetres.voir', 'perimetres.affecter',
+                            'roles.voir', 'roles.gerer',
+                            'paiements.voir', 'paiements.confirmer',
+                            'audit.consulter', 'archives.consulter', 'statistiques.consulter',
+                        ]) || auth()->user()->isSuperAdmin();
+                    @endphp
+                    @if ($sectionConfig)
+                        <div class="sb-section">Configuration</div>
+                    @endif
                     @canany(['procedures.voir', 'parametres.gerer'])
                         <a href="{{ route('admin.procedures.index') }}" class="sb-link {{ request()->routeIs('admin.procedures.*') ? 'active' : '' }}" title="Procédures">
                             <span class="sb-icon"><i class="fas fa-diagram-project"></i></span><span class="sb-label">Procédures</span>
@@ -519,14 +553,24 @@
                             <span class="sb-icon"><i class="fas fa-location-crosshairs"></i></span><span class="sb-label">Périmètres agents</span>
                         </a>
                     @endcanany
+                    @if (\App\Models\Paiement::moduleActif())
+                    @canany(['paiements.voir', 'paiements.confirmer'])
+                        <a href="{{ route('admin.paiements.index') }}" class="sb-link {{ request()->routeIs('admin.paiements.*') ? 'active' : '' }}" title="Paiements">
+                            <span class="sb-icon"><i class="fas fa-money-bill-transfer"></i></span><span class="sb-label">Paiements</span>
+                        </a>
+                    @endcanany
+                    @endif
                     @canany(['roles.voir', 'roles.gerer'])
                         <a href="{{ route('admin.roles.index') }}" class="sb-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" title="Rôles & permissions">
                             <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Rôles &amp; permissions</span>
                         </a>
                     @endcanany
                     @if (auth()->user()->isSuperAdmin())
-                        <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.*') ? 'active' : '' }}" title="Paramètres">
+                        <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.settings*') || request()->routeIs('superadmin.cachet*') ? 'active' : '' }}" title="Paramètres">
                             <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
+                        </a>
+                        <a href="{{ route('superadmin.sauvegardes.index') }}" class="sb-link {{ request()->routeIs('superadmin.sauvegardes.*') ? 'active' : '' }}" title="Sauvegardes">
+                            <span class="sb-icon"><i class="fas fa-box-archive"></i></span><span class="sb-label">Sauvegardes</span>
                         </a>
                     @endif
 
@@ -664,6 +708,39 @@
             document.querySelectorAll('.sb-link').forEach(l => l.addEventListener('click', () => {
                 if (isMobile()) { sb.classList.remove('open'); overlay.classList.remove('open'); }
             }));
+
+            /* ── Le menu ne doit pas remonter en haut à chaque navigation ──
+               Chaque clic charge une page entière : sans ça, le défilement
+               du menu repart de zéro et il faut re-défiler pour retrouver
+               l'onglet actif. On mémorise la position, et à défaut on centre
+               directement sur le lien actif. */
+            const sbNav = document.querySelector('.sb-nav');
+            if (sbNav) {
+                const CLE = 'sbNavScroll';
+
+                document.querySelectorAll('.sb-nav .sb-link').forEach(l => {
+                    l.addEventListener('click', () => {
+                        try { sessionStorage.setItem(CLE, String(sbNav.scrollTop)); } catch (e) {}
+                    });
+                });
+
+                let restaure = false;
+                try {
+                    const sauve = sessionStorage.getItem(CLE);
+                    if (sauve !== null) {
+                        sbNav.scrollTop = parseInt(sauve, 10) || 0;
+                        restaure = true;
+                    }
+                } catch (e) {}
+
+                if (!restaure) {
+                    const actif = sbNav.querySelector('.sb-link.active');
+                    if (actif) {
+                        const cible = actif.offsetTop - sbNav.clientHeight / 2 + actif.clientHeight / 2;
+                        sbNav.scrollTop = Math.max(0, cible);
+                    }
+                }
+            }
 
             // Toasts auto-dismiss
             document.querySelectorAll('.toast-pill[data-ttl]').forEach(el => {

@@ -46,6 +46,12 @@ Route::prefix('candidature')->name('candidature.')->group(function () {
     Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->middleware('throttle:15,1')->name('suivi.post');
     // Complétion du dossier (statut « À compléter ») : référence + date de naissance
     Route::post('/completer', [PublicCandidatureController::class, 'completer'])->middleware('throttle:10,1')->name('completer');
+    // Postuler à un parcours supplémentaire (pièces communes reprises)
+    Route::post('/parcours', [PublicCandidatureController::class, 'ajouterParcours'])
+        ->middleware('throttle:10,1')->name('parcours.ajouter');
+    // Déclaration d'un versement (frais de candidature)
+    Route::post('/paiement', [PublicCandidatureController::class, 'declarerPaiement'])
+        ->middleware(['throttle:10,1', 'module:payments.enabled'])->name('paiement');
 });
 
 /* ── Routes protégées ────────────────────────────────── */
@@ -69,6 +75,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/cachet', [SuperAdminController::class, 'uploadCachet'])->name('cachet.upload');
         Route::delete('/cachet', [SuperAdminController::class, 'deleteCachet'])->name('cachet.delete');
         Route::get('/cachet', [SuperAdminController::class, 'cachet'])->name('cachet');
+
+        // Sauvegardes : une archive contient toute la base et toutes les pièces
+        Route::prefix('sauvegardes')->name('sauvegardes.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\SauvegardeController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\SauvegardeController::class, 'executer'])
+                ->middleware('throttle:5,10')->name('executer');
+            Route::get('/{nom}/telecharger', [\App\Http\Controllers\SauvegardeController::class, 'telecharger'])->name('telecharger');
+            Route::delete('/{nom}', [\App\Http\Controllers\SauvegardeController::class, 'supprimer'])->name('supprimer');
+        });
     });
 
     /* ─── ÉTUDIANT ───────────────────────────────────── */
@@ -95,6 +110,9 @@ Route::middleware('auth')->group(function () {
         Route::delete('/requests/file/{file}', [StudentRequestController::class, 'deleteFile'])
             ->middleware('throttle:30,1')->name('requests.file.delete');
         Route::get('/requests/file/{file}/download', [StudentRequestController::class, 'downloadFile'])->name('requests.file.download');
+        // Frais de dossier : déclaration du versement par l'étudiant
+        Route::post('/paiements/{paiement}/declarer', [StudentRequestController::class, 'declarerPaiement'])
+            ->middleware(['throttle:10,1', 'module:payments.enabled'])->name('paiements.declarer');
     });
 
     /* ─── ADMINISTRATEUR ─────────────────────────────── */
@@ -116,7 +134,10 @@ Route::middleware('auth')->group(function () {
         });
 
         // Journal d'audit (traçabilité)
-        Route::middleware('permission:audit.consulter')->get('/audit', [AuditController::class, 'index'])->name('audit.index');
+        Route::middleware('permission:audit.consulter')->group(function () {
+            Route::get('/audit', [AuditController::class, 'index'])->name('audit.index');
+            Route::get('/audit/export/{format}', [AuditController::class, 'export'])->name('audit.export');
+        });
 
         // Archives numériques (rôle archiviste)
         Route::middleware('permission:archives.consulter')->prefix('archives')->name('archives.')->group(function () {
@@ -177,12 +198,10 @@ Route::middleware('auth')->group(function () {
             Route::middleware('permission:annees.editer|annees.gerer')->group(function () {
                 Route::put('/{annee}', [AnneeController::class, 'update'])->name('update');
                 Route::post('/{annee}/activer', [AnneeController::class, 'activate'])->name('activate');
-                Route::post('/{annee}/cloner', [AnneeController::class, 'cloner'])->name('cloner');
                 Route::post('/{annee}/periodes', [AnneeController::class, 'savePeriode'])->name('periodes.save');
             });
             Route::middleware('permission:annees.supprimer|annees.gerer')->group(function () {
                 Route::delete('/{annee}', [AnneeController::class, 'destroy'])->name('destroy');
-                Route::delete('/periodes/{periode}', [AnneeController::class, 'destroyPeriode'])->name('periodes.destroy');
             });
         });
 
@@ -248,11 +267,30 @@ Route::middleware('auth')->group(function () {
         // Candidatures (traitement par l'agent candidatures)
         Route::middleware('permission:candidature.traiter')->prefix('candidatures')->name('candidatures.')->group(function () {
             Route::get('/', [CandidatureController::class, 'index'])->name('index');
+            Route::get('/export/{format}', [CandidatureController::class, 'export'])->name('export');
+            // Téléchargement des pièces en ZIP (un candidat, ou un lot filtré)
+            Route::get('/telecharger/lot', [CandidatureController::class, 'telechargerLot'])->name('telecharger.lot');
+            Route::get('/{candidature}/telecharger', [CandidatureController::class, 'telechargerDossier'])->name('telecharger');
             Route::get('/file/{file}/preview', [CandidatureController::class, 'previewFile'])->name('file.preview');
             Route::get('/file/{file}/download', [CandidatureController::class, 'downloadFile'])->name('file.download');
             Route::post('/file/{file}/revue', [CandidatureController::class, 'reviewFile'])->name('file.review');
             Route::get('/{candidature}', [CandidatureController::class, 'show'])->name('show');
-            Route::post('/{candidature}/statut', [CandidatureController::class, 'updateStatus'])->name('status');
+            // Décision parcours par parcours (un candidat peut être admis partout)
+            Route::post('/section/{section}/decision', [CandidatureController::class, 'decisionSection'])->name('section.decision');
+        });
+
+        // Paiements — frais de dossier (consultation / rapprochement)
+        Route::middleware('module:payments.enabled')->prefix('paiements')->name('paiements.')->group(function () {
+            Route::middleware('permission:paiements.voir|paiements.confirmer')->group(function () {
+                Route::get('/', [\App\Http\Controllers\PaiementController::class, 'index'])->name('index');
+                Route::get('/export/{format}', [\App\Http\Controllers\PaiementController::class, 'export'])->name('export');
+                Route::get('/{paiement}', [\App\Http\Controllers\PaiementController::class, 'show'])->name('show');
+                Route::get('/{paiement}/recu', [\App\Http\Controllers\PaiementController::class, 'recu'])->name('recu');
+            });
+            Route::middleware('permission:paiements.confirmer')->group(function () {
+                Route::post('/{paiement}/valider', [\App\Http\Controllers\PaiementController::class, 'valider'])->name('valider');
+                Route::post('/{paiement}/rejeter', [\App\Http\Controllers\PaiementController::class, 'rejeter'])->name('rejeter');
+            });
         });
 
         // Rôles & permissions

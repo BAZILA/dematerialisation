@@ -253,18 +253,30 @@ class StatistiqueController extends Controller
     {
         abort_unless(in_array($format, ['excel', 'csv', 'pdf']), 404);
 
-        $horodatage = now()->format('Ymd-His');
+        // Nom de fichier lisible : année + filtres actifs
+        $anneeId  = $request->input('annee_id');
+        $anneeCtx = $anneeId === 'all'
+            ? 'toutes-annees'
+            : (\App\Models\AnneeAcademique::find((int) ($anneeId ?? \App\Models\AnneeAcademique::context()?->id))?->libelle);
+        $contexte = [
+            $anneeCtx,
+            $request->filled('category') ? \App\Models\Procedure::labels()[$request->category] ?? $request->category : null,
+            $request->filled('status') ? self::$statutsLabels[$request->status] ?? $request->status : null,
+        ];
 
         if ($format === 'pdf') {
             $pdf = app(\App\Services\StatsPdfService::class)->build(
                 $this->aggregats($request),
-                $this->filtresLisibles($request)
+                $this->filtresLisibles($request),
+                $request->user()->staff_name   // reporté en pied de chaque page
             );
             \App\Models\AuditLog::record('stats.export', null, "Export statistiques PDF", $this->filtresLisibles($request));
 
+            $nom = \App\Support\NomExport::build('statistiques', $contexte, 'pdf');
+
             return response($pdf, 200, [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="statistiques-' . $horodatage . '.pdf"',
+                'Content-Disposition' => 'attachment; filename="' . $nom . '"',
             ]);
         }
 
@@ -281,7 +293,7 @@ class StatistiqueController extends Controller
         if ($format === 'csv') {
             return \Maatwebsite\Excel\Facades\Excel::download(
                 new \App\Exports\DemandesDetailExport($rows),
-                'statistiques-detail-' . $horodatage . '.csv',
+                \App\Support\NomExport::build('statistiques-detail', $contexte, 'csv'),
                 \Maatwebsite\Excel\Excel::CSV
             );
         }
@@ -293,7 +305,7 @@ class StatistiqueController extends Controller
                 $this->filtresLisibles($request),
                 $rows
             ),
-            'statistiques-' . $horodatage . '.xlsx'
+            \App\Support\NomExport::build('statistiques', $contexte, 'xlsx')
         );
     }
 }

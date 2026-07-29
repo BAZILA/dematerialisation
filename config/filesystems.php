@@ -33,7 +33,11 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Les pièces déposées ne sont JAMAIS servies par la route
+            // /storage de Laravel : elles passent uniquement par les
+            // contrôleurs, qui vérifient permission et périmètre.
+            // Désactivé pour supprimer cette surface d'attaque.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

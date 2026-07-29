@@ -31,6 +31,11 @@ class AdminController extends Controller
             ? array_values(array_intersect($toutes, $traitables))
             : ($user->canAny(['demandes.controler', 'dossiers.consulter']) ? $toutes : []);
 
+        // Les candidatures ne sont PAS des demandes étudiantes : elles ont
+        // leur propre table et leur propre écran. On les sort des onglets
+        // « demandes » et on leur consacre un bloc à part.
+        $cats = array_values(array_diff($cats, ['candidature']));
+
         // ── Tout le tableau de bord est borné à l'ANNÉE DE CONTEXTE
         //    ET au PÉRIMÈTRE de l'agent connecté ──
         $annee = AnneeAcademique::context();
@@ -116,11 +121,25 @@ class AdminController extends Controller
                 ->take(10)->get();
         }
 
+        // Candidatures récentes, bornées au périmètre (par parcours)
+        $recentCandidatures = collect();
+        $nbCandidatures = 0;
+        if ($user->canAny(['candidature.traiter', 'dossiers.consulter'])) {
+            $qc = \App\Models\Candidature::with('choix.parcours')
+                ->when($annee, fn ($q) => $q->where('annee_academique_id', $annee->id));
+            $user->applyCandidaturePerimeter($qc);
+
+            $nbCandidatures = (clone $qc)->whereIn('status', ['soumise', 'en_instruction'])->count();
+            $recentCandidatures = $qc->latest('created_at')->limit(10)->get();
+        }
+
         return view('admin.dashboard', compact(
             'stats',
             'chartData',
             'recentDeposits',
             'recentRequests',
+            'recentCandidatures',
+            'nbCandidatures',
             'annee'
         ));
     }

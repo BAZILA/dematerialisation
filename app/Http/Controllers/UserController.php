@@ -33,11 +33,15 @@ class UserController extends Controller
             'nom'       => 'required|string|max:100',
             'prenom'    => 'required|string|max:100',
             'email'     => 'required|email|unique:users,email',
-            'role'      => 'required|exists:roles,name',
+            // Un agent peut cumuler plusieurs fonctions (dépôt + attestation…)
+            'roles'     => 'required|array|min:1',
+            'roles.*'   => 'exists:roles,name',
             'password'  => 'required|string|min:8',
             'signature' => 'nullable|image|mimes:png,jpg,jpeg|max:2048',
         ]);
-        $this->assertStaffRole($data['role']);
+        foreach ($data['roles'] as $r) {
+            $this->assertStaffRole($r);
+        }
 
         $user = User::create([
             'numero_identifiant' => $data['numero_identifiant'],
@@ -45,18 +49,19 @@ class UserController extends Controller
             'prenom'    => $data['prenom'],
             'email'     => $data['email'],
             'password'  => Hash::make($data['password']),
-            'role'      => $data['role'],
+            // « role » reste le rôle PRINCIPAL : affichage et redirection
+            'role'      => $data['roles'][0],
             'is_active' => true,
         ]);
-        $user->syncRoles([$data['role']]);
+        $user->syncRoles($data['roles']);
 
         if ($request->hasFile('signature')) {
             $user->update(['signature_path' => $request->file('signature')->store('signatures', 'local')]);
         }
 
         \App\Models\AuditLog::record('utilisateur.cree', $user,
-            "Compte créé : {$user->staff_name} ({$user->numero_identifiant}) — rôle {$data['role']}",
-            ['role' => $data['role']]);
+            "Compte créé : {$user->staff_name} ({$user->numero_identifiant}) — rôle(s) " . implode(', ', $data['roles']),
+            ['roles' => $data['roles']]);
 
         return back()->with('success', "Compte « {$user->staff_name} » créé.");
     }
@@ -67,18 +72,23 @@ class UserController extends Controller
             'nom'       => 'required|string|max:100',
             'prenom'    => 'required|string|max:100',
             'email'     => 'required|email|unique:users,email,' . $user->id,
-            'role'      => 'required|exists:roles,name',
+            // Un agent peut cumuler plusieurs fonctions (dépôt + attestation…)
+            'roles'     => 'required|array|min:1',
+            'roles.*'   => 'exists:roles,name',
             'password'  => 'nullable|string|min:8',
             'is_active' => 'nullable|boolean',
             'signature' => 'nullable|image|mimes:png,jpg,jpeg|max:2048',
         ]);
-        $this->assertStaffRole($data['role']);
+        foreach ($data['roles'] as $r) {
+            $this->assertStaffRole($r);
+        }
 
         $update = [
             'nom'       => $data['nom'],
             'prenom'    => $data['prenom'],
             'email'     => $data['email'],
-            'role'      => $data['role'],
+            // « role » reste le rôle PRINCIPAL : affichage et redirection
+            'role'      => $data['roles'][0],
             'is_active' => $request->boolean('is_active'),
         ];
         if (!empty($data['password'])) {
@@ -92,13 +102,13 @@ class UserController extends Controller
         }
         $ancienRole = $user->role;
         $user->update($update);
-        $user->syncRoles([$data['role']]);
+        $user->syncRoles($data['roles']);
 
         \App\Models\AuditLog::record('utilisateur.modifie', $user,
             "Compte modifié : {$user->staff_name} ({$user->numero_identifiant})"
-                . ($ancienRole !== $data['role'] ? " — rôle {$ancienRole} → {$data['role']}" : ''),
+                . ($ancienRole !== $data['roles'][0] ? " — rôle principal {$ancienRole} → {$data['roles'][0]}" : ''),
             [
-                'role' => $data['role'],
+                'roles' => $data['roles'],
                 'mot_de_passe_change' => !empty($data['password']),
                 'desactive' => !$request->boolean('is_active'),
             ]);

@@ -136,6 +136,11 @@
                                                 style="background:rgba(59,130,246,.2);color:#93c5fd;border:1px solid rgba(59,130,246,.35);">
                                                 <i class="fas fa-stamp"></i> Tamponné ✓
                                             </span>
+                                        @elseif ($file && $isDepot && $type->has_stamp && $studentRequest->status === 'validé' && $file->isPdf())
+                                            {{-- Validé mais pas encore tamponné : le worker s'en occupe --}}
+                                            <span class="badge bg-warning text-dark small">
+                                                <i class="fas fa-hourglass-half"></i> Tamponnage en cours…
+                                            </span>
                                         @endif
                                         @if ($file?->is_locked)
                                             <span class="badge bg-success small">

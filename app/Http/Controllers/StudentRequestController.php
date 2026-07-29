@@ -95,16 +95,16 @@ class StudentRequestController extends Controller
         }
 
         if ($existing) {
-            Storage::disk('local')->delete($existing->file_path);
-            if ($existing->stamped_file_path) {
-                Storage::disk('local')->delete($existing->stamped_file_path);
-            }
+            $this->effacerFichiers($existing);
             $existing->delete();
         }
 
         $file = $request->file('file');
-        // Nom de stockage assaini : jamais le nom client brut dans un chemin
-        $storedName = time() . '_' . $this->safeFilename($file->getClientOriginalName());
+        // Nom de stockage assaini : jamais le nom client brut dans un chemin.
+        // Le suffixe aléatoire évite qu'un même nom déposé dans la même
+        // seconde n'écrase la pièce précédente.
+        $storedName = time() . '_' . \Illuminate\Support\Str::random(6) . '_'
+            . $this->safeFilename($file->getClientOriginalName());
         $path = $file->storeAs('requests/' . $sr->id, $storedName, 'local');
 
         RequestFile::create([
@@ -118,6 +118,28 @@ class StudentRequestController extends Controller
         ]);
 
         return $this->ajaxOrBack($request, true, "« {$type->label} » ajouté.", $tab);
+    }
+
+    /**
+     * Efface les fichiers du disque, sauf ceux encore référencés par une
+     * autre pièce : un chemin partagé effacé aveuglément laisserait l'autre
+     * enregistrement pointer vers le vide.
+     */
+    private function effacerFichiers(RequestFile $file): void
+    {
+        foreach ([$file->file_path, $file->stamped_file_path] as $chemin) {
+            if (blank($chemin)) {
+                continue;
+            }
+            $partage = RequestFile::where('id', '!=', $file->id)
+                ->where(fn ($q) => $q->where('file_path', $chemin)
+                                     ->orWhere('stamped_file_path', $chemin))
+                ->exists();
+
+            if (!$partage) {
+                Storage::disk('local')->delete($chemin);
+            }
+        }
     }
 
     /**
@@ -158,10 +180,7 @@ class StudentRequestController extends Controller
             return $this->ajaxOrBack($request, false, 'Cette demande ne peut plus être modifiée.', $tab);
         }
 
-        Storage::disk('local')->delete($file->file_path);
-        if ($file->stamped_file_path) {
-            Storage::disk('local')->delete($file->stamped_file_path);
-        }
+        $this->effacerFichiers($file);
         $file->delete();
 
         return $this->ajaxOrBack($request, true, 'Fichier supprimé.', $tab);
@@ -184,10 +203,7 @@ class StudentRequestController extends Controller
 
         // Supprimer les pièces stockées puis l'enregistrement
         foreach ($studentRequest->files as $file) {
-            Storage::disk('local')->delete($file->file_path);
-            if ($file->stamped_file_path) {
-                Storage::disk('local')->delete($file->stamped_file_path);
-            }
+            $this->effacerFichiers($file);
         }
         $studentRequest->files()->delete();
         $studentRequest->etudesAnterieures()->delete();
@@ -234,7 +250,16 @@ class StudentRequestController extends Controller
             'engagement_accepte' => $sr->category === 'depot' ? true : $sr->engagement_accepte,
         ]);
 
-        return $this->tabRedirect($tab)->with('success', 'Demande soumise avec succès.');
+        // Frais de dossier : créés à la soumission si la procédure est payante
+        $paiement = app(\App\Services\Paiement\PaiementService::class)
+            ->creerPour($sr, $sr->category, $sr->annee_academique_id);
+
+        $msg = 'Demande soumise avec succès.';
+        if ($paiement && !$paiement->estPaye()) {
+            $msg .= " Des frais de {$paiement->montant_formate} restent à régler : voir l'encadré « Frais de dossier ».";
+        }
+
+        return $this->tabRedirect($tab)->with('success', $msg);
     }
 
     /* ══════════════════════════════════════════════════
@@ -272,5 +297,32 @@ class StudentRequestController extends Controller
     {
         if ($sr->student_id !== Auth::user()->student->id)
             abort(403);
+    }
+
+    /* ══════════════════════════════════════════════════
+     |  FRAIS DE DOSSIER — déclaration du versement
+     ══════════════════════════════════════════════════ */
+
+    public function declarerPaiement(Request $request, \App\Models\Paiement $paiement)
+    {
+        // Le paiement doit bien porter sur une demande de CET étudiant
+        $sr = $paiement->payable;
+        abort_unless($sr instanceof StudentRequest, 404);
+        $this->authorizeRequest($sr);
+
+        $data = $request->validate([
+            'transaction_id' => 'required|string|max:80',
+            'numero_payeur'  => 'nullable|string|max:30',
+            'operateur'      => 'nullable|in:' . implode(',', array_keys(\App\Models\Paiement::$operateurs)),
+        ], [], ['transaction_id' => 'identifiant de transaction']);
+
+        $r = app(\App\Services\Paiement\PaiementService::class)->declarer(
+            $paiement, trim($data['transaction_id']),
+            $data['numero_payeur'] ?? null, $data['operateur'] ?? null
+        );
+
+        return $r['ok']
+            ? $this->tabRedirect($sr->category)->with('success', $r['message'])
+            : $this->tabRedirect($sr->category)->withErrors($r['message']);
     }
 }

@@ -82,6 +82,7 @@
             'candidature.traiter'  => 'Traiter les candidatures',
             'demandes.controler'   => 'Contrôler / superviser les demandes',
             'demandes.rouvrir'     => 'Annuler une validation / rouvrir un dossier',
+            'pieces.commune_refuser' => 'Refuser une pièce commune (impacte tous les parcours)',
             'documents.valider'    => 'Valider les documents',
             'documents.signer'     => 'Signer officiellement',
             'paiements.confirmer'  => 'Confirmer les paiements',

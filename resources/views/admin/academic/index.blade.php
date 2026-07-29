@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('page-title', 'Référentiel académique')
-@section('page-subtitle', 'Facultés / Instituts → Départements → Parcours')
+@section('page-subtitle', 'Facultés / Instituts / Écoles → Départements → Parcours')
 
 @section('content')
     @php $grades = \App\Models\Parcours::$grades; @endphp
@@ -45,7 +45,10 @@
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div data-bs-toggle="collapse" data-bs-target="#fac-{{ $fac->id }}" role="button" style="cursor:pointer;flex:1;min-width:0;">
                     <i class="fas fa-chevron-down me-1" style="font-size:11px;color:var(--t3);"></i>
-                    <i class="fas {{ $fac->type === 'institut' ? 'fa-building-columns' : 'fa-landmark' }}" style="color:var(--brand);"></i>
+                    @php
+                        $facIcone = ['institut' => 'fa-building-columns', 'ecole' => 'fa-school'][$fac->type] ?? 'fa-landmark';
+                    @endphp
+                    <i class="fas {{ $facIcone }}" style="color:var(--brand);"></i>
                     <strong class="ms-1">{{ $fac->nom }}</strong>
                     @if ($fac->sigle)<span class="badge bg-secondary ms-1">{{ $fac->sigle }}</span>@endif
                     <span class="badge bg-primary ms-1">{{ $fac->type_label }}</span>
@@ -145,7 +148,7 @@
         </div>
     @endforelse
 
-    {{-- ═══ Modal Faculté/Institut ═══ --}}
+    {{-- ═══ Modal composante (faculté / institut / école) ═══ --}}
     <div class="modal fade" id="modalFaculte" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -162,8 +165,9 @@
                                 <input type="text" class="form-control" name="sigle"></div>
                             <div class="col-6"><label class="form-label">Type <span class="text-danger">*</span></label>
                                 <select class="form-select" name="type" required>
-                                    <option value="faculte">Faculté</option>
-                                    <option value="institut">Institut</option>
+                                    @foreach (\App\Models\Faculte::$types as $val => $lbl)
+                                        <option value="{{ $val }}">{{ $lbl }}</option>
+                                    @endforeach
                                 </select></div>
                         </div>
                         <div class="form-check form-switch mt-3" id="fac_active_wrap" style="display:none;">

@@ -37,9 +37,10 @@
                     <label class="form-label small">Au</label>
                     <input type="date" name="date_fin" class="form-control form-control-sm" value="{{ request('date_fin') }}">
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button class="btn btn-primary btn-sm flex-grow-1"><i class="fas fa-filter"></i> Filtrer</button>
-                    <a href="{{ route('admin.audit.index') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-times"></i></a>
+                <div class="col-md-2 filtre-actions">
+                    <button class="btn btn-primary btn-filtrer"><i class="fas fa-filter"></i> Filtrer</button>
+                    <a href="{{ route('admin.audit.index') }}" class="btn btn-outline-secondary btn-reset"
+                        title="Réinitialiser"><i class="fas fa-times"></i></a>
                 </div>
                 <div class="col-12">
                     <input type="text" name="search" class="form-control form-control-sm mt-1"
@@ -50,9 +51,30 @@
     </div>
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span style="font-weight:600;color:var(--t1);"><i class="fas fa-clipboard-list"></i> Journal</span>
-            <small class="text-muted">{{ $logs->total() }} entrée(s)</small>
+            <div class="d-flex align-items-center gap-3">
+                <small class="text-muted">{{ $logs->total() }} entrée(s)</small>
+                @php
+                    // L'export reprend exactement les filtres de l'écran
+                    $qs = request()->getQueryString();
+                    $qs = $qs ? '?' . $qs : '';
+                @endphp
+                <div class="btn-group btn-group-sm" role="group" aria-label="Exporter le journal">
+                    <a href="{{ route('admin.audit.export', 'excel') }}{{ $qs }}" class="btn btn-outline-success"
+                        title="Exporter au format Excel">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ route('admin.audit.export', 'csv') }}{{ $qs }}" class="btn btn-outline-secondary"
+                        title="Exporter au format CSV">
+                        <i class="fas fa-file-csv"></i> CSV
+                    </a>
+                    <a href="{{ route('admin.audit.export', 'pdf') }}{{ $qs }}" class="btn btn-outline-danger"
+                        title="Rapport PDF avec en-tête de l'université">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                </div>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">

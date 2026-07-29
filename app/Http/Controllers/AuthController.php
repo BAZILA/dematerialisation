@@ -28,10 +28,25 @@ class AuthController extends Controller
             'password'           => 'required|string',
         ]);
 
-        if (Auth::attempt($credentials)) {
+        // Un compte désactivé ne doit PAS pouvoir se connecter
+        if (Auth::attempt($credentials + ['is_active' => true])) {
             $request->session()->regenerate();
             \App\Models\AuditLog::record('auth.login', Auth::user(), 'Connexion réussie');
             return redirect()->intended('/dashboard');
+        }
+
+        // Identifiants corrects mais compte désactivé : on le dit clairement.
+        // Aucune fuite d'information — il faut déjà connaître le bon mot de passe.
+        $compte = \App\Models\User::where('numero_identifiant', $credentials['numero_identifiant'])->first();
+        if ($compte && !$compte->is_active
+            && \Illuminate\Support\Facades\Hash::check($credentials['password'], $compte->password)) {
+
+            \App\Models\AuditLog::record('auth.refus_desactive', $compte,
+                "Tentative de connexion sur un compte désactivé ({$compte->numero_identifiant})");
+
+            return back()->withErrors([
+                'numero_identifiant' => "Ce compte a été désactivé. Rapprochez-vous de l'administration.",
+            ])->onlyInput('numero_identifiant');
         }
 
         return back()->withErrors([

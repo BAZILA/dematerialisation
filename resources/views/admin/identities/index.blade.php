@@ -158,8 +158,8 @@
                                     <option value="sans_compte" @selected(request($l['etat']) === 'sans_compte')>Sans compte</option>
                                 </select>
                             </div>
-                            <div class="col-md-4 d-flex gap-2">
-                                <button class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Filtrer</button>
+                            <div class="col-md-4 filtre-actions">
+                                <button class="btn btn-primary btn-filtrer"><i class="fas fa-search"></i> Filtrer</button>
                                 @can('identites.importer')
                                     <button type="button" class="btn btn-success btn-sm ms-auto"
                                         data-bs-toggle="modal" data-bs-target="#{{ $l['modal'] }}">

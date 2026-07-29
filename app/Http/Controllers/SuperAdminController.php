@@ -11,9 +11,20 @@ class SuperAdminController extends Controller
     /** Page de paramétrage de la plateforme. */
     public function settings()
     {
-        // cachet_path est géré par un formulaire d'upload dédié, pas la liste
+        // Module de paiement éteint : tous ses réglages disparaissent.
+        // Seul l'interrupteur général (rangé dans « Modules ») reste visible.
+        $paiementActif = \App\Models\Paiement::moduleActif();
+
+        // Même principe pour les notifications : module éteint, réglages masqués
+        $notifsActives = \App\Models\NotificationEnvoyee::moduleActif();
+
         $groups = Setting::allCached()
+            // cachet_path est géré par un formulaire d'upload dédié, pas la liste
             ->reject(fn ($s) => $s->key === 'cachet_path')
+            ->reject(fn ($s) => !$paiementActif && (
+                $s->group === 'paiement' || $s->key === 'candidature.fees.enabled'
+            ))
+            ->reject(fn ($s) => !$notifsActives && $s->group === 'notifications')
             ->groupBy('group');
         $hasCachet = (bool) Setting::get('cachet_path');
 
