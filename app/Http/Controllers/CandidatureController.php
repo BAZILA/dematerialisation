@@ -90,6 +90,187 @@ class CandidatureController extends Controller
         ];
     }
 
+    /* ══════════ TABLEAU DE BORD PAR PARCOURS ══════════
+     |  Les commissions d'admission raisonnent par parcours, pas par
+     |  candidat : « combien sur Informatique, combien reste-t-il à
+     |  instruire ». On compte donc les VŒUX — un candidat qui vise trois
+     |  parcours pèse une unité dans chacun.
+     */
+
+    public function tableauBord(Request $request)
+    {
+        $lignes = $this->agregatParcours($request);
+
+        return view('admin.candidatures.tableau', array_merge(
+            ['lignes' => $lignes, 'totaux' => $this->totaliser($lignes)],
+            $this->optionsFiltres($request)
+        ));
+    }
+
+    /**
+     * Un enregistrement par parcours : volumétrie, répartition par statut,
+     * reste à traiter et taux d'admission.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    private function agregatParcours(Request $request)
+    {
+        $statuts = array_keys(\App\Models\CandidatureChoix::$statuts);
+
+        $query = \App\Models\CandidatureChoix::query()
+            ->join('candidatures', 'candidatures.id', '=', 'candidature_choix.candidature_id')
+            ->join('parcours', 'parcours.id', '=', 'candidature_choix.parcours_id')
+            ->select('candidature_choix.parcours_id')
+            ->selectRaw('COUNT(*) as voeux')
+            ->selectRaw('COUNT(DISTINCT candidatures.id) as candidats');
+
+        // Une colonne de comptage par statut, pour éviter N requêtes
+        foreach ($statuts as $s) {
+            $query->selectRaw(
+                "SUM(CASE WHEN candidature_choix.statut = ? THEN 1 ELSE 0 END) as `st_{$s}`",
+                [$s]
+            );
+        }
+
+        // Isolation par année : celle du contexte, sauf « all »
+        $anneeId = $request->input('annee_id', \App\Models\AnneeAcademique::context()?->id);
+        if (filled($anneeId) && $anneeId !== 'all') {
+            $query->where('candidatures.annee_academique_id', (int) $anneeId);
+        }
+
+        // Périmètre de l'agent : il ne compte que ses parcours
+        $pIds = $request->user()->perimeterParcoursIds();
+        if ($pIds !== null) {
+            $query->whereIn('candidature_choix.parcours_id', $pIds);
+        }
+
+        if ($request->filled('faculte_id')) {
+            $fid = (int) $request->faculte_id;
+            $query->join('departements', 'departements.id', '=', 'parcours.departement_id')
+                  ->where('departements.faculte_id', $fid);
+        }
+        if ($request->filled('parcours_id')) {
+            $query->where('candidature_choix.parcours_id', (int) $request->parcours_id);
+        }
+
+        $brut = $query->groupBy('candidature_choix.parcours_id')->get()->keyBy('parcours_id');
+
+        $parcours = \App\Models\Parcours::with('departement.faculte')
+            ->whereIn('id', $brut->keys())->get()->keyBy('id');
+
+        return $brut->map(function ($r) use ($parcours, $statuts) {
+            $p = $parcours[$r->parcours_id] ?? null;
+
+            $par = [];
+            foreach ($statuts as $s) { $par[$s] = (int) $r->{'st_' . $s}; }
+
+            // Un dossier « traité » est celui sur lequel on a tranché
+            $tranches = $par['admis'] + $par['refuse'];
+            $enCours  = (int) $r->voeux - $tranches;
+
+            return (object) [
+                'parcours_id' => (int) $r->parcours_id,
+                'nom'         => $p?->nom ?? '—',
+                'faculte'     => $p?->departement?->faculte?->nom ?? '—',
+                'grade'       => $p?->grade_label ?? '—',
+                'voeux'       => (int) $r->voeux,
+                'candidats'   => (int) $r->candidats,
+                'par_statut'  => $par,
+                'tranches'    => $tranches,
+                'en_cours'    => $enCours,
+                // Sur les dossiers tranchés seulement : un taux calculé sur
+                // les dossiers encore en cours ne voudrait rien dire.
+                'taux_admis'  => $tranches > 0 ? round($par['admis'] * 100 / $tranches, 1) : null,
+            ];
+        })->sortByDesc('voeux')->values();
+    }
+
+    /** Cumuls tous parcours confondus, pour les encadrés de tête. */
+    private function totaliser($lignes): array
+    {
+        $t = [
+            'voeux' => 0, 'candidats' => 0, 'en_cours' => 0, 'tranches' => 0,
+            'par_statut' => array_fill_keys(array_keys(\App\Models\CandidatureChoix::$statuts), 0),
+        ];
+
+        foreach ($lignes as $l) {
+            $t['voeux']    += $l->voeux;
+            $t['en_cours'] += $l->en_cours;
+            $t['tranches'] += $l->tranches;
+            foreach ($l->par_statut as $s => $n) { $t['par_statut'][$s] += $n; }
+        }
+
+        // Un même candidat peut viser plusieurs parcours : additionner les
+        // colonnes « candidats » le compterait deux fois. On le recompte.
+        $t['candidats']  = $lignes->sum('candidats');
+        $t['parcours']   = $lignes->count();
+        $t['taux_admis'] = $t['tranches'] > 0
+            ? round($t['par_statut']['admis'] * 100 / $t['tranches'], 1) : null;
+
+        return $t;
+    }
+
+    /** Le tableau de bord, en PDF ou en tableur, avec les mêmes filtres. */
+    public function exportTableau(Request $request, string $format)
+    {
+        abort_unless(in_array($format, ['excel', 'csv', 'pdf'], true), 404);
+
+        $lignes = $this->agregatParcours($request);
+        $labels = \App\Models\CandidatureChoix::$statuts;
+
+        $entetes = array_merge(
+            ['Parcours', 'Faculté / Institut / École', 'Grade', 'Candidats', 'Vœux'],
+            array_values($labels),
+            ['Reste à traiter', 'Taux d\'admission']
+        );
+
+        $rows = $lignes->map(function ($l) use ($labels) {
+            $ligne = [$l->nom, $l->faculte, $l->grade, $l->candidats, $l->voeux];
+            foreach (array_keys($labels) as $s) { $ligne[] = $l->par_statut[$s]; }
+            $ligne[] = $l->en_cours;
+            $ligne[] = $l->taux_admis === null ? '—' : $l->taux_admis . ' %';
+
+            return $ligne;
+        });
+
+        $anneeId  = $request->input('annee_id');
+        $anneeCtx = $anneeId === 'all'
+            ? 'toutes-annees'
+            : (\App\Models\AnneeAcademique::find((int) ($anneeId ?? \App\Models\AnneeAcademique::context()?->id))?->libelle);
+        $contexte = [
+            $anneeCtx,
+            $request->filled('faculte_id') ? \App\Models\Faculte::find((int) $request->faculte_id)?->nom : null,
+        ];
+
+        \App\Models\AuditLog::record('candidature.tableau_export', null,
+            "Export du tableau de bord candidatures ({$format}) — {$lignes->count()} parcours");
+
+        if ($format === 'pdf') {
+            $pdf = app(\App\Services\TableauPdfService::class)->build(
+                'Candidatures par parcours — vue d\'ensemble',
+                $entetes, $rows, $request->user()->staff_name,
+                $this->filtresLisibles($request),
+                [1.6, 1.6, .6, .6, .5, .6, .7, .7, .5, .6, .7, .7],
+                'L'
+            );
+
+            return response($pdf, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="'
+                    . \App\Support\NomExport::build('candidatures-par-parcours', $contexte, 'pdf') . '"',
+            ]);
+        }
+
+        $ext    = $format === 'csv' ? 'csv' : 'xlsx';
+        $writer = $format === 'csv' ? \Maatwebsite\Excel\Excel::CSV : \Maatwebsite\Excel\Excel::XLSX;
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\TableauSimpleExport($entetes, $rows),
+            \App\Support\NomExport::build('candidatures-par-parcours', $contexte, $ext),
+            $writer
+        );
+    }
+
     /**
      * Export des candidatures FILTRÉES, une ligne par parcours demandé.
      * Reprend exactement les filtres de l'écran et le périmètre de l'agent.

@@ -20,11 +20,16 @@ Write-Host "ZIP      : $zipPath`n"
 if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 
 # 1) Copie du projet dans un dossier temporaire, en excluant l'inutile ---------
-$excludeDirs = @('.git', 'node_modules', 'tests')
+# On exclut aussi « deploy » (il contient les ZIP des livraisons
+# précédentes) et les sauvegardes : sans cela chaque livraison
+# embarquerait la précédente et le paquet doublerait de taille.
 robocopy $root $staging /MIR /XD `
     (Join-Path $root '.git') `
     (Join-Path $root 'node_modules') `
     (Join-Path $root 'tests') `
+    (Join-Path $root 'deploy') `
+    (Join-Path $root 'storage\app\sauvegardes') `
+    (Join-Path $root 'storage\app\tmp') `
     /XF (Join-Path $root '.env') `
     /NFL /NDL /NJH /NJS /NP | Out-Null
 # robocopy renvoie 0-7 en succès ; on neutralise le code de sortie

@@ -11,6 +11,18 @@
         $nbFiltres = collect(['faculte_id', 'parcours_id', 'status', 'search'])->filter(fn($k) => request()->filled($k))->count();
     @endphp
 
+    {{-- ═══ Bascule liste / vue d'ensemble ═══ --}}
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <span class="btn btn-sm btn-primary disabled">
+            <i class="fas fa-list"></i> Liste des candidatures
+        </span>
+        <a href="{{ route('admin.candidatures.tableau', ['annee_id' => request('annee_id')]) }}"
+            class="btn btn-sm btn-outline-secondary"
+            title="Combien de candidats par parcours, et ce qu'il reste à instruire">
+            <i class="fas fa-chart-column"></i> Vue par parcours
+        </a>
+    </div>
+
     <div class="card mb-4"><div class="card-body py-3">
         <form method="GET" class="row g-2 align-items-end">
             <div class="col-lg-4 col-md-6">

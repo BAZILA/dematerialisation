@@ -39,6 +39,15 @@ class AppServiceProvider extends ServiceProvider
         // Le super-administrateur passe tous les contrôles d'autorisation.
         Gate::before(fn ($user, $ability) => $user->hasRole('super_admin') ? true : null);
 
+        /* Limiteur propre aux codes de secours 2FA.
+           Sans clé dédiée, Laravel range toutes les routes « throttle:n,m »
+           d'un même compte dans le même seau : un agent qui vient de rater
+           son code ne pourrait plus régénérer ses codes de secours —
+           précisément la manœuvre de déblocage dont il a besoin. */
+        \Illuminate\Support\Facades\RateLimiter::for('2fa-codes', fn ($request) =>
+            \Illuminate\Cache\RateLimiting\Limit::perMinute(5)
+                ->by('2fa-codes:' . ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         // En production : toutes les URLs générées sont en HTTPS
         // (cohérent avec HSTS + cookies sécurisés).
         if ($this->app->environment('production')) {

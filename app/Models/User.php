@@ -27,19 +27,79 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     protected $casts = [
-        'email_verified_at'       => 'datetime',
-        'is_active'               => 'boolean',
-        'two_factor_secret'       => 'encrypted', // secret TOTP chiffré au repos
-        'two_factor_confirmed_at' => 'datetime',
+        'email_verified_at'         => 'datetime',
+        'is_active'                 => 'boolean',
+        'two_factor_secret'         => 'encrypted', // secret TOTP chiffré au repos
+        'two_factor_recovery_codes' => 'array',     // codes de secours, hachés un à un
+        'two_factor_confirmed_at'   => 'datetime',
     ];
+
+    /** Nombre de codes de secours générés à chaque activation. */
+    public const NB_CODES_SECOURS = 8;
 
     /** 2FA active et confirmée sur ce compte ? */
     public function hasTwoFactor(): bool
     {
         return !empty($this->two_factor_secret) && $this->two_factor_confirmed_at !== null;
+    }
+
+    /* ── Codes de secours 2FA ──────────────────────────────────
+     |  Un téléphone perdu bloquerait sinon le compte jusqu'à
+     |  l'intervention d'un gestionnaire. Les codes sont hachés :
+     |  ils ne sont lisibles qu'au moment où on les génère.
+     */
+
+    /**
+     * Fabrique une nouvelle série et l'enregistre hachée.
+     * Les anciens codes sont invalidés du même coup.
+     *
+     * @return array<int,string>  codes en clair, à montrer UNE seule fois
+     */
+    public function genererCodesSecours(): array
+    {
+        $clairs = [];
+        for ($i = 0; $i < self::NB_CODES_SECOURS; $i++) {
+            $clairs[] = strtoupper(\Illuminate\Support\Str::random(5) . '-' . \Illuminate\Support\Str::random(5));
+        }
+
+        $this->two_factor_recovery_codes = array_map(
+            fn ($c) => \Illuminate\Support\Facades\Hash::make($c), $clairs
+        );
+        $this->save();
+
+        return $clairs;
+    }
+
+    /** Combien de codes restent utilisables. */
+    public function codesSecoursRestants(): int
+    {
+        return count($this->two_factor_recovery_codes ?? []);
+    }
+
+    /**
+     * Consomme un code de secours s'il correspond. Un code ne sert
+     * qu'une fois : il est retiré de la liste dès qu'il est accepté.
+     */
+    public function consommerCodeSecours(string $saisi): bool
+    {
+        $codes = $this->two_factor_recovery_codes ?? [];
+        $saisi = strtoupper(trim($saisi));
+
+        foreach ($codes as $i => $hache) {
+            if (\Illuminate\Support\Facades\Hash::check($saisi, $hache)) {
+                unset($codes[$i]);
+                $this->two_factor_recovery_codes = array_values($codes);
+                $this->save();
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function student()

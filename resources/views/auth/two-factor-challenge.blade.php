@@ -27,7 +27,7 @@
     <div class="tfa-card">
         <div class="tfa-ic"><i class="fas fa-shield-halved"></i></div>
         <h5 class="fw-bold text-center mb-1">Double authentification</h5>
-        <p class="text-muted text-center small mb-4">
+        <p class="text-muted text-center small mb-4" id="texteAide">
             Saisissez le code à 6 chiffres généré par votre application
             (Google Authenticator, Authy…) pour continuer.
         </p>
@@ -38,17 +38,62 @@
 
         <form method="POST" action="{{ route('2fa.verify') }}">
             @csrf
-            <input type="text" name="code" class="tfa-code mb-3" maxlength="6" pattern="\d{6}"
+            <input type="text" name="code" id="champCode" class="tfa-code mb-3" maxlength="6" pattern="\d{6}"
                 inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" autofocus required>
             <button type="submit" class="btn-uk"><i class="fas fa-unlock"></i> Vérifier</button>
         </form>
 
-        <form method="POST" action="{{ route('logout') }}" class="text-center mt-3">
+        {{-- Téléphone perdu : les codes de secours évitent le blocage total --}}
+        <div class="text-center mt-3">
+            <button type="button" class="btn btn-link btn-sm text-decoration-none" id="basculerSecours">
+                <i class="fas fa-key"></i> Utiliser un code de secours
+            </button>
+        </div>
+
+        <form method="POST" action="{{ route('logout') }}" class="text-center mt-1">
             @csrf
             <button type="submit" class="btn btn-link btn-sm text-muted">
                 <i class="fas fa-arrow-left"></i> Revenir à la connexion
             </button>
         </form>
+
+        <script>
+            (function () {
+                const champ  = document.getElementById('champCode');
+                const lien   = document.getElementById('basculerSecours');
+                const aide   = document.getElementById('texteAide');
+                let secours  = false;
+
+                lien.addEventListener('click', function () {
+                    secours = !secours;
+                    if (secours) {
+                        champ.maxLength = 11;
+                        champ.removeAttribute('pattern');
+                        champ.inputMode = 'text';
+                        champ.placeholder = 'XXXXX-XXXXX';
+                        champ.style.fontSize = '18px';
+                        champ.style.letterSpacing = '.12em';
+                        champ.style.textTransform = 'uppercase';
+                        aide.textContent = "Saisissez l'un des codes de secours notés à l'activation. "
+                            + 'Chaque code ne fonctionne qu\'une seule fois.';
+                        this.innerHTML = '<i class="fas fa-mobile-screen"></i> Utiliser mon application';
+                    } else {
+                        champ.maxLength = 6;
+                        champ.setAttribute('pattern', '\\d{6}');
+                        champ.inputMode = 'numeric';
+                        champ.placeholder = '••••••';
+                        champ.style.fontSize = '26px';
+                        champ.style.letterSpacing = '.45em';
+                        champ.style.textTransform = 'none';
+                        aide.textContent = 'Saisissez le code à 6 chiffres généré par votre application '
+                            + '(Google Authenticator, Authy…) pour continuer.';
+                        this.innerHTML = '<i class="fas fa-key"></i> Utiliser un code de secours';
+                    }
+                    champ.value = '';
+                    champ.focus();
+                });
+            })();
+        </script>
     </div>
 </body>
 </html>

@@ -47,6 +47,12 @@ class SettingSeeder extends Seeder
             ['key' => 'sms.moov.cle', 'value' => '', 'type' => 'string', 'group' => 'notifications', 'label' => 'Moov — clé d\'API'],
             ['key' => 'sms.moov.expediteur', 'value' => 'UK', 'type' => 'string', 'group' => 'notifications', 'label' => 'Moov — nom d\'expéditeur'],
 
+            // Relance automatique des dossiers laissés incomplets
+            ['key' => 'relances.enabled', 'value' => '0', 'type' => 'boolean', 'group' => 'modules', 'label' => 'Relance automatique', 'description' => "Rappeler chaque jour aux usagers dont le dossier est « à compléter » qu'il attend leurs pièces. S'appuie sur le module de notifications : si celui-ci est éteint, rien ne part."],
+            ['key' => 'relances.delai_jours', 'value' => '3', 'type' => 'integer', 'group' => 'relances', 'label' => 'Délai avant la 1re relance (jours)', 'description' => "Nombre de jours d'inaction avant le premier rappel. Relancer trop tôt agace ; trop tard fait perdre le dossier."],
+            ['key' => 'relances.intervalle_jours', 'value' => '7', 'type' => 'integer', 'group' => 'relances', 'label' => 'Intervalle entre deux relances (jours)', 'description' => "Délai minimum entre deux rappels pour un même dossier."],
+            ['key' => 'relances.max', 'value' => '3', 'type' => 'integer', 'group' => 'relances', 'label' => 'Nombre maximum de relances', 'description' => "Au-delà, on cesse de relancer : le dossier relève alors d'un traitement manuel."],
+
             // Paiement des frais de dossier (T-Money en priorité)
             ['key' => 'paiement.numero_marchand', 'value' => '', 'type' => 'string', 'group' => 'paiement', 'label' => 'Numéro marchand', 'description' => "Numéro sur lequel les usagers envoient les frais (T-Money / Flooz). Affiché dans les consignes de paiement."],
             ['key' => 'paiement.nom_marchand', 'value' => 'Université de Kara', 'type' => 'string', 'group' => 'paiement', 'label' => 'Nom du compte marchand', 'description' => "Nom affiché par l'opérateur lors du transfert — permet à l'usager de vérifier qu'il paie au bon destinataire."],

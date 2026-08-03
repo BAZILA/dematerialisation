@@ -6,6 +6,58 @@
     <div class="row justify-content-center">
         <div class="col-lg-8">
 
+            {{-- ═══ CODES DE SECOURS — affichés une seule fois ═══ --}}
+            @if (session('codes_secours'))
+                <div class="card mb-4" style="border:2px solid var(--brand,#0d6efd);">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <span><i class="fas fa-key"></i> Vos codes de secours</span>
+                        <span class="badge bg-warning text-dark">Affichés une seule fois</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="small mb-3" style="color:var(--t2);">
+                            Conservez-les hors de votre téléphone — imprimés, ou dans un gestionnaire
+                            de mots de passe. Chacun remplace votre code à 6 chiffres <strong>une fois</strong>,
+                            si vous perdez l'accès à votre application d'authentification.
+                        </p>
+
+                        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3" id="blocCodes">
+                            @foreach (session('codes_secours') as $code)
+                                <div class="col">
+                                    <div class="text-center py-2 rounded"
+                                        style="background:var(--bg2,#f6f7f9);border:1px solid var(--line);
+                                               font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                                               font-weight:700;letter-spacing:.05em;user-select:all;">
+                                        {{ $code }}
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-sm btn-primary" id="btnCopierCodes">
+                                <i class="fas fa-copy"></i> Copier les codes
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print();">
+                                <i class="fas fa-print"></i> Imprimer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    document.getElementById('btnCopierCodes')?.addEventListener('click', function () {
+                        const codes = [...document.querySelectorAll('#blocCodes .col')]
+                            .map(c => c.textContent.trim()).join('\n');
+                        navigator.clipboard?.writeText(codes).then(() => {
+                            this.innerHTML = '<i class="fas fa-check"></i> Copiés';
+                            setTimeout(() => {
+                                this.innerHTML = '<i class="fas fa-copy"></i> Copier les codes';
+                            }, 2000);
+                        });
+                    });
+                </script>
+            @endif
+
             @if ($user->hasTwoFactor())
                 {{-- ═══ 2FA ACTIVE ═══ --}}
                 <div class="card">
@@ -16,6 +68,39 @@
                             Depuis le {{ $user->two_factor_confirmed_at->format('d/m/Y à H:i') }}.
                             Un code à 6 chiffres est demandé à chaque connexion.
                         </p>
+
+                        {{-- Codes de secours : combien il en reste, comment en refaire --}}
+                        @php $restants = $user->codesSecoursRestants(); @endphp
+                        <div class="mt-4 pt-4 mx-auto text-start" style="border-top:1px solid var(--line);max-width:380px;">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="fw-semibold small" style="color:var(--t2);">
+                                    <i class="fas fa-key"></i> Codes de secours
+                                </span>
+                                <span class="badge bg-{{ $restants === 0 ? 'danger' : ($restants <= 2 ? 'warning text-dark' : 'secondary') }}">
+                                    {{ $restants }} restant{{ $restants > 1 ? 's' : '' }}
+                                </span>
+                            </div>
+                            <p class="small mb-2" style="color:var(--t3);">
+                                @if ($restants === 0)
+                                    Aucun code disponible : si vous perdez votre téléphone, seul un
+                                    gestionnaire pourra vous débloquer. Générez-en dès maintenant.
+                                @else
+                                    Ils remplacent votre code à 6 chiffres en cas de perte du téléphone.
+                                    En générer de nouveaux annule les précédents.
+                                @endif
+                            </p>
+                            <form method="POST" action="{{ route('admin.securite.2fa.codes') }}"
+                                onsubmit="return confirm('Générer de nouveaux codes ? Les anciens cesseront de fonctionner.');">
+                                @csrf
+                                <div class="d-flex gap-2">
+                                    <input type="password" name="password" class="form-control form-control-sm"
+                                        placeholder="Votre mot de passe" required>
+                                    <button type="submit" class="btn btn-sm btn-outline-primary flex-shrink-0">
+                                        <i class="fas fa-rotate"></i> Générer
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
 
                         <div class="mt-4 pt-4 mx-auto text-start" style="border-top:1px solid var(--line);max-width:380px;">
                             <div class="fw-semibold small mb-2" style="color:var(--t2);">

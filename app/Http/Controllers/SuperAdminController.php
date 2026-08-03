@@ -18,6 +18,9 @@ class SuperAdminController extends Controller
         // Même principe pour les notifications : module éteint, réglages masqués
         $notifsActives = \App\Models\NotificationEnvoyee::moduleActif();
 
+        // Les délais de relance n'ont de sens qu'une fois la relance armée
+        $relancesActives = (bool) Setting::get('relances.enabled', false);
+
         $groups = Setting::allCached()
             // cachet_path est géré par un formulaire d'upload dédié, pas la liste
             ->reject(fn ($s) => $s->key === 'cachet_path')
@@ -25,6 +28,7 @@ class SuperAdminController extends Controller
                 $s->group === 'paiement' || $s->key === 'candidature.fees.enabled'
             ))
             ->reject(fn ($s) => !$notifsActives && $s->group === 'notifications')
+            ->reject(fn ($s) => !$relancesActives && $s->group === 'relances')
             ->groupBy('group');
         $hasCachet = (bool) Setting::get('cachet_path');
 

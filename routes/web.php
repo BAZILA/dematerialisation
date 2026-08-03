@@ -125,6 +125,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/securite/2fa/activer', [\App\Http\Controllers\TwoFactorController::class, 'enable'])
             ->middleware('throttle:5,1')->name('securite.2fa.activer');
         Route::post('/securite/2fa/desactiver', [\App\Http\Controllers\TwoFactorController::class, 'disable'])->name('securite.2fa.desactiver');
+        Route::post('/securite/2fa/codes', [\App\Http\Controllers\TwoFactorController::class, 'regenererCodes'])
+            ->middleware('throttle:2fa-codes')->name('securite.2fa.codes');
 
         // Statistiques (réservées : permission dédiée) + exports en un clic
         Route::middleware('permission:statistiques.consulter')->group(function () {
@@ -268,6 +270,9 @@ Route::middleware('auth')->group(function () {
         Route::middleware('permission:candidature.traiter')->prefix('candidatures')->name('candidatures.')->group(function () {
             Route::get('/', [CandidatureController::class, 'index'])->name('index');
             Route::get('/export/{format}', [CandidatureController::class, 'export'])->name('export');
+            // Vue d'ensemble par parcours, pour les commissions d'admission
+            Route::get('/tableau-bord', [CandidatureController::class, 'tableauBord'])->name('tableau');
+            Route::get('/tableau-bord/export/{format}', [CandidatureController::class, 'exportTableau'])->name('tableau.export');
             // Téléchargement des pièces en ZIP (un candidat, ou un lot filtré)
             Route::get('/telecharger/lot', [CandidatureController::class, 'telechargerLot'])->name('telecharger.lot');
             Route::get('/{candidature}/telecharger', [CandidatureController::class, 'telechargerDossier'])->name('telecharger');

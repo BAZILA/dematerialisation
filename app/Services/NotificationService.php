@@ -57,6 +57,20 @@ class NotificationService
                 . "Rendez-vous sur la page de suivi avec votre numéro de suivi pour la compléter.\n\n:universite",
             'sms'   => ":universite : candidature :reference a completer. :motif",
         ],
+        // Relances automatiques : le dossier dort, on rappelle l'usager
+        'candidature.relance' => [
+            'sujet' => 'Rappel — votre candidature attend vos pièces',
+            'email' => "Bonjour :nom,\n\nVotre candidature :reference est toujours incomplète depuis :jours jour(s).\n\n"
+                . ":motif\n\nSans réponse de votre part, elle ne pourra pas être examinée.\n"
+                . "Rendez-vous sur la page de suivi avec votre numéro de suivi pour la compléter.\n\n:universite",
+            'sms'   => ":universite : candidature :reference toujours incomplete depuis :jours jour(s). Completez-la sur la page de suivi.",
+        ],
+        'depot.relance' => [
+            'sujet' => 'Rappel — votre dossier attend une correction',
+            'email' => "Bonjour :nom,\n\nVotre :procedure attend une correction depuis :jours jour(s).\n\n"
+                . ":motif\n\nConnectez-vous à votre espace personnel pour remplacer les pièces concernées.\n\n:universite",
+            'sms'   => ":universite : votre :procedure attend une correction depuis :jours jour(s). Connectez-vous.",
+        ],
         'paiement.valide' => [
             'sujet' => 'Paiement confirmé',
             'email' => "Bonjour :nom,\n\nVotre paiement de :montant (référence :reference) a bien été enregistré.\n\n"

@@ -494,8 +494,11 @@
                             </a>
                         @endforeach
                         @if ($voitCandidatures)
-                            <a href="{{ route('admin.candidatures.index') }}" class="sb-link {{ request()->routeIs('admin.candidatures.*') ? 'active' : '' }}" title="Candidatures">
+                            <a href="{{ route('admin.candidatures.index') }}" class="sb-link {{ request()->routeIs('admin.candidatures.*') && !request()->routeIs('admin.candidatures.tableau*') ? 'active' : '' }}" title="Candidatures">
                                 <span class="sb-icon"><i class="fas fa-file-signature"></i></span><span class="sb-label">Candidatures</span>
+                            </a>
+                            <a href="{{ route('admin.candidatures.tableau') }}" class="sb-link {{ request()->routeIs('admin.candidatures.tableau*') ? 'active' : '' }}" title="Candidatures par parcours">
+                                <span class="sb-icon"><i class="fas fa-chart-column"></i></span><span class="sb-label">Vue par parcours</span>
                             </a>
                         @endif
                     @endif

@@ -32,16 +32,23 @@ class AuditLog extends Model
         array $meta = []
     ): void {
         try {
-            $req = request();
+            // Une commande planifiée n'a ni requête HTTP ni session : y
+            // toucher lèverait une exception, et la trace — justement celle
+            // qui prouve que la tâche a tourné — serait perdue en silence.
+            $req = app()->bound('request') ? app('request') : null;
+            $userId = $req ? Auth::id() : null;
+
             static::create([
-                'user_id'      => Auth::id(),
+                'user_id'      => $userId,
                 'action'       => $action,
                 'subject_type' => $subject ? $subject::class : null,
                 'subject_id'   => $subject?->getKey(),
                 'description'  => $description,
                 'meta'         => $meta ?: null,
                 'ip_address'   => $req?->ip(),
-                'user_agent'   => $req?->userAgent(),
+                // Distinguer d'un coup d'œil une action humaine d'une tâche
+                // automatique : sans cela, l'audit laisse croire à un oubli.
+                'user_agent'   => $req?->userAgent() ?? 'console (tâche planifiée)',
                 'created_at'   => now(),
             ]);
         } catch (\Throwable $e) {

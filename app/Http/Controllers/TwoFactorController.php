@@ -70,9 +70,40 @@ class TwoFactorController extends Controller
         $request->session()->forget('2fa_setup_secret');
         $request->session()->put('2fa_passed', true); // il vient de prouver son code
 
+        // Sans codes de secours, un téléphone perdu bloque le compte
+        $codes = $user->genererCodesSecours();
+
         AuditLog::record('2fa.activee', $user, "2FA activée sur le compte {$user->numero_identifiant}");
 
-        return back()->with('success', 'Double authentification activée. Un code vous sera demandé à chaque connexion.');
+        return back()
+            ->with('codes_secours', $codes)
+            ->with('success', 'Double authentification activée. Notez vos codes de secours : ils ne seront plus affichés.');
+    }
+
+    /**
+     * Nouvelle série de codes de secours. Les précédents sont annulés :
+     * c'est le geste à faire quand on doute qu'ils soient encore secrets.
+     */
+    public function regenererCodes(Request $request)
+    {
+        $request->validate(['password' => 'required'], [], ['password' => 'mot de passe']);
+        $user = $request->user();
+
+        if (!$user->hasTwoFactor()) {
+            return back()->withErrors("La double authentification n'est pas active sur ce compte.");
+        }
+        if (!Hash::check($request->password, $user->password)) {
+            return back()->withErrors('Mot de passe incorrect.');
+        }
+
+        $codes = $user->genererCodesSecours();
+
+        AuditLog::record('2fa.codes_regeneres', $user,
+            "Codes de secours régénérés pour {$user->numero_identifiant} — les anciens sont annulés");
+
+        return back()
+            ->with('codes_secours', $codes)
+            ->with('success', 'Nouveaux codes de secours générés. Les anciens ne fonctionnent plus.');
     }
 
     public function disable(Request $request)
@@ -86,6 +117,7 @@ class TwoFactorController extends Controller
 
         $user->two_factor_secret = null;
         $user->two_factor_confirmed_at = null;
+        $user->two_factor_recovery_codes = null;   // ils n'ouvriraient plus rien
         $user->save();
 
         AuditLog::record('2fa.desactivee', $user, "2FA désactivée sur le compte {$user->numero_identifiant}");
@@ -107,18 +139,38 @@ class TwoFactorController extends Controller
 
     public function verify(Request $request)
     {
-        $request->validate(['code' => 'required|digits:6']);
+        $request->validate(['code' => 'required|string|max:20']);
         $user = $request->user();
+        $saisi = trim($request->code);
 
-        if (!(new Google2FA())->verifyKey($user->two_factor_secret, $request->code)) {
-            AuditLog::record('2fa.echec', $user, "Code 2FA incorrect ({$user->numero_identifiant})");
+        // Six chiffres = code de l'application ; sinon, code de secours
+        $estTotp = (bool) preg_match('/^\d{6}$/', $saisi);
 
-            return back()->withErrors('Code incorrect ou expiré.');
+        if ($estTotp && (new Google2FA())->verifyKey($user->two_factor_secret, $saisi)) {
+            $request->session()->put('2fa_passed', true);
+
+            return redirect()->intended(route('admin.dashboard'));
         }
 
-        $request->session()->put('2fa_passed', true);
+        if (!$estTotp && $user->consommerCodeSecours($saisi)) {
+            $restants = $user->codesSecoursRestants();
 
-        return redirect()->intended(route('admin.dashboard'));
+            AuditLog::record('2fa.code_secours', $user,
+                "Connexion par code de secours ({$user->numero_identifiant}) — {$restants} code(s) restant(s)");
+
+            $request->session()->put('2fa_passed', true);
+
+            // Le prévenir tôt : à zéro code, un téléphone perdu bloque tout
+            $alerte = $restants === 0
+                ? "Vous avez utilisé votre dernier code de secours. Générez-en de nouveaux dès maintenant."
+                : "Code de secours accepté — il ne fonctionnera plus. Il vous en reste {$restants}.";
+
+            return redirect()->intended(route('admin.dashboard'))->with('warning', $alerte);
+        }
+
+        AuditLog::record('2fa.echec', $user, "Code 2FA incorrect ({$user->numero_identifiant})");
+
+        return back()->withErrors('Code incorrect ou expiré.');
     }
 
     /* ── Réinitialisation par un gestionnaire ──────────────── */
@@ -130,6 +182,7 @@ class TwoFactorController extends Controller
 
         $user->two_factor_secret = null;
         $user->two_factor_confirmed_at = null;
+        $user->two_factor_recovery_codes = null;
         $user->save();
 
         AuditLog::record('2fa.reinitialisee', $user,

@@ -27,5 +27,19 @@ if ($sauvegarde->automatiqueActive()) {
         ->appendOutputTo(storage_path('logs/sauvegarde.log'));
 }
 
+/*
+|--------------------------------------------------------------------------
+| Relance des dossiers laissés incomplets
+|--------------------------------------------------------------------------
+| Un dossier renvoyé à son auteur meurt souvent en silence. Le rappel part
+| une fois par jour, en fin de matinée : assez tôt pour être lu dans la
+| journée, assez tard pour ne pas se noyer dans le courrier du matin.
+| Délais, quota et interrupteur se règlent depuis Paramètres.
+*/
+Schedule::command('uk:relancer')
+    ->dailyAt('10:00')
+    ->withoutOverlapping(30)
+    ->appendOutputTo(storage_path('logs/relances.log'));
+
 // Hygiène de la file d'attente : purge des travaux échoués de plus de 30 jours
 Schedule::command('queue:prune-failed', ['--hours=720'])->weekly();

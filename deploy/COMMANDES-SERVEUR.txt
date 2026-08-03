@@ -1,0 +1,510 @@
+=======================================================================
+  DÉMATÉRIALISATION — UNIVERSITÉ DE KARA
+  INSTALLATION NEUVE SUR O2SWITCH — TOUTES LES COMMANDES
+  Paquet : dematerialisation-prod-20260803-0923.zip  (44,7 Mo)
+  Rédigé le 03/08/2026
+=======================================================================
+
+  Installation PROPRE, base repartie de zéro. Aucune donnée réelle
+  n'est encore en service : on peut refaire l'opération autant de
+  fois que nécessaire (voir section 13 « Repartir de zéro »).
+
+  ✔ Cette procédure a été RÉPÉTÉE le 03/08/2026 sur une base vierge
+    avant livraison : les 44 migrations passent, la chaîne de seed
+    va au bout, et les 27 pages de l'application répondent (200).
+
+  Ce que contient la livraison : dépôts, candidatures publiques par
+  sections, paiements, notifications + SMS, journal d'audit,
+  statistiques, archives, 2FA + codes de secours, pages d'erreur,
+  exports Excel/CSV/PDF, tableau de bord par parcours, relance
+  automatique des dossiers incomplets, sauvegardes planifiées.
+
+
+=======================================================================
+  0. DONNÉES DU SERVEUR  (ne pas s'en écarter)
+=======================================================================
+
+  Sous-domaine ....... dematerialisation.univ-kara.org
+  Compte cPanel ...... gysj7444
+  Dossier du site .... /home/gysj7444/dematerialisation.univ-kara.org/
+  PHP CLI 8.3 ........ /opt/alt/php83/usr/bin/php
+
+  ⚠️ MÉTHODE B OBLIGATOIRE — PHP 8.3 par DOSSIER (.htaccess + php.ini).
+     Ne PAS basculer le compte entier en 8.3 : d'AUTRES SITES du
+     compte tournent en PHP 8.0 et tomberaient.
+
+  ⚠️ Le CLI doit lire le php.ini DU PROJET, sinon les extensions
+     manquent. Toujours passer -c, avec des chemins ABSOLUS
+     (artisan résout ses chemins relativement au dossier courant).
+
+  ⚠️ suPHP REFUSE 775 et 777.  Dossiers 755, fichiers 644. Jamais plus.
+
+
+  --- Raccourcis à coller une fois par session SSH -------------------
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+
+=======================================================================
+  1. PRÉPARER cPANEL   (avant tout dépôt de fichier)
+=======================================================================
+
+  1.a  Sous-domaine
+       cPanel > Domaines > Créer un sous-domaine
+       Nom .............. dematerialisation
+       Domaine .......... univ-kara.org
+       Racine ........... /home/gysj7444/dematerialisation.univ-kara.org
+       (NE PAS pointer sur /public : le .htaccess fourni redirige seul)
+
+  1.b  Base de données
+       cPanel > Bases de données MySQL
+       - Créer la base ......... gysj7444_demat
+       - Créer l'utilisateur ... gysj7444_demat
+       - Mot de passe .......... généré, fort, NOTÉ quelque part
+       - Ajouter l'utilisateur à la base avec TOUS LES PRIVILÈGES
+
+       ⚠️ cPanel préfixe automatiquement par le nom du compte.
+          Le nom réel sera « gysj7444_demat », pas « demat ».
+
+  1.c  Adresse d'expédition
+       cPanel > Comptes de messagerie > Créer
+       - Adresse ............... no-reply@univ-kara.org
+       - Mot de passe .......... noté (servira au .env, section 5)
+
+  1.d  Certificat HTTPS
+       cPanel > SSL/TLS Status > lancer AutoSSL sur le sous-domaine.
+       Attendre qu'il soit vert AVANT la section 5 (cookies sécurisés).
+
+
+=======================================================================
+  2. DÉPOSER LE CODE
+=======================================================================
+
+  cPanel > Gestionnaire de fichiers (ou SFTP) :
+   - Téléverser dematerialisation-prod-20260803-0923.zip
+     dans  /home/gysj7444/dematerialisation.univ-kara.org/
+   - Extraire sur place.
+
+  Puis, en SSH, retirer l'archive pour ne pas l'exposer :
+
+cd $SITE
+rm -f dematerialisation-prod-*.zip
+ls -la          # on doit voir : app/ bootstrap/ public/ vendor/ artisan .htaccess
+
+
+=======================================================================
+  3. LE php.ini DU PROJET   ← LA CAUSE DES 500 LA DERNIÈRE FOIS
+=======================================================================
+
+  Le PHP 8.3 d'O2switch NE CHARGE PAS par défaut : pdo, pdo_mysql,
+  mbstring, gd, intl, fileinfo, dom, zip, bcmath, xmlwriter, xmlreader.
+  Sans elles, Laravel ne démarre pas.
+
+nano $SITE/php.ini
+
+  --- Contenu à coller TEL QUEL ------------------------------------
+
+; ---- Extensions ----
+; ⚠️ L'ORDRE COMPTE : mysqlnd, puis pdo, AVANT pdo_mysql et mysqli.
+; Un autre ordre provoque « undefined symbol » et un 500.
+extension=mysqlnd
+extension=pdo
+extension=pdo_mysql
+extension=mbstring
+extension=gd
+extension=intl
+extension=fileinfo
+extension=dom
+extension=xml
+extension=xmlwriter
+extension=xmlreader
+extension=zip
+extension=bcmath
+extension=curl
+extension=openssl
+extension=tokenizer
+extension=ctype
+extension=json
+
+; ---- Téléversements (pièces jointes : 5 Mo max par fichier) ----
+upload_max_filesize = 8M
+post_max_size = 64M
+max_file_uploads = 30
+memory_limit = 256M
+max_execution_time = 120
+
+; ---- Production ----
+display_errors = Off
+log_errors = On
+date.timezone = Africa/Lome
+
+  ------------------------------------------------------------------
+
+  ⚠️ NE PAS reprendre le php.ini d'exemple d'O2switch : il est écrit
+     pour php81 et ses lignes « zend_extension=/opt/alt/php81/... »
+     (opcache, ioncube) provoquent un « module API mismatch » → 500.
+     Si tu pars du leur : SUPPRIME les lignes zend_extension, et
+     remplace php81 par php83 partout (y compris session.save_path).
+
+  --- Vérifier IMMÉDIATEMENT (avant d'aller plus loin) --------------
+
+$PHP -v
+$PHP -m | grep -E "pdo_mysql|mbstring|gd|intl|zip|bcmath|fileinfo|dom"
+
+  Les 8 doivent apparaître. Si l'une manque : STOP, corriger le
+  php.ini. Les avertissements « mysqlnd/mysqli already loaded »
+  sont INOFFENSIFS (le serveur les charge déjà).
+
+
+=======================================================================
+  4. LE .htaccess — HANDLER PHP 8.3
+=======================================================================
+
+nano $SITE/.htaccess
+
+  Ajouter À LA FIN du fichier existant (ne rien supprimer) :
+
+<FilesMatch \.php$>
+SetHandler application/x-httpd-php83
+</FilesMatch>
+AddHandler application/x-httpd-php83 .php
+suPHP_ConfigPath /home/gysj7444/dematerialisation.univ-kara.org/
+
+  Le .htaccess fourni redirige déjà vers public/ et bloque .env,
+  vendor/ et storage/. Ne pas y toucher pour le reste.
+
+
+=======================================================================
+  5. LE .env
+=======================================================================
+
+cd $SITE
+cp .env.production.example .env
+nano .env
+
+  --- Lignes à renseigner ------------------------------------------
+
+APP_NAME="Université de Kara — Dématérialisation"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://dematerialisation.univ-kara.org
+APP_LOCALE=fr
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=gysj7444_demat
+DB_USERNAME=gysj7444_demat
+DB_PASSWORD=<le mot de passe de la section 1.b>
+
+SESSION_DRIVER=file
+SESSION_SECURE_COOKIE=true
+CACHE_STORE=file
+QUEUE_CONNECTION=sync
+FILESYSTEM_DISK=local
+LOG_LEVEL=error
+
+# Sauvegardes automatiques : chemin de mysqldump sur le serveur
+MYSQLDUMP_PATH=/usr/bin/mysqldump
+
+# E-mail — sans ces lignes justes, AUCUNE notification ne partira
+MAIL_MAILER=smtp
+MAIL_HOST=mail.univ-kara.org
+MAIL_PORT=465
+MAIL_USERNAME=no-reply@univ-kara.org
+MAIL_PASSWORD=<le mot de passe de la section 1.c>
+MAIL_ENCRYPTION=ssl
+MAIL_FROM_ADDRESS="no-reply@univ-kara.org"
+MAIL_FROM_NAME="Université de Kara"
+
+  # Confirmer le chemin réel de mysqldump :
+which mysqldump || ls /usr/bin/mysqldump /usr/local/bin/mysqldump 2>/dev/null
+
+  --- Générer la clé de chiffrement --------------------------------
+
+$ART key:generate --force
+
+  ⚠️ Cette clé chiffre les secrets 2FA. Si tu la changes plus tard,
+     les comptes ayant activé la 2FA seront bloqués. Ne pas la
+     régénérer après la mise en service.
+
+
+=======================================================================
+  6. CRÉER LA BASE   (installation neuve)
+=======================================================================
+
+cd $SITE
+
+  # a) Vérifier que la connexion passe AVANT de migrer :
+$ART db:show
+
+  # b) Créer toutes les tables et les données de référence :
+$ART migrate:fresh --seed --force
+
+  ⚠️ « migrate:fresh » VIDE la base avant de la reconstruire.
+     C'est voulu ici (installation neuve). À NE PLUS JAMAIS lancer
+     une fois l'exploitation réelle démarrée.
+
+  # c) Contrôler :
+$ART migrate:status | grep -ci ran        # doit afficher 44
+$ART migrate:status | grep -i pending     # doit ne RIEN afficher
+
+  Ce que le seed installe — chiffres constatés lors de la
+  répétition faite le 03/08/2026 sur une base vierge :
+
+    44 migrations       18 rôles            53 permissions
+    35 réglages          7 procédures        3 facultés
+     6 parcours         30 types de pièces   1 année académique
+     3 bacheliers        4 anciens étudiants 2 comptes
+
+    · référentiel académique UK (facultés, départements, parcours)
+    · année académique courante + fenêtres d'ouverture
+    · quelques identités d'exemple, à remplacer par vos imports
+    · ADMIN001 (super-admin) et ETUD001 (étudiant de test)
+
+  État des modules après le seed :
+    candidatures ... ALLUMÉ    (le portail public est ouvert)
+    paiements ...... éteint
+    notifications .. éteint
+    relances ....... éteint
+
+  ⚠️ Le portail de candidature est donc accessible au public dès la
+     mise en ligne. Si ce n'est pas voulu tout de suite, l'éteindre
+     dans /super-admin/parametres avant de communiquer l'adresse.
+
+
+=======================================================================
+  7. CHANGER LES MOTS DE PASSE PAR DÉFAUT   ← NE PAS SAUTER
+=======================================================================
+
+  Le seed crée deux comptes aux mots de passe PUBLICS et FAIBLES :
+      ADMIN001 / admin123456     (super-administrateur !)
+      ETUD001  / etudiant123
+
+  Sur un sous-domaine accessible depuis Internet, c'est une porte
+  ouverte. À changer AVANT la première connexion.
+
+$ART tinker --execute="
+\$u = \App\Models\User::where('numero_identifiant','ADMIN001')->first();
+\$u->password = \Illuminate\Support\Facades\Hash::make('<VOTRE-MOT-DE-PASSE-FORT>');
+\$u->save();
+echo 'mot de passe ADMIN001 change';
+"
+
+  # Le compte de test étudiant : le changer aussi, ou le désactiver
+$ART tinker --execute="
+\App\Models\User::where('numero_identifiant','ETUD001')->update(['is_active'=>false]);
+echo 'ETUD001 desactive';
+"
+
+  Ensuite, activer la 2FA sur ADMIN001 depuis /admin/securite et
+  CONSERVER LES 8 CODES DE SECOURS affichés une seule fois.
+
+
+=======================================================================
+  8. CACHES ET DROITS
+=======================================================================
+
+cd $SITE
+
+  # a) Compiler la configuration
+$ART config:cache
+$ART route:cache
+$ART view:cache
+
+  ⚠️ Toute retouche ultérieure du .env EXIGE de refaire
+     « $ART config:cache », sinon elle reste sans effet.
+
+  # b) Droits suPHP — 755 dossiers, 644 fichiers, JAMAIS 775
+find $SITE -type d -exec chmod 755 {} \;
+find $SITE -type f -exec chmod 644 {} \;
+chmod 644 $SITE/.env $SITE/php.ini
+
+  # c) Ces deux arbres doivent rester inscriptibles
+chmod -R 755 $SITE/storage $SITE/bootstrap/cache
+
+  # d) Contrôle : ces deux commandes ne doivent RIEN afficher
+find $SITE -perm -o+w | head
+find $SITE -type f -perm /111 -name "*.php" | head
+
+
+=======================================================================
+  9. TÂCHE PLANIFIÉE   ← RIEN D'AUTOMATIQUE SANS ÇA
+=======================================================================
+
+  Sans ce cron, ni la sauvegarde quotidienne ni la relance des
+  dossiers incomplets ne s'exécuteront jamais.
+
+  cPanel > Tâches CRON > Ajouter — périodicité « Chaque minute » :
+
+* * * * * /opt/alt/php83/usr/bin/php -c /home/gysj7444/dematerialisation.univ-kara.org/php.ini /home/gysj7444/dematerialisation.univ-kara.org/artisan schedule:run >> /home/gysj7444/cron-demat.log 2>&1
+
+  Ce qu'il déclenche :
+    02h00 quotidien ... uk:sauvegarder      base + pièces déposées
+    10h00 quotidien ... uk:relancer         rappel dossiers incomplets
+    dimanche 00h00 .... queue:prune-failed  hygiène
+
+  # Contrôler :
+$ART schedule:list
+tail -20 ~/cron-demat.log        # après 2 minutes d'attente
+
+
+=======================================================================
+  10. VÉRIFICATION
+=======================================================================
+
+  --- En ligne de commande -----------------------------------------
+
+cd $SITE
+$ART about                       # doit afficher env=production, debug=false
+$ART uk:verifier-pieces          # « Toutes les pièces sont présentes »
+$ART uk:relancer --simulation    # liste à blanc, n'envoie rien
+$ART uk:sauvegarder --sans-fichiers   # crée une archive de contrôle
+
+  --- Dans le navigateur -------------------------------------------
+
+  [ ] https://dematerialisation.univ-kara.org  s'affiche en HTTPS
+  [ ] Les 3 portes de l'accueil (Étudiant / Candidature / Personnel)
+  [ ] Connexion ADMIN001 avec le NOUVEAU mot de passe
+  [ ] /admin/dashboard                  sans erreur
+  [ ] /admin/candidatures               liste + filtres
+  [ ] /admin/candidatures/tableau-bord  répartition par parcours
+  [ ] /admin/statistiques               graphiques
+  [ ] /admin/audit                      journal des actions
+  [ ] /admin/securite                   2FA + codes de secours
+  [ ] /admin/academique                 référentiel UK présent
+  [ ] /super-admin/parametres           tous les groupes de réglages
+  [ ] Une URL bidon → page 404 personnalisée (pas l'écran Laravel)
+  [ ] Export Excel ET PDF depuis les candidatures
+  [ ] /candidature                      formulaire public accessible
+
+  --- Si une page renvoie 500 --------------------------------------
+
+  La vraie erreur : cPanel > Métriques > Erreurs
+  Le journal applicatif :
+tail -50 $SITE/storage/logs/laravel.log
+
+  Causes déjà rencontrées sur CE serveur, par ordre de fréquence :
+   1. php.ini : lignes zend_extension en php81 → les supprimer (§3)
+   2. php.ini : ordre des extensions → mysqlnd, pdo, PUIS pdo_mysql
+   3. Permissions : un 775 quelque part → rejouer §8.b
+   4. .env modifié après config:cache → refaire config:cache
+   5. Extension manquante → $PHP -m pour identifier laquelle
+
+
+=======================================================================
+  11. CONFIGURER DEPUIS L'INTERFACE   (après la mise en ligne)
+=======================================================================
+
+  Tous les modules arrivent ÉTEINTS. Les allumer un par un, en
+  testant entre chaque, depuis /super-admin/parametres :
+
+  [ ] Notifications — n'allumer QU'APRÈS avoir testé le SMTP.
+                      Faire un premier envoi vers sa propre adresse.
+  [ ] SMS ........... laisser sur « Journal » (aucun envoi réel)
+                      tant qu'aucun contrat Togocom/Yas ou Moov
+                      n'est signé. Les passerelles sont prêtes.
+  [ ] Paiements ..... n'allumer que si les frais sont décidés.
+                      Éteint, TOUT ce qui touche au paiement
+                      disparaît de l'interface et des exports.
+  [ ] Relances ...... dépend des notifications. Réglages : délai
+                      avant 1er rappel (3 j), intervalle (7 j),
+                      maximum (3 rappels).
+  [ ] Sauvegardes ... activer l'automatique + fixer la rétention.
+
+  Puis :
+  [ ] Créer les comptes du personnel (/admin/utilisateurs)
+  [ ] Leur affecter un PÉRIMÈTRE (/admin/perimetres)
+      ⚠️ Un agent SANS périmètre voit TOUS les dossiers.
+  [ ] Importer les identités réelles (/admin/identites) —
+      bacheliers et anciens étudiants, via Excel/CSV
+  [ ] Vérifier les fenêtres d'ouverture (/admin/annees)
+  [ ] Téléverser le cachet officiel (/super-admin/parametres)
+  [ ] Téléverser la signature de chaque agent (/admin/utilisateurs)
+
+
+=======================================================================
+  12. SAUVEGARDE ET RESTAURATION
+=======================================================================
+
+  # Sauvegarde manuelle complète (base + pièces déposées)
+$ART uk:sauvegarder
+
+  # Base seule, plus rapide
+$ART uk:sauvegarder --sans-fichiers
+
+  # Les archives se trouvent dans :
+ls -lh $SITE/storage/app/sauvegardes/
+
+  # Restaurer une archive :
+  #  1) la décompresser
+  #  2) mysql -u gysj7444_demat -p gysj7444_demat < base/*.sql
+  #  3) recopier le contenu de storage/app/ par-dessus
+  #  4) cd $SITE && $ART optimize:clear && $ART config:cache
+
+
+=======================================================================
+  13. REPARTIR DE ZÉRO   (tant que l'exploitation n'a pas démarré)
+=======================================================================
+
+  Pendant la phase de test, on peut réinitialiser autant que voulu :
+
+cd $SITE
+$ART migrate:fresh --seed --force
+$ART optimize:clear && $ART config:cache
+
+  # Effacer aussi les pièces déposées pendant les tests :
+rm -rf $SITE/storage/app/private/candidatures/*
+rm -rf $SITE/storage/app/private/requests/*
+
+  Puis REFAIRE la section 7 (mots de passe par défaut recréés).
+
+  --- Redéployer une nouvelle version du code ----------------------
+
+cd $SITE && $ART down --render="errors.503" --retry=60
+  # extraire le nouveau ZIP par-dessus (il ne contient ni .env,
+  # ni php.ini, ni les pièces déposées : ils survivent)
+cd $SITE
+$ART migrate --force              # migrations seules, base préservée
+$ART optimize:clear
+$ART config:cache && $ART route:cache && $ART view:cache
+find $SITE -type d -exec chmod 755 {} \; ; find $SITE -type f -exec chmod 644 {} \;
+$ART up
+
+
+=======================================================================
+  14. AIDE-MÉMOIRE
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+$PHP -m                          extensions chargées
+$ART about                       état de l'application
+$ART db:show                     connexion à la base
+$ART migrate:status              état des migrations
+$ART optimize:clear              vider tous les caches
+$ART config:cache                après CHAQUE retouche du .env
+$ART down / $ART up              maintenance
+$ART schedule:list               tâches planifiées
+$ART uk:sauvegarder              sauvegarde
+$ART uk:verifier-pieces          pièces sans fichier
+$ART uk:relancer --simulation    relance à blanc
+tail -50 $SITE/storage/logs/laravel.log
+
+  COMPTES CRÉÉS PAR LE SEED (à changer immédiatement, §7)
+    ADMIN001 / admin123456     super-administrateur
+    ETUD001  / etudiant123     étudiant de test
+
+  RÈGLES D'OR
+   · Ne pas basculer le compte entier en PHP 8.3 (méthode B).
+   · Toujours -c avec le php.ini du projet pour le CLI.
+   · Jamais chmod 775 ou 777 : suPHP refuse et renvoie 500.
+   · config:cache après chaque retouche du .env.
+   · Changer ADMIN001 avant la première connexion.
+   · migrate:fresh est autorisé MAINTENANT, plus jamais après.
+
+=======================================================================

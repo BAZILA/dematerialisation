@@ -28,6 +28,7 @@
             'modules'       => ['Modules', 'fa-puzzle-piece'],
             'paiement'      => ['Paiement', 'fa-credit-card'],
             'notifications' => ['Notifications', 'fa-bell'],
+            'relances'      => ['Relances automatiques', 'fa-bell-concierge'],
             'recyclage'     => ['Recyclage', 'fa-arrows-rotate'],
             'affichage'     => ['Affichage', 'fa-table-list'],
             'sauvegarde'    => ['Sauvegarde', 'fa-shield-halved'],
