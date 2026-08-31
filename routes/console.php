@@ -16,13 +16,29 @@ Artisan::command('inspire', function () {
 | Activation, heure et rétention se règlent depuis Paramètres.
 | Nécessite que « php artisan schedule:run » tourne chaque minute
 | (Planificateur de tâches Windows, ou cron sous Linux).
+|
+| Ce fichier est chargé au démarrage de CHAQUE commande artisan. Lire les
+| réglages ici interroge la base : sur une installation neuve — base vide,
+| cache vide — la table « settings » n'existe pas encore et « migrate »
+| lui-même échouerait. On se contente donc de ce qui est disponible, et
+| l'horaire par défaut sert de repli tant que la base n'est pas prête.
 */
 
-$sauvegarde = app(SauvegardeService::class);
+$heureSauvegarde = '02:00';
+$sauvegardeActive = true;
 
-if ($sauvegarde->automatiqueActive()) {
+try {
+    $sauvegarde = app(SauvegardeService::class);
+    $sauvegardeActive = $sauvegarde->automatiqueActive();
+    $heureSauvegarde = $sauvegarde->heureAuto();
+} catch (\Throwable $e) {
+    // Base non encore migrée ou injoignable : on planifie avec les valeurs
+    // par défaut. La commande relira les réglages au moment de s'exécuter.
+}
+
+if ($sauvegardeActive) {
     Schedule::command('uk:sauvegarder', ['--declencheur=planifiee'])
-        ->dailyAt($sauvegarde->heureAuto())
+        ->dailyAt($heureSauvegarde)
         ->withoutOverlapping(120)      // jamais deux sauvegardes en parallèle
         ->appendOutputTo(storage_path('logs/sauvegarde.log'));
 }

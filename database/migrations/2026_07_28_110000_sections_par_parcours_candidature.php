@@ -30,7 +30,13 @@ return new class extends Migration
             $table->timestamp('soumis_at')->nullable()->after('ordre');
         });
 
-        // Les sections existantes datent de la création de leur dossier
+        // Les sections existantes datent de la création de leur dossier.
+        // UPDATE ... JOIN est de la syntaxe MySQL ; ailleurs (SQLite des
+        // tests) il n'y a de toute façon aucune ligne à reprendre.
+        if (\Illuminate\Support\Facades\DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         \Illuminate\Support\Facades\DB::statement(
             'UPDATE candidature_choix c
              JOIN candidatures d ON d.id = c.candidature_id

@@ -30,7 +30,13 @@ return new class extends Migration
             $table->index(['statut', 'parcours_id']);
         });
 
-        // Report de l'ancienne décision globale sur les sections
+        // Report de l'ancienne décision globale sur les sections.
+        // UPDATE ... JOIN est de la syntaxe MySQL ; ailleurs (SQLite des
+        // tests) il n'y a de toute façon aucune décision à reporter.
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("
             UPDATE candidature_choix c
             JOIN candidatures d ON d.id = c.candidature_id
