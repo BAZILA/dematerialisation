@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Paquets de déploiement : volumineux, régénérables par deploy/build-zip.ps1
+deploy/*.zip
