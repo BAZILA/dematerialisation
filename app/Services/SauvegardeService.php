@@ -97,6 +97,19 @@ class SauvegardeService
         $zip->addFromString('MANIFESTE.txt', $this->manifeste($horodatage, $dumpOk, $nbFichiers, $declencheur, $avertissements));
         $zip->close();
 
+        /* Une archive sans base ressemble en tout point à une sauvegarde
+           valide : même nom, même liste, taille plausible. On la renomme
+           pour que le manque saute aux yeux partout — dans la liste, dans
+           le dossier, et jusque dans le fichier téléchargé. */
+        if (!$dumpOk) {
+            $nomSansBase = str_replace('.zip', '-SANS-BASE.zip', $nomArchive);
+            $cheminSansBase = $this->dossier() . DIRECTORY_SEPARATOR . $nomSansBase;
+            if (@rename($chemin, $cheminSansBase)) {
+                $nomArchive = $nomSansBase;
+                $chemin     = $cheminSansBase;
+            }
+        }
+
         if ($dumpTmp && is_file($dumpTmp)) {
             @unlink($dumpTmp);
         }
@@ -181,10 +194,24 @@ class SauvegardeService
             $cfg['database'],
         ];
 
-        $process = new \Symfony\Component\Process\Process($args, null, [
-            // mysqldump lit MYSQL_PWD : le mot de passe n'apparaît pas dans la ligne de commande
-            'MYSQL_PWD' => (string) ($cfg['password'] ?? ''),
-        ], null, 900);
+        // mysqldump lit MYSQL_PWD : le mot de passe n'apparaît pas dans la
+        // ligne de commande, donc pas dans la liste des processus.
+        $env = ['MYSQL_PWD' => (string) ($cfg['password'] ?? '')];
+
+        // Lancé depuis le navigateur, Apache ne transmet qu'un environnement
+        // réduit. Sous Windows, mysqldump initialise Winsock, qui a besoin de
+        // SystemRoot pour charger ses DLL : sans lui la création du socket
+        // échoue (« Can't create TCP/IP socket (10106) ») et la base n'est
+        // pas sauvegardée. On réinjecte donc explicitement le strict
+        // nécessaire, ici comme sous Linux.
+        foreach (['SystemRoot', 'SystemDrive', 'WINDIR', 'COMSPEC', 'PATH', 'TEMP', 'TMP'] as $cle) {
+            $valeur = getenv($cle);
+            if ($valeur !== false && $valeur !== '') {
+                $env[$cle] = $valeur;
+            }
+        }
+
+        $process = new \Symfony\Component\Process\Process($args, null, $env, null, 900);
 
         $process->run();
 
@@ -246,6 +273,9 @@ class SauvegardeService
                 'chemin'  => $f,
                 'taille'  => filesize($f) ?: 0,
                 'date'    => \Carbon\Carbon::createFromTimestamp(filemtime($f)),
+                // Restaurer une archive sans base ne rétablit rien :
+                // l'écran doit pouvoir la signaler clairement.
+                'base'    => !str_contains(basename($f), '-SANS-BASE'),
             ];
         }
         usort($out, fn ($a, $b) => $b['date']->getTimestamp() <=> $a['date']->getTimestamp());

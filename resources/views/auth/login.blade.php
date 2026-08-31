@@ -86,10 +86,19 @@
                     </a>
                 </div>
 
+                {{-- Identifiants de démonstration : JAMAIS en production.
+                     Affichés sur une page publique, ils donnent le compte
+                     super-administrateur à quiconque lit l'écran. --}}
+                @unless (app()->environment('production'))
+                    <div class="alert alert-warning mt-4 mb-0" style="font-size:12px;">
+                        <strong><i class="fas fa-flask"></i> Environnement de démonstration</strong>
+                        <div class="mt-1">Administrateur : <code>ADMIN001</code> / <code>admin123456</code></div>
+                        <div class="mt-1" style="color:var(--t2);">Ce bloc disparaît automatiquement en production.</div>
+                    </div>
+                @endunless
+
                 <div class="alert alert-info mt-4 mb-0" style="font-size:12px;">
-                    <strong><i class="fas fa-circle-info"></i> Démonstration</strong>
-                    <div class="mt-1">Administrateur : <code>ADMIN001</code> / <code>admin123456</code></div>
-                    <div class="mt-1" style="color:var(--t2);">Les étudiants créent leur compte via « S'inscrire ».</div>
+                    <div style="color:var(--t2);">Les étudiants créent leur compte via « S'inscrire ».</div>
                 </div>
             </div>
 

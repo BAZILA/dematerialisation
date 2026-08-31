@@ -134,16 +134,30 @@
                         </thead>
                         <tbody>
                             @forelse ($archives as $a)
-                                @php $baseSeule = str_contains($a['nom'], 'base-seule'); @endphp
-                                <tr>
-                                    <td><code class="small">{{ $a['nom'] }}</code></td>
+                                @php
+                                    $baseSeule = str_contains($a['nom'], 'base-seule');
+                                    // Archive dont le dump a échoué : elle ne restaure RIEN.
+                                    $sansBase  = !($a['base'] ?? true);
+                                @endphp
+                                <tr @class(['table-danger' => $sansBase])>
+                                    <td>
+                                        <code class="small">{{ $a['nom'] }}</code>
+                                        @if ($sansBase)
+                                            <div class="small text-danger fw-semibold mt-1">
+                                                <i class="fas fa-triangle-exclamation"></i>
+                                                Ne contient aucune donnée — inutilisable pour restaurer.
+                                            </div>
+                                        @endif
+                                    </td>
                                     <td class="small">
                                         {{ $a['date']->format('d/m/Y H:i') }}<br>
                                         <span class="text-muted">{{ $a['date']->diffForHumans() }}</span>
                                     </td>
                                     <td class="small">{{ $service->formaterTaille($a['taille']) }}</td>
                                     <td>
-                                        @if ($baseSeule)
+                                        @if ($sansBase)
+                                            <span class="badge bg-danger">Sans base</span>
+                                        @elseif ($baseSeule)
                                             <span class="badge bg-secondary">Base seule</span>
                                         @else
                                             <span class="badge bg-success">Base + pièces</span>
