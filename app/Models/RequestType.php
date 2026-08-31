@@ -64,14 +64,40 @@ class RequestType extends Model
         return $this->belongsToMany(Parcours::class, 'parcours_request_type');
     }
 
-    /* ── Portée : commune ou propre à des parcours ──────── */
+    /**
+     * Grades auxquels cette pièce est demandée (licence, master…).
+     * Se cumule avec la portée par parcours.
+     */
+    public function grades(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(RequestTypeGrade::class);
+    }
 
-    /** Pièce demandée à tous les candidats, quel que soit le parcours ? */
+    /** Codes des grades couverts, sous forme de tableau simple. */
+    public function gradesCodes(): array
+    {
+        return ($this->relationLoaded('grades') ? $this->grades : $this->grades()->get())
+            ->pluck('grade')->all();
+    }
+
+    /* ── Portée : commune, par grade, ou par parcours ───── */
+
+    /**
+     * Pièce demandée à tous les candidats ?
+     * Vrai seulement si AUCUNE restriction n'est posée — ni grade,
+     * ni parcours. Une pièce réservée aux masters n'est pas commune.
+     */
     public function estCommune(): bool
     {
-        return $this->relationLoaded('parcours')
+        $sansParcours = $this->relationLoaded('parcours')
             ? $this->parcours->isEmpty()
             : !$this->parcours()->exists();
+
+        $sansGrade = $this->relationLoaded('grades')
+            ? $this->grades->isEmpty()
+            : !$this->grades()->exists();
+
+        return $sansParcours && $sansGrade;
     }
 
     public function getPorteeLabelAttribute(): string
@@ -79,9 +105,21 @@ class RequestType extends Model
         if ($this->estCommune()) {
             return 'Commune à tous les parcours';
         }
-        $noms = $this->parcours->pluck('nom');
 
-        return 'Propre à : ' . $noms->implode(', ');
+        $morceaux = [];
+
+        $grades = collect($this->gradesCodes())
+            ->map(fn ($g) => Parcours::$grades[$g]['label'] ?? $g);
+        if ($grades->isNotEmpty()) {
+            $morceaux[] = 'Tout ' . $grades->implode(', ');
+        }
+
+        $noms = $this->parcours->pluck('nom');
+        if ($noms->isNotEmpty()) {
+            $morceaux[] = $noms->implode(', ');
+        }
+
+        return 'Propre à : ' . implode(' + ', $morceaux);
     }
 
     /**
@@ -94,11 +132,22 @@ class RequestType extends Model
     {
         $ids = array_values(array_filter(array_map('intval', $parcoursIds)));
 
-        return static::with('parcours')
+        // Les grades se déduisent des parcours visés : demander « tous les
+        // masters » ne doit pas obliger à les énumérer un par un.
+        $grades = $ids
+            ? Parcours::whereIn('id', $ids)->pluck('grade')->filter()->unique()->values()->all()
+            : [];
+
+        return static::with('parcours', 'grades')
             ->where('category', 'candidature')
             ->where('is_active', true)
-            ->where(function ($q) use ($ids) {
-                $q->whereDoesntHave('parcours');
+            ->where(function ($q) use ($ids, $grades) {
+                // Commune : aucune restriction, ni parcours ni grade
+                $q->where(fn ($sq) => $sq->whereDoesntHave('parcours')->whereDoesntHave('grades'));
+
+                if ($grades) {
+                    $q->orWhereHas('grades', fn ($g) => $g->whereIn('grade', $grades));
+                }
                 if ($ids) {
                     $q->orWhereHas('parcours', fn ($p) => $p->whereIn('parcours.id', $ids));
                 }

@@ -73,12 +73,13 @@
     {{-- Portée (candidatures uniquement) : commune ou propre à des parcours --}}
     @php
         $uid = $item?->id ?? 'new';
-        $porteeActuelle = old(
-            'portee',
-            $item && $item->parcours->isNotEmpty() ? 'specifique' : 'commune',
-        );
+        $aUnePortee = $item && ($item->parcours->isNotEmpty() || $item->grades->isNotEmpty());
+        $porteeActuelle = old('portee', $aUnePortee ? 'specifique' : 'commune');
         $parcoursCoches = collect(old('parcours_ids', $item?->parcours->pluck('id')->all() ?? []))
             ->map(fn($v) => (int) $v)
+            ->all();
+        $gradesCoches = collect(old('grades', $item?->grades->pluck('grade')->all() ?? []))
+            ->map(fn($v) => (string) $v)
             ->all();
     @endphp
     <div class="col-12" id="portee-row-{{ $uid }}"
@@ -98,12 +99,40 @@
                     id="portee-spe-{{ $uid }}" {{ $porteeActuelle === 'specifique' ? 'checked' : '' }}
                     onchange="togglePortee(this)">
                 <label class="form-check-label" for="portee-spe-{{ $uid }}">
-                    <strong>Propre à certains parcours</strong>
+                    <strong>Restreinte</strong> — à un niveau ou à des parcours
                 </label>
             </div>
         </div>
 
         <div id="portee-list-{{ $uid }}" style="display: {{ $porteeActuelle === 'specifique' ? '' : 'none' }};">
+
+            {{-- Par NIVEAU : évite d'énumérer chaque parcours, et couvre
+                 automatiquement ceux qui seront ouverts plus tard. --}}
+            <div class="mb-3">
+                <div class="small fw-semibold mb-2" style="color:var(--t2);">
+                    <i class="fas fa-graduation-cap"></i> Par niveau
+                </div>
+                <div class="d-flex gap-3 flex-wrap">
+                    @foreach ($grades ?? [] as $code => $info)
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="grades[]"
+                                value="{{ $code }}" id="gr-{{ $uid }}-{{ $code }}"
+                                {{ in_array($code, $gradesCoches, true) ? 'checked' : '' }}>
+                            <label class="form-check-label small" for="gr-{{ $uid }}-{{ $code }}">
+                                Tout {{ $info['label'] }}
+                            </label>
+                        </div>
+                    @endforeach
+                </div>
+                <small class="text-muted d-block mt-1">
+                    Cocher « Tout Master » réclame la pièce à chaque parcours de master,
+                    y compris ceux créés par la suite.
+                </small>
+            </div>
+
+            <div class="small fw-semibold mb-2" style="color:var(--t2);">
+                <i class="fas fa-list-check"></i> Par parcours précis
+            </div>
             <div class="border rounded p-2" style="max-height:220px;overflow-y:auto;">
                 @forelse ($parcoursParFaculte ?? [] as $facNom => $liste)
                     <div class="small fw-semibold mt-2 mb-1" style="color:var(--t2);">{{ $facNom }}</div>
@@ -123,7 +152,8 @@
                 @endforelse
             </div>
             <small class="text-muted">
-                Le candidat ne verra cette pièce que s'il choisit l'un des parcours cochés.
+                Les deux portées se cumulent : un niveau coché ET des parcours nommés
+                réclament la pièce dans les deux cas.
             </small>
         </div>
     </div>

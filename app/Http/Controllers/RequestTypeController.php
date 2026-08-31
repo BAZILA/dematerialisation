@@ -19,7 +19,7 @@ class RequestTypeController extends Controller
 
     public function index()
     {
-        $types = RequestType::with('parcours')
+        $types = RequestType::with('parcours', 'grades')
             ->orderBy('category')->orderBy('order')->orderBy('id')
             ->get()->groupBy('category');
         $categories = RequestType::categories();
@@ -29,21 +29,48 @@ class RequestTypeController extends Controller
             ->where('is_active', true)->orderBy('nom')->get()
             ->groupBy(fn ($p) => $p->departement?->faculte?->nom ?? 'Sans rattachement');
 
-        return view('admin.request_types.index', compact('types', 'categories', 'parcoursParFaculte'));
+        // Grades disponibles pour la portée « tout un niveau »
+        $grades = \App\Models\Parcours::$grades;
+
+        return view('admin.request_types.index',
+            compact('types', 'categories', 'parcoursParFaculte', 'grades'));
     }
 
-    /** Portée : aucun parcours coché (ou « commune ») = pièce commune à tous. */
+    /**
+     * Portée d'une pièce de candidature. Trois cas :
+     *   commune ...... aucune restriction, réclamée à tout le monde ;
+     *   par grade .... « tous les masters », sans énumérer les parcours ;
+     *   par parcours . nommés un par un.
+     * Grade et parcours se cumulent : on peut viser tous les masters
+     * ET ajouter une pièce propre au master d'informatique.
+     */
     private function syncPortee(Request $request, RequestType $type): void
     {
         if ($type->category !== 'candidature') {
             $type->parcours()->detach();
+            $type->grades()->delete();
 
             return;
         }
-        $ids = $request->input('portee') === 'specifique'
+
+        $specifique = $request->input('portee') === 'specifique';
+
+        $parcoursIds = $specifique
             ? array_filter((array) $request->input('parcours_ids', []))
             : [];
-        $type->parcours()->sync($ids);
+        $type->parcours()->sync($parcoursIds);
+
+        $grades = $specifique
+            ? array_values(array_intersect(
+                (array) $request->input('grades', []),
+                array_keys(\App\Models\Parcours::$grades)
+              ))
+            : [];
+
+        $type->grades()->delete();
+        foreach ($grades as $grade) {
+            $type->grades()->create(['grade' => $grade]);
+        }
     }
 
     /* ── Store ─────────────────────────────────────────── */
@@ -62,6 +89,8 @@ class RequestTypeController extends Controller
             'portee' => 'nullable|in:commune,specifique',
             'parcours_ids' => 'nullable|array',
             'parcours_ids.*' => 'integer|exists:parcours,id',
+            'grades' => 'nullable|array',
+            'grades.*' => 'string|max:30',
         ]);
 
         if ($data['category'] !== 'depot') {
@@ -103,6 +132,8 @@ class RequestTypeController extends Controller
             'portee' => 'nullable|in:commune,specifique',
             'parcours_ids' => 'nullable|array',
             'parcours_ids.*' => 'integer|exists:parcours,id',
+            'grades' => 'nullable|array',
+            'grades.*' => 'string|max:30',
         ]);
 
         if ($data['category'] !== 'depot') {
