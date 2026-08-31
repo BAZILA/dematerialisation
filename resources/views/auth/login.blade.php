@@ -4,7 +4,7 @@
 
 @section('css')
     <style>
-        .auth-card { width: 100%; max-width: 960px; border-radius: 20px !important; overflow: hidden; box-shadow: var(--shadow-lg) !important; }
+        .auth-card { width: 100%; max-width: 820px; border-radius: 20px !important; overflow: hidden; box-shadow: var(--shadow-lg) !important; }
         .auth-aside {
             background: linear-gradient(150deg, #1A56A8 0%, #1E7B67 55%, #2F9E33 100%);
             color: #fff; padding: 44px 40px; position: relative; overflow: hidden;

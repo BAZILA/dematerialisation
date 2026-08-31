@@ -72,9 +72,14 @@
 
         {{-- Recherche --}}
         <div class="card mb-4"><div class="card-body">
-            <form method="POST" action="{{ route('candidature.suivi.post') }}" class="d-flex gap-2">
+            {{-- Un numero de suivi fait 16 caracteres : un champ pleine largeur
+                 laisse croire qu'on attend davantage. --}}
+            <form method="POST" action="{{ route('candidature.suivi.post') }}"
+                class="d-flex gap-2 flex-wrap align-items-start">
                 @csrf
                 <input class="form-control" name="reference" placeholder="CAND-2026-XXXXXX"
+                    style="max-width:260px;text-transform:uppercase;letter-spacing:.04em;"
+                    maxlength="24" autocomplete="off"
                     value="{{ old('reference', $candidature->reference ?? request('reference')) }}" required>
                 <button class="btn btn-primary flex-shrink-0" data-loading-text="Recherche…"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
             </form>
