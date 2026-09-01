@@ -16,9 +16,18 @@ use Illuminate\Support\Facades\Log;
 class SauvegardeService
 {
     /** Dossier des archives (hors du disque public : jamais servi par le web). */
+    /**
+     * Dossier des archives.
+     *
+     * Le chemin passe par la configuration : sans cela, tout code qui
+     * appelle ce service — un test, un script — écrit dans le dossier
+     * réel et déclenche la purge de rétention sur de vraies
+     * sauvegardes. Un hébergement peut aussi vouloir les ranger hors
+     * de l'arborescence web.
+     */
     public function dossier(): string
     {
-        $dir = storage_path('app/sauvegardes');
+        $dir = config('sauvegarde.dossier') ?: storage_path('app/sauvegardes');
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }

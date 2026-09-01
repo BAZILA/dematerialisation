@@ -77,7 +77,9 @@ class StudentController extends Controller
         $fenetres = [];
         foreach ($categories as $cat) {
             $openCats[$cat] = $anneeActive ? $anneeActive->operationOpen($cat) : false;
-            $fenetres[$cat] = $anneeActive?->periodes->firstWhere('operation', $cat);
+            // Plusieurs regles peuvent exister par operation : celle qui
+            // s'affiche par defaut est la regle generale.
+            $fenetres[$cat] = $anneeActive?->periodeGenerale($cat);
         }
 
         $requestsByCategory = [];

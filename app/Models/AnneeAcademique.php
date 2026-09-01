@@ -85,30 +85,67 @@ class AnneeAcademique extends Model
      * (fenêtre cochée « ouverte » ET date du jour dans la période).
      * À utiliser pour toute création/soumission côté usager.
      */
-    public static function operationOuverte(string $operation): bool
+    public static function operationOuverte(string $operation, ?Parcours $parcours = null): bool
     {
         $a = static::active();
 
-        return $a ? $a->operationOpen($operation) : false;
+        return $a ? $a->operationOpen($operation, $parcours) : false;
     }
 
-    /** Une opération est-elle actuellement ouverte pour cette année ? */
-    public function operationOpen(string $operation): bool
+    /**
+     * Une opération est-elle ouverte ? Sans parcours, seule la règle
+     * générale est consultée — c'est le comportement historique.
+     * Avec un parcours, la règle la plus précise l'emporte.
+     */
+    public function operationOpen(string $operation, ?Parcours $parcours = null): bool
     {
         if ($this->statut !== 'ouverte') {
             return false;
         }
-        $p = $this->periodes->firstWhere('operation', $operation);
-        if (!$p || !$p->is_open) {
-            return false;
-        }
-        $today = now()->startOfDay();
-        if ($p->date_debut && $today->lt($p->date_debut)) {
-            return false;
-        }
-        if ($p->date_fin && $today->gt($p->date_fin->copy()->endOfDay())) {
-            return false;
-        }
-        return true;
+
+        $regle = $this->periodeApplicable($operation, $parcours);
+
+        return $regle ? $regle->ouverteAujourdhui() : false;
+    }
+
+    /**
+     * Règle qui décide pour ce parcours : la plus précise gagne.
+     * Un parcours nommé bat son niveau, qui bat la règle générale.
+     * Une seule règle décide — on ne cumule pas, sinon « fermé pour
+     * les masters » serait contredit par « ouvert pour tous ».
+     */
+    public function periodeApplicable(string $operation, ?Parcours $parcours = null): ?Periode
+    {
+        $candidates = $this->periodes
+            ->where('operation', $operation)
+            ->filter(function (Periode $p) use ($parcours) {
+                if ($p->parcours_id !== null) {
+                    return $parcours && (int) $p->parcours_id === (int) $parcours->id;
+                }
+                if ($p->grade !== null) {
+                    return $parcours && $p->grade === $parcours->grade;
+                }
+
+                return true;    // règle générale : toujours candidate
+            });
+
+        return $candidates->sortByDesc(fn (Periode $p) => $p->precision())->first();
+    }
+
+    /** Règle générale d'une opération, celle qui vaut par défaut. */
+    public function periodeGenerale(string $operation): ?Periode
+    {
+        return $this->periodes->first(
+            fn (Periode $p) => $p->operation === $operation && $p->estGenerale()
+        );
+    }
+
+    /** Règles ciblées d'une opération (niveau ou parcours). */
+    public function periodesCiblees(string $operation): \Illuminate\Support\Collection
+    {
+        return $this->periodes
+            ->filter(fn (Periode $p) => $p->operation === $operation && !$p->estGenerale())
+            ->sortByDesc(fn (Periode $p) => $p->precision())
+            ->values();
     }
 }

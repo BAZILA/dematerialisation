@@ -81,17 +81,47 @@
         $gradesCoches = collect(old('grades', $item?->grades->pluck('grade')->all() ?? []))
             ->map(fn($v) => (string) $v)
             ->all();
+
+        // Édité depuis l'écran d'un niveau : on ne montre QUE ce niveau et
+        // ses parcours. Proposer les autres n'aurait pas de sens ici, et
+        // le contrôleur préserve de son côté les portées non affichées.
+        $niveauCourant = $niveauCourant ?? null;
+        $gradesAffiches = $niveauCourant
+            ? array_intersect_key($grades ?? [], [$niveauCourant => true])
+            : ($grades ?? []);
+
+        // Portées hors du niveau courant : on les annonce, sans les toucher
+        $horsNiveau = [];
+        if ($niveauCourant && $item) {
+            $autresGrades = collect($item->grades->pluck('grade'))
+                ->reject(fn($g) => $g === $niveauCourant)
+                ->map(fn($g) => 'Tout ' . (\App\Models\Parcours::$grades[$g]['label'] ?? $g));
+            $autresParcours = $item->parcours
+                ->filter(fn($p) => $p->grade !== $niveauCourant)
+                ->pluck('nom');
+            $horsNiveau = $autresGrades->merge($autresParcours)->all();
+        }
     @endphp
     <div class="col-12" id="portee-row-{{ $uid }}"
         style="display: {{ old('category', $item?->category) === 'candidature' ? '' : 'none' }};">
         <label class="form-label">Portée de la pièce <span class="text-danger">*</span></label>
-        <div class="d-flex gap-3 flex-wrap mb-2">
+
+        {{-- « Commune » couvre TOUS les niveaux, pas seulement celui d'où
+             l'on édite. La confusion est facile depuis l'écran d'un niveau :
+             on le dit franchement. --}}
+        <div class="d-flex flex-column gap-2 mb-2">
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="portee" value="commune"
                     id="portee-com-{{ $uid }}" {{ $porteeActuelle === 'commune' ? 'checked' : '' }}
                     onchange="togglePortee(this)">
                 <label class="form-check-label" for="portee-com-{{ $uid }}">
-                    <strong>Commune</strong> — demandée à tous les candidats
+                    <strong>Commune à tous les niveaux</strong>
+                    <span class="d-block small" style="color:var(--t2);">
+                        Réclamée à chaque candidat de l'université — licence, master, doctorat…
+                        @if ($niveauCourant)
+                            Pas seulement en {{ \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant }}.
+                        @endif
+                    </span>
                 </label>
             </div>
             <div class="form-check">
@@ -99,7 +129,15 @@
                     id="portee-spe-{{ $uid }}" {{ $porteeActuelle === 'specifique' ? 'checked' : '' }}
                     onchange="togglePortee(this)">
                 <label class="form-check-label" for="portee-spe-{{ $uid }}">
-                    <strong>Restreinte</strong> — à un niveau ou à des parcours
+                    <strong>Restreinte</strong>
+                    <span class="d-block small" style="color:var(--t2);">
+                        @if ($niveauCourant)
+                            À tout {{ \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant }},
+                            ou à certains de ses parcours seulement.
+                        @else
+                            À un niveau entier, ou à des parcours nommés.
+                        @endif
+                    </span>
                 </label>
             </div>
         </div>
@@ -113,7 +151,7 @@
                     <i class="fas fa-graduation-cap"></i> Par niveau
                 </div>
                 <div class="d-flex gap-3 flex-wrap">
-                    @foreach ($grades ?? [] as $code => $info)
+                    @foreach ($gradesAffiches as $code => $info)
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="grades[]"
                                 value="{{ $code }}" id="gr-{{ $uid }}-{{ $code }}"
@@ -125,9 +163,23 @@
                     @endforeach
                 </div>
                 <small class="text-muted d-block mt-1">
-                    Cocher « Tout Master » réclame la pièce à chaque parcours de master,
-                    y compris ceux créés par la suite.
+                    @if ($niveauCourant)
+                        Cocher réclame la pièce à chaque parcours de ce niveau,
+                        y compris ceux créés par la suite.
+                    @else
+                        Cocher « Tout Master » réclame la pièce à chaque parcours de master,
+                        y compris ceux créés par la suite.
+                    @endif
                 </small>
+
+                @if ($horsNiveau)
+                    <div class="alert alert-secondary py-2 px-3 mt-2 mb-0" style="font-size:12px;">
+                        <i class="fas fa-lock"></i>
+                        Cette pièce est aussi rattachée ailleurs :
+                        <strong>{{ implode(', ', $horsNiveau) }}</strong>.
+                        Ces portées ne sont pas modifiables depuis cet écran et seront conservées.
+                    </div>
+                @endif
             </div>
 
             <div class="small fw-semibold mb-2" style="color:var(--t2);">

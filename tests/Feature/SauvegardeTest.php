@@ -15,6 +15,31 @@ class SauvegardeTest extends TestCase
 {
     use RefreshDatabase;
 
+    private string $dossierTest;
+
+    /**
+     * Le service purge les archives au-delà de la rétention. Sans
+     * isolation, ces tests écrivent dans le vrai dossier et effacent
+     * de vraies sauvegardes — c'est arrivé.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->dossierTest = sys_get_temp_dir() . '/uk_sauvegardes_' . uniqid();
+        config(['sauvegarde.dossier' => $this->dossierTest]);
+    }
+
+    protected function tearDown(): void
+    {
+        foreach (glob($this->dossierTest . '/*') ?: [] as $f) {
+            @unlink($f);
+        }
+        @rmdir($this->dossierTest);
+
+        parent::tearDown();
+    }
+
     private function service(): \App\Services\SauvegardeService
     {
         return app(\App\Services\SauvegardeService::class);
@@ -35,7 +60,7 @@ class SauvegardeTest extends TestCase
         $this->assertStringContainsString('SANS-BASE', $resultat['fichier'],
             "Le nom du fichier doit porter le manque.");
 
-        $chemin = storage_path('app/sauvegardes/' . $resultat['fichier']);
+        $chemin = $this->dossierTest . '/' . $resultat['fichier'];
         $this->assertFileExists($chemin);
         @unlink($chemin);
     }
@@ -61,7 +86,7 @@ class SauvegardeTest extends TestCase
         $this->socle();
 
         $resultat = $this->service()->executer(false, 'test');
-        $chemin = storage_path('app/sauvegardes/' . $resultat['fichier']);
+        $chemin = $this->dossierTest . '/' . $resultat['fichier'];
 
         $zip = new \ZipArchive();
         $zip->open($chemin);

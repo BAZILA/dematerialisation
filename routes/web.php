@@ -155,8 +155,17 @@ Route::middleware('auth')->group(function () {
 
         // CRUD types de documents
         Route::prefix('request-types')->name('request-types.')->group(function () {
-            Route::middleware('permission:types.voir|parametres.gerer')
-                ->get('/', [RequestTypeController::class, 'index'])->name('index');
+            Route::middleware('permission:types.voir|parametres.gerer')->group(function () {
+                Route::get('/', [RequestTypeController::class, 'index'])->name('index');
+                Route::get('/niveau/{grade}', [RequestTypeController::class, 'niveau'])->name('niveau');
+            });
+            // Ouvrir/fermer une procédure pour un niveau ou l'un de ses parcours
+            Route::middleware('permission:annees.gerer|parametres.gerer')->group(function () {
+                Route::post('/niveau/{grade}/ouverture',
+                    [RequestTypeController::class, 'enregistrerOuverture'])->name('ouverture');
+                Route::delete('/ouverture/{periode}',
+                    [RequestTypeController::class, 'supprimerOuverture'])->name('ouverture.supprimer');
+            });
             Route::middleware('permission:types.creer|parametres.gerer')
                 ->post('/', [RequestTypeController::class, 'store'])->name('store');
             Route::middleware('permission:types.editer|parametres.gerer')->group(function () {

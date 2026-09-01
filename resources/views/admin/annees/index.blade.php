@@ -66,12 +66,38 @@
                             </thead>
                             <tbody>
                                 @foreach ($ops as $opKey => $opLabel)
-                                    @php $p = $a->periodes->firstWhere('operation', $opKey); @endphp
+                                    @php
+                                        // La ligne montre la regle GENERALE ; les regles
+                                        // ciblees (niveau, parcours) se pilotent depuis
+                                        // l'ecran des pieces attendues.
+                                        $p = $a->periodeGenerale($opKey);
+                                        $ciblees = $a->periodesCiblees($opKey);
+                                    @endphp
                                     <tr>
-                                        <td><strong>{{ $opLabel }}</strong></td>
                                         <td>
-                                            @if ($p && $p->is_open)
+                                            <strong>{{ $opLabel }}</strong>
+                                            @if ($ciblees->isNotEmpty())
+                                                <div class="small mt-1" style="color:var(--t3);">
+                                                    <i class="fas fa-crosshairs"></i>
+                                                    {{ $ciblees->count() }} règle(s) ciblée(s) :
+                                                    {{ $ciblees->take(3)->map(fn($c) => $c->cible_label)->implode(', ') }}{{ $ciblees->count() > 3 ? '…' : '' }}
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @php
+                                                // Le drapeau seul ment : une fenêtre cochée
+                                                // « ouverte » dont les dates sont passées ne
+                                                // laisse plus rien deposer.
+                                                $effective = $p && $p->ouverteAujourdhui();
+                                            @endphp
+                                            @if ($effective)
                                                 <span class="badge bg-success"><i class="fas fa-lock-open"></i> Ouverte</span>
+                                            @elseif ($p && $p->is_open)
+                                                <span class="badge bg-warning text-dark"
+                                                    title="Cochée ouverte, mais hors de sa période">
+                                                    <i class="fas fa-clock"></i> Hors période
+                                                </span>
                                             @else
                                                 <span class="badge bg-secondary"><i class="fas fa-lock"></i> Fermée</span>
                                             @endif
