@@ -29,6 +29,17 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     // Anti-force brute : 5 tentatives / minute / IP
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1')->name('login.post');
+    /* Acces des usagers par code, sans mot de passe. Les cadences sont
+       serrees : le code est court, et devine-t-on lentement ou pas du tout. */
+    Route::get('/acces', [\App\Http\Controllers\AccesController::class, 'identite'])->name('acces.identite');
+    Route::post('/acces', [\App\Http\Controllers\AccesController::class, 'verifierIdentite'])
+        ->middleware('throttle:8,1')->name('acces.identite.post');
+    Route::get('/acces/code', [\App\Http\Controllers\AccesController::class, 'code'])->name('acces.code');
+    Route::post('/acces/code', [\App\Http\Controllers\AccesController::class, 'verifierCode'])
+        ->middleware('throttle:10,1')->name('acces.code.post');
+    Route::post('/acces/renvoyer', [\App\Http\Controllers\AccesController::class, 'renvoyer'])
+        ->middleware('throttle:4,1')->name('acces.renvoyer');
+
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register/verify', [AuthController::class, 'verifyIdentity'])->middleware('throttle:10,1')->name('register.verify');
     Route::get('/register/complete', [AuthController::class, 'showComplete'])->name('register.complete');

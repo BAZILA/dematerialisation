@@ -71,6 +71,19 @@ class NotificationService
                 . ":motif\n\nConnectez-vous à votre espace personnel pour remplacer les pièces concernées.\n\n:universite",
             'sms'   => ":universite : votre :procedure attend une correction depuis :jours jour(s). Connectez-vous.",
         ],
+        'acces.code' => [
+            'sujet' => "Votre code d'accès",
+            'email' => "Bonjour :nom,
+
+Voici votre code d'accès : :code
+
+"
+                . "Il est valable :minutes minutes et ne sert qu'une fois. "
+                . "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.
+
+:universite",
+            'sms'   => ":universite : votre code d'acces est :code (valable :minutes min).",
+        ],
         'paiement.valide' => [
             'sujet' => 'Paiement confirmé',
             'email' => "Bonjour :nom,\n\nVotre paiement de :montant (référence :reference) a bien été enregistré.\n\n"

@@ -70,6 +70,19 @@
                     </button>
                 </form>
 
+                @if (app(\App\Services\AccesParCode::class)->actif())
+                    {{-- Mode code actif : les usagers n'ont plus de mot de passe,
+                         on les oriente avant qu'ils ne cherchent le leur. --}}
+                    <div class="alert alert-info mt-3 mb-0" style="font-size:13px;">
+                        <strong><i class="fas fa-key"></i> Étudiant ou candidat ?</strong>
+                        <div class="mt-1">Vous n'avez pas de mot de passe : accédez à votre espace
+                            en vérifiant simplement votre identité.</div>
+                        <a href="{{ route('acces.identite') }}" class="btn btn-primary btn-sm w-100 mt-2">
+                            <i class="fas fa-arrow-right"></i> Accéder à mon espace
+                        </a>
+                    </div>
+                @endif
+
                 <hr style="margin:22px 0;">
                 <p class="text-center mb-0" style="font-size:13.5px;color:var(--t2);">
                     Pas encore de compte ?
