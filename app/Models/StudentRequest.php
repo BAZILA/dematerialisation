@@ -110,6 +110,60 @@ class StudentRequest extends Model
         return $this->files->firstWhere('request_type_id', $type->id);
     }
 
+    /* --- Derogations : pieces obligatoires differees --- */
+
+    public function derogations()
+    {
+        return $this->hasMany(Derogation::class);
+    }
+
+    /** Pieces encore dues au titre d'une derogation. */
+    public function derogationsEnCours()
+    {
+        return $this->derogations()->where('statut', 'engagee');
+    }
+
+    /** Le dossier avance-t-il avec une piece encore attendue ? */
+    public function sousDerogation(): bool
+    {
+        return $this->relationLoaded('derogations')
+            ? $this->derogations->where('statut', 'engagee')->isNotEmpty()
+            : $this->derogationsEnCours()->exists();
+    }
+
+    /**
+     * Pieces obligatoires absentes que l'usager PEUT differer.
+     * Les autres restent bloquantes : toutes ne se prêtent pas au report.
+     *
+     * @return \Illuminate\Support\Collection<int,RequestType>
+     */
+    public function piecesDerogeables()
+    {
+        return $this->piecesObligatoiresManquantes()
+            ->filter(fn (RequestType $t) => (bool) $t->derogation_possible)
+            ->values();
+    }
+
+    /** Pieces obligatoires absentes qui bloquent encore la soumission. */
+    public function piecesBloquantes()
+    {
+        $derogees = $this->derogations()->where('statut', 'engagee')
+            ->pluck('request_type_id')->all();
+
+        return $this->piecesObligatoiresManquantes()
+            ->reject(fn (RequestType $t) => in_array($t->id, $derogees, true))
+            ->values();
+    }
+
+    /** @return \Illuminate\Support\Collection<int,RequestType> */
+    public function piecesObligatoiresManquantes()
+    {
+        return RequestType::forCategory($this->category, $this->student->user->type_etudiant)
+            ->where('is_required', true)
+            ->reject(fn (RequestType $t) => (bool) $this->fileForType($t))
+            ->values();
+    }
+
     public function allRequiredFilesUploaded(): bool
     {
         $required = RequestType::forCategory(

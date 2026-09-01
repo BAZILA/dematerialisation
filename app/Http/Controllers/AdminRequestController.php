@@ -254,6 +254,33 @@ class AdminRequestController extends Controller
         return view('admin.requests.show', compact('studentRequest', 'types'));
     }
 
+    /**
+     * Levee d'une derogation : l'agent constate que la piece promise
+     * est arrivee. Le dossier cesse alors d'etre « sous derogation ».
+     */
+    public function leverDerogation(Request $request, \App\Models\Derogation $derogation)
+    {
+        $sr = $derogation->studentRequest;
+        abort_unless($request->user()->coversRequest($sr), 403,
+            "Cette demande est hors de votre périmètre d'affectation.");
+
+        if (!$derogation->estEnCours()) {
+            return back()->withErrors('Cette dérogation a déjà été traitée.');
+        }
+
+        $derogation->update([
+            'statut'    => 'levee',
+            'levee_at'  => now(),
+            'levee_par' => $request->user()->id,
+        ]);
+
+        \App\Models\AuditLog::record('depot.derogation_levee', $sr,
+            'Dérogation levée sur « ' . ($derogation->requestType->label ?? 'document')
+            . " » — pièce fournie ({$sr->reference})");
+
+        return back()->with('success', 'Dérogation levée : la pièce est enregistrée comme fournie.');
+    }
+
     /* ── Aperçu & téléchargement (admin voit l'original) ── */
 
     public function previewFile(Request $request, $fileId)

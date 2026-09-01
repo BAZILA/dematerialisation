@@ -335,6 +335,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/requests/{category?}', [AdminRequestController::class, 'index'])->name('requests.index');
         Route::get('/requests/detail/{studentRequest}', [AdminRequestController::class, 'show'])->name('requests.show');
         Route::post('/requests/{studentRequest}/validate', [AdminRequestController::class, 'validate'])->name('requests.validate');
+        // Levée d'une dérogation : la pièce promise est arrivée
+        Route::post('/derogations/{derogation}/lever', [AdminRequestController::class, 'leverDerogation'])
+            ->name('derogations.lever');
         Route::post('/requests/{studentRequest}/reject', [AdminRequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{studentRequest}/reject-final', [AdminRequestController::class, 'rejectFinal'])->name('requests.reject-final');
         // Annuler une validation : réservé aux superviseurs (permission dédiée,

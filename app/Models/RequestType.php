@@ -14,7 +14,7 @@ class RequestType extends Model
         'category',       // code de procédure (table procedures)
         'type_etudiant',  // 'nouveau' | 'ancien' | 'both'
         'description',
-        'is_required',
+        'is_required', 'derogation_possible',
         'is_active',
         'has_stamp',      // tamponné automatiquement à la validation
         'fills_verso',    // fiche dont le verso est rempli automatiquement
@@ -26,6 +26,7 @@ class RequestType extends Model
         'is_active'   => 'boolean',
         'has_stamp'   => 'boolean',
         'fills_verso' => 'boolean',
+        'derogation_possible' => 'boolean',
     ];
 
     /* ── Catégories = procédures (dynamiques, gérables depuis l'interface) ── */

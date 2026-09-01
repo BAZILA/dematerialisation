@@ -233,8 +233,29 @@ class StudentRequestController extends Controller
                 ->withErrors("« {$label} » est actuellement fermé : la soumission n'est plus possible. Contactez l'administration si la période doit être prolongée.");
         }
 
-        if (!$sr->allRequiredFilesUploaded()) {
-            return $this->tabRedirect($tab)->withErrors('Uploadez tous les documents obligatoires avant de soumettre.');
+        /* Certaines pieces obligatoires mettent des semaines a etre
+           delivrees, et la periode de depot, elle, se ferme. L'usager
+           peut s'engager a les fournir plus tard — mais seulement pour
+           les pieces que l'administration a ouvertes a la derogation. */
+        $engagements = array_map('intval', (array) $request->input('derogations', []));
+        $derogeables = $sr->piecesDerogeables()->pluck('id')->all();
+        $retenus = array_values(array_intersect($engagements, $derogeables));
+
+        foreach ($retenus as $typeId) {
+            \App\Models\Derogation::updateOrCreate(
+                ['student_request_id' => $sr->id, 'request_type_id' => $typeId],
+                ['statut' => 'engagee', 'engagee_at' => now(),
+                 'levee_at' => null, 'levee_par' => null]
+            );
+        }
+
+        $bloquantes = $sr->fresh()->piecesBloquantes();
+        if ($bloquantes->isNotEmpty()) {
+            $noms = $bloquantes->pluck('label')->implode(', ');
+
+            return $this->tabRedirect($tab)->withErrors(
+                "Il manque encore : {$noms}. Ces pièces sont exigées pour soumettre."
+            );
         }
 
         // Pour un dépôt : l'étudiant doit avoir confirmé l'engagement (« Lu et approuvé »)
@@ -249,6 +270,12 @@ class StudentRequestController extends Controller
             'version' => $sr->version + 1,
             'engagement_accepte' => $sr->category === 'depot' ? true : $sr->engagement_accepte,
         ]);
+
+        if ($retenus) {
+            $libelles = \App\Models\RequestType::whereIn('id', $retenus)->pluck('label')->implode(', ');
+            \App\Models\AuditLog::record('depot.derogation', $sr,
+                "Dossier soumis sous dérogation — pièce(s) attendue(s) : {$libelles}");
+        }
 
         // Frais de dossier : créés à la soumission si la procédure est payante
         $paiement = app(\App\Services\Paiement\PaiementService::class)
