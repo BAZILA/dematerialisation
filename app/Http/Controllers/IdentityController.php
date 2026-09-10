@@ -137,6 +137,119 @@ class IdentityController extends Controller
             ->with('success', "« {$a->full_name} » ajouté au référentiel : il peut désormais créer son compte et déposer.");
     }
 
+    /* ── Modification d'une fiche du référentiel ─────────── */
+
+    /**
+     * L'identité civile vit à deux endroits : la fiche du référentiel,
+     * et — dès qu'un compte existe — la fiche « student » qui en porte
+     * une copie. C'est cette copie qui alimente les documents tamponnés.
+     * Les laisser diverger produirait un diplôme au mauvais nom : on
+     * répercute donc toute correction sur les deux.
+     */
+    private function repercuterSurLeCompte($fiche, array $data): void
+    {
+        $student = $fiche->student;
+        if (!$student) {
+            return;
+        }
+
+        $student->update(array_filter([
+            'nom'            => $data['nom'] ?? null,
+            'prenom'         => $data['prenom'] ?? null,
+            'sexe'           => $data['sexe'] ?? null,
+            'date_naissance' => $data['date_naissance'] ?? null,
+            'lieu_naissance' => $data['lieu_naissance'] ?? null,
+            'telephone'      => $data['telephone'] ?? null,
+        ], fn ($v) => $v !== null));
+    }
+
+    public function updateBachelier(Request $request, Bachelier $bachelier)
+    {
+        $data = $request->validate([
+            'nom'            => 'required|string|max:100',
+            'prenom'         => 'required|string|max:100',
+            'sexe'           => 'required|in:M,F',
+            'date_naissance' => 'required|date|before:today',
+            'lieu_naissance' => 'required|string|max:150',
+            // Les unicités ignorent la fiche modifiée : sans cela, on ne
+            // pourrait plus enregistrer sans changer ses propres numéros.
+            'numero_suivi'   => 'nullable|string|max:50|unique:bacheliers,numero_suivi,' . $bachelier->id,
+            'serie_bac'      => 'nullable|string|max:50',
+            'annee_bac'      => 'nullable|string|max:10',
+            'numero_releve'  => 'nullable|string|max:50|unique:bacheliers,numero_releve,' . $bachelier->id,
+            'numero_table'   => 'nullable|string|max:50',
+            'academie'       => 'nullable|string|max:100',
+            'telephone'      => 'nullable|string|max:30',
+            'email'          => 'nullable|email|max:150',
+        ], [
+            'date_naissance.before' => "La date de naissance doit être antérieure à aujourd'hui.",
+            'numero_suivi.unique'   => 'Ce numéro de suivi est déjà attribué à un autre bachelier.',
+            'numero_releve.unique'  => 'Ce numéro de relevé est déjà attribué à un autre bachelier.',
+        ], [
+            'numero_suivi'   => 'numéro de suivi',
+            'numero_releve'  => 'numéro de relevé',
+            'date_naissance' => 'date de naissance',
+            'lieu_naissance' => 'lieu de naissance',
+        ]);
+
+        /* Le bachelier se reconnaît par son numéro de suivi ou de relevé :
+           les retirer tous les deux le rendrait introuvable. */
+        if (blank($data['numero_suivi'] ?? null) && blank($data['numero_releve'] ?? null)) {
+            return back()->withInput()->withErrors([
+                'numero_suivi' => "Gardez au moins le numéro de suivi ou le numéro de relevé : c'est la clé qui permet à l'étudiant de se connecter.",
+            ]);
+        }
+
+        $avant = $bachelier->full_name;
+        $bachelier->update($data);
+        $this->repercuterSurLeCompte($bachelier->fresh(), $data);
+
+        \App\Models\AuditLog::record('identites.modification', $bachelier,
+            "Bachelier modifié : {$avant} → {$bachelier->full_name}",
+            ['type' => 'bachelier', 'numero_suivi' => $bachelier->numero_suivi]);
+
+        return redirect()->route('admin.identites.index', ['tab' => 'bacheliers'])
+            ->with('success', "Fiche de « {$bachelier->full_name} » mise à jour.");
+    }
+
+    public function updateAncien(Request $request, AncienEtudiant $ancien)
+    {
+        $data = $request->validate([
+            'nom'                 => 'required|string|max:100',
+            'prenom'              => 'required|string|max:100',
+            'sexe'                => 'required|in:M,F',
+            'date_naissance'      => 'required|date|before:today',
+            'lieu_naissance'      => 'required|string|max:150',
+            'numero_carte'        => 'required|string|max:50|unique:anciens_etudiants,numero_carte,' . $ancien->id,
+            'numero_suivi'        => 'nullable|string|max:50',
+            'specialite'          => 'nullable|string|max:150',
+            'derniere_universite' => 'nullable|string|max:150',
+            'telephone'           => 'nullable|string|max:30',
+            'email'               => 'nullable|email|max:150',
+            'adresse'             => 'nullable|string|max:255',
+        ], [
+            'date_naissance.before' => "La date de naissance doit être antérieure à aujourd'hui.",
+            'numero_carte.unique'   => 'Ce numéro de carte est déjà attribué à un autre étudiant.',
+        ], [
+            'numero_carte'        => 'numéro de carte',
+            'numero_suivi'        => 'numéro de suivi',
+            'date_naissance'      => 'date de naissance',
+            'lieu_naissance'      => 'lieu de naissance',
+            'derniere_universite' => 'dernière université',
+        ]);
+
+        $avant = $ancien->full_name;
+        $ancien->update($data);
+        $this->repercuterSurLeCompte($ancien->fresh(), $data);
+
+        \App\Models\AuditLog::record('identites.modification', $ancien,
+            "Ancien étudiant modifié : {$avant} → {$ancien->full_name}",
+            ['type' => 'ancien', 'numero_carte' => $ancien->numero_carte]);
+
+        return redirect()->route('admin.identites.index', ['tab' => 'anciens'])
+            ->with('success', "Fiche de « {$ancien->full_name} » mise à jour.");
+    }
+
     /* ── Suppression : impossible dès qu'un compte est rattaché ── */
 
     public function destroyBachelier(Bachelier $bachelier)

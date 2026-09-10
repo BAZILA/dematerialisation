@@ -244,6 +244,9 @@ Route::middleware('auth')->group(function () {
                 Route::post('/anciens/import', [IdentityController::class, 'importAnciens'])->name('anciens.import');
                 // Ajout manuel : un étudiant absent du fichier doit pouvoir déposer
                 Route::post('/bacheliers', [IdentityController::class, 'storeBachelier'])->name('bacheliers.store');
+                // Corriger une fiche : une erreur de saisie bloque la connexion
+                Route::put('/bacheliers/{bachelier}', [IdentityController::class, 'updateBachelier'])->name('bacheliers.update');
+                Route::put('/anciens/{ancien}', [IdentityController::class, 'updateAncien'])->name('anciens.update');
                 Route::post('/anciens', [IdentityController::class, 'storeAncien'])->name('anciens.store');
                 Route::delete('/bacheliers/{bachelier}', [IdentityController::class, 'destroyBachelier'])->name('bacheliers.destroy');
                 Route::delete('/anciens/{ancien}', [IdentityController::class, 'destroyAncien'])->name('anciens.destroy');
@@ -262,6 +265,9 @@ Route::middleware('auth')->group(function () {
                 Route::put('/{user}', [UserController::class, 'update'])->name('update');
                 // Réinitialiser la 2FA d'un compte (téléphone perdu, etc.)
                 Route::post('/{user}/2fa-reset', [\App\Http\Controllers\TwoFactorController::class, 'reset'])->name('2fa-reset');
+                // Filet : un compte cree par code n'a pas de mot de passe utilisable
+                Route::post('/{user}/mot-de-passe', [\App\Http\Controllers\UserController::class, 'reinitialiserMotDePasse'])
+                    ->name('mot-de-passe');
             });
             Route::middleware('permission:utilisateurs.supprimer|utilisateurs.gerer')
                 ->delete('/{user}', [UserController::class, 'destroy'])->name('destroy');

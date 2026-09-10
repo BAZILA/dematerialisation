@@ -116,6 +116,45 @@ class UserController extends Controller
         return back()->with('success', 'Compte mis à jour.');
     }
 
+    /**
+     * Redonne un mot de passe utilisable a un usager.
+     *
+     * Un compte cree par la connexion par code recoit un mot de passe
+     * aleatoire que personne ne connait : l'acces passe uniquement par
+     * code. Le jour ou ce module est eteint, ces comptes n'ont plus
+     * aucune porte — et l'application n'offre pas de « mot de passe
+     * oublie ». Ceci est cette porte : l'administration remet un mot de
+     * passe provisoire, affiche UNE FOIS, a transmettre de vive voix.
+     */
+    public function reinitialiserMotDePasse(Request $request, User $user)
+    {
+        abort_unless($request->user()->can('utilisateurs.gerer'), 403);
+
+        // Un super-administrateur ne se fait pas remettre son mot de
+        // passe par un autre compte : ce serait une prise de controle.
+        if ($user->isSuperAdmin() && !$request->user()->isSuperAdmin()) {
+            return back()->withErrors(
+                "Le mot de passe d'un super-administrateur ne peut etre reinitialise que par un autre super-administrateur."
+            );
+        }
+
+        $provisoire = \Illuminate\Support\Str::password(12, true, true, false, false);
+
+        $user->forceFill([
+            'password' => \Illuminate\Support\Facades\Hash::make($provisoire),
+        ])->save();
+
+        \App\Models\AuditLog::record('utilisateur.mot_de_passe_reinitialise', $user,
+            "Mot de passe reinitialise pour {$user->numero_identifiant}");
+
+        /* Le mot de passe transite par la session le temps d'un
+           affichage, jamais par la base ni par le journal. */
+        return back()->with('mot_de_passe_provisoire', [
+            'identifiant' => $user->numero_identifiant,
+            'valeur'      => $provisoire,
+        ])->with('success', "Mot de passe reinitialise pour « {$user->numero_identifiant} ».");
+    }
+
     public function destroy(User $user)
     {
         if ($user->id === auth()->id()) {

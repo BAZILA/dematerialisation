@@ -3,6 +3,8 @@
 @section('page-subtitle', 'Référentiel des bacheliers et anciens étudiants (Excel / CSV)')
 
 @section('content')
+    @include('admin._mot_de_passe_provisoire')
+
     @if (session('import_errors'))
         <div class="alert alert-warning">
             <strong><i class="fas fa-triangle-exclamation"></i> Lignes ignorées ({{ count(session('import_errors')) }} affichées) :</strong>
@@ -230,6 +232,36 @@
                                         </td>
                                         <td class="text-center">
                                             @can('identites.importer')
+                                                {{-- Corriger reste possible meme avec un compte : une faute
+                                                     de frappe sur l'identite empeche justement d'entrer. --}}
+                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#modalFiche{{ $l['tab'] }}{{ $it->id }}"
+                                                    title="Modifier la fiche">
+                                                    <i class="fas fa-pen"></i>
+                                                </button>
+                                            @endcan
+
+                                            {{-- Le compte d'un usager n'apparait PAS dans l'ecran
+                                                 Utilisateurs, qui ne liste que le personnel. C'est
+                                                 donc ici, et nulle part ailleurs, qu'on peut lui
+                                                 redonner un mot de passe utilisable — un compte cree
+                                                 par la connexion par code n'en a aucun. --}}
+                                            @can('utilisateurs.gerer')
+                                                @if ($it->student?->user)
+                                                    <form method="POST" class="d-inline"
+                                                        action="{{ route('admin.utilisateurs.mot-de-passe', $it->student->user) }}"
+                                                        onsubmit="return confirm('Donner un mot de passe provisoire a {{ addslashes($it->full_name) }} ?');">
+                                                        @csrf
+                                                        <button class="btn btn-sm btn-outline-secondary"
+                                                            title="Reinitialiser son mot de passe">
+                                                            <i class="fas fa-key"></i>
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            @endcan
+
+                                            @can('identites.importer')
                                                 @if (!$it->is_registered && !$it->student)
                                                     <form method="POST" action="{{ route($l['destroy'], $it) }}" class="d-inline"
                                                         onsubmit="return confirm('Retirer {{ addslashes($it->full_name) }} du référentiel ?');">
@@ -259,6 +291,40 @@
                     </div>
                 </div>
                 <div class="d-flex justify-content-center mt-3">{{ $l['items']->links('pagination::bootstrap-5') }}</div>
+
+                @can('identites.importer')
+                    @foreach ($l['items'] as $it)
+                        <div class="modal fade" id="modalFiche{{ $l['tab'] }}{{ $it->id }}" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <form method="POST"
+                                        action="{{ route('admin.identites.' . $l['tab'] . '.update', $it) }}">
+                                        @csrf @method('PUT')
+                                        <div class="modal-header">
+                                            <h6 class="modal-title">
+                                                <i class="fas fa-pen"></i> {{ $it->full_name }}
+                                            </h6>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            @include('admin.identities._fiche', [
+                                                'item' => $it,
+                                                'type' => $l['tab'],
+                                            ])
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-outline-secondary"
+                                                data-bs-dismiss="modal">Annuler</button>
+                                            <button class="btn btn-primary">
+                                                <i class="fas fa-check"></i> Enregistrer
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                @endcan
             </div>
         @endforeach
     </div>

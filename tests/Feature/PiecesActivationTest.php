@@ -29,7 +29,8 @@ class PiecesActivationTest extends TestCase
     private function piece(string $libelle = 'Acte de naissance', bool $active = true): RequestType
     {
         return RequestType::create([
-            'label' => $libelle, 'category' => 'depot', 'type_etudiant' => 'both',
+            'label' => $libelle, 'category' => 'depot', 'grade' => 'licence',
+            'type_etudiant' => 'both',
             'is_required' => true, 'is_active' => $active,
         ]);
     }
@@ -39,6 +40,7 @@ class PiecesActivationTest extends TestCase
         return array_merge([
             'label' => $type->label,
             'category' => $type->category,
+            'grade' => $type->grade ?? 'licence',
             'type_etudiant' => 'both',
             'niveau' => 'licence',
         ], $ecrase);
@@ -148,8 +150,8 @@ class PiecesActivationTest extends TestCase
     public function test_l_ecran_offre_desactivation_et_suppression(): void
     {
         $this->socle();
+        // Le niveau est porte par la piece elle-meme, plus par une table de liaison.
         $type = $this->piece();
-        $type->grades()->create(['grade' => 'licence']);
 
         $this->actingAs($this->pilote())
             ->get('/admin/request-types/niveau/licence')

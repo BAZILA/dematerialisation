@@ -30,6 +30,13 @@ class CycleCompletTest extends TestCase
     use RefreshDatabase;
 
     private ?AnneeAcademique $annee = null;
+    private ?\App\Models\Parcours $parcoursTest = null;
+
+    /** Le parcours decide du niveau, et le niveau decide des pieces. */
+    private function parcoursTest(): \App\Models\Parcours
+    {
+        return $this->parcoursTest ??= $this->parcours();
+    }
 
     protected function setUp(): void
     {
@@ -106,7 +113,8 @@ class CycleCompletTest extends TestCase
     {
         return RequestType::create([
             'label' => 'Pièce justificative — ' . $categorie,
-            'category' => $categorie, 'type_etudiant' => 'both',
+            'category' => $categorie, 'grade' => $this->parcoursTest()->grade,
+            'type_etudiant' => 'both',
             'is_required' => true, 'is_active' => true, 'has_stamp' => false,
         ]);
     }
@@ -132,7 +140,9 @@ class CycleCompletTest extends TestCase
         $usager = $this->ancien();
 
         // 1. Création
-        $this->actingAs($usager)->post('/student/requests/create', ['category' => $categorie]);
+        $this->actingAs($usager)->post('/student/requests/create', [
+            'category' => $categorie, 'parcours_id' => $this->parcoursTest()->id,
+        ]);
         $dossier = StudentRequest::where('category', $categorie)->latest('id')->first();
         $this->assertNotNull($dossier, "Création impossible pour « {$categorie} ».");
 
@@ -197,7 +207,9 @@ class CycleCompletTest extends TestCase
         $this->pieceAttendue($categorie);
         $usager = $this->ancien();
 
-        $this->actingAs($usager)->post('/student/requests/create', ['category' => $categorie]);
+        $this->actingAs($usager)->post('/student/requests/create', [
+            'category' => $categorie, 'parcours_id' => $this->parcoursTest()->id,
+        ]);
         $dossier = StudentRequest::where('category', $categorie)->latest('id')->first();
 
         // Aucune pièce déposée

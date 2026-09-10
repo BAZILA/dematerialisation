@@ -15,6 +15,8 @@
         ];
     @endphp
 
+    @include('admin._mot_de_passe_provisoire')
+
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="text-muted small"><i class="fas fa-circle-info"></i> Les <strong>noms réels</strong> et <strong>signatures</strong> apparaissent sur les fiches validées (verso).</div>
         @canany(['utilisateurs.creer', 'utilisateurs.gerer'])
@@ -70,6 +72,18 @@
                                         </button>
                                     </form>
                                 @endif
+                                @can('utilisateurs.gerer')
+                                    {{-- Un compte cree par la connexion par code n'a aucun mot de passe
+                                         utilisable, et l'application n'offre pas de « mot de passe
+                                         oublie » : ceci est la seule porte de secours. --}}
+                                    <form method="POST" action="{{ route('admin.utilisateurs.mot-de-passe', $u) }}" class="d-inline"
+                                        onsubmit="return confirm('Donner un nouveau mot de passe provisoire a {{ addslashes($u->staff_name) }} ? L'ancien cessera aussitot de fonctionner.')">
+                                        @csrf
+                                        <button class="btn btn-sm btn-outline-secondary" title="Reinitialiser le mot de passe">
+                                            <i class="fas fa-key"></i>
+                                        </button>
+                                    </form>
+                                @endcan
                                 @if ($u->id !== auth()->id() && auth()->user()->canAny(['utilisateurs.supprimer', 'utilisateurs.gerer']))
                                     <form method="POST" action="{{ route('admin.utilisateurs.destroy', $u) }}" class="d-inline" onsubmit="return confirm('Supprimer ce compte ?')">
                                         @csrf @method('DELETE')

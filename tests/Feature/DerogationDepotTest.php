@@ -47,10 +47,20 @@ class DerogationDepotTest extends TestCase
         return $user->fresh();
     }
 
+    private ?\App\Models\Parcours $parcoursTest = null;
+
+    /** Le parcours porte le niveau, et le niveau decide des pieces. */
+    private function parcoursTest(): \App\Models\Parcours
+    {
+        return $this->parcoursTest ??= $this->parcours();
+    }
+
     private function typeDepot(string $libelle, bool $derogeable = false): RequestType
     {
         return RequestType::create([
-            'label' => $libelle, 'category' => 'depot', 'type_etudiant' => 'both',
+            'label' => $libelle, 'category' => 'depot',
+            'grade' => $this->parcoursTest()->grade,
+            'type_etudiant' => 'both',
             'is_required' => true, 'is_active' => true,
             'derogation_possible' => $derogeable,
         ]);
@@ -71,6 +81,7 @@ class DerogationDepotTest extends TestCase
 
         return StudentRequest::create([
             'student_id' => $user->student->id, 'category' => 'depot',
+            'parcours_id' => $this->parcoursTest()->id,
             'annee_academique_id' => $annee->id, 'status' => 'brouillon', 'version' => 1,
         ]);
     }

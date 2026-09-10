@@ -98,11 +98,20 @@ abstract class TestCase extends BaseTestCase
      * Un type de document attendu. Sans parcours = pièce COMMUNE ;
      * avec parcours = pièce PROPRE à ce parcours.
      */
-    protected function typeDocument(string $libelle = 'Acte de naissance', ?Parcours $parcours = null): \App\Models\RequestType
-    {
+    /**
+     * Une piece attendue. Le niveau est desormais obligatoire : une piece
+     * appartient a un niveau et un seul, les niveaux partageant les
+     * procedures mais jamais les pieces.
+     */
+    protected function typeDocument(
+        string $libelle = 'Acte de naissance',
+        ?Parcours $parcours = null,
+        string $grade = 'licence'
+    ): \App\Models\RequestType {
         $type = \App\Models\RequestType::create([
             'label'       => $libelle,
             'category'    => 'candidature',
+            'grade'       => $parcours?->grade ?? $grade,
             'is_required' => true,
             'is_active'   => true,
         ]);

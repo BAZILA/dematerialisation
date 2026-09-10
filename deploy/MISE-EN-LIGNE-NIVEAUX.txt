@@ -1,0 +1,223 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Chaque niveau a ses propres pieces
+=======================================================================
+
+  Archive : correctif-niveaux-20260911.zip   (53 Ko, 12 fichiers)
+  UNE migration, non destructive.
+  Un fichier a SUPPRIMER sur le serveur (voir section 3).
+
+
+=======================================================================
+  1. CE QUE CETTE MISE A JOUR CHANGE
+=======================================================================
+
+  LE PROBLEME
+    Vos 11 pieces de depot n'avaient aucun rattachement : elles etaient
+    donc reclamees a TOUT LE MONDE. En pratique :
+      - un etudiant de master devait fournir son attestation de
+        reussite au Bac ;
+      - un nouveau bachelier devait fournir un diplome de Licence
+        qu'il n'a evidemment pas.
+    Le libelle « Diplome de Licence (si passage M1) » disait deja le
+    manque : faute de pouvoir viser le niveau, la condition avait ete
+    ecrite dans le texte de la piece.
+
+  LA NOUVELLE REGLE
+    Une piece appartient a UN niveau, et a un seul.
+    Les niveaux partagent les PROCEDURES, jamais les PIECES.
+
+    A l'interieur d'un niveau, « commune » ne veut plus dire « tous les
+    niveaux » mais « tous les parcours de CE niveau ». La restriction
+    par parcours reste disponible pour viser plus etroit, et vaut
+    desormais pour TOUTES les procedures, plus seulement la
+    candidature.
+
+  EXEMPLE
+    Depot > Licence
+      Acte de naissance ................ tout le niveau licence
+      Attestation de reussite au Bac ... tout le niveau licence
+      Certificat medical ............... parcours STAPS seulement
+
+    Depot > Master   (liste totalement separee)
+      Diplome de Licence ............... tout le niveau master
+      L'attestation du Bac n'existe pas ici. Plus jamais reclamee.
+
+    « Acte de naissance » en licence et en master sont DEUX fiches
+    distinctes : renommer, desactiver ou supprimer l'une ne touche pas
+    l'autre.
+
+  AU PASSAGE
+    La carte « Communes a tous » de l'ecran des niveaux disparait.
+    C'est elle qui provoquait la redirection vers la licence : n'ayant
+    pas d'ecran a elle, elle renvoyait sur le premier niveau de la
+    liste. Le probleme n'existe plus.
+
+
+=======================================================================
+  2. CE QUI ARRIVE A VOS PIECES EXISTANTES
+=======================================================================
+
+  TOUTES vos pieces basculent en LICENCE.   (choix retenu)
+
+  En local, cela donne : depot 11, diplome 5, candidature 4,
+  duplicat 4, attestation 3, releve 3 — toutes en licence.
+
+  Aucun fichier deja depose n'est touche : les pieces gardent leur
+  identifiant, seules leurs conditions d'application changent.
+
+  /!\ CONSEQUENCE A CONNAITRE
+      Les autres niveaux (master, doctorat, specialisation, certificat)
+      repartent SANS AUCUNE PIECE. Tant que vous n'en aurez pas defini,
+      un dossier de ces niveaux pourra etre soumis VIDE.
+
+      L'ecran vous le dit a deux endroits :
+        - sur la liste des niveaux, un bandeau nomme les niveaux vides ;
+        - dans un niveau, chaque procedure sans piece affiche
+          l'avertissement, la ou il se corrige.
+
+      Pour monter le master rapidement : entrez dans Licence, choisissez
+      la procedure, et utilisez « Recopier ces N piece(s) vers » en bas
+      de l'onglet. Puis elaguez ce qui n'a pas lieu d'etre.
+      La recopie ne reprend pas la restriction par parcours (les
+      parcours ne sont pas les memes) et ignore ce qui porte deja le
+      meme libelle : elle peut etre relancee sans creer de doublons.
+
+
+=======================================================================
+  3. DEPLOIEMENT
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+  # a) Sauvegarde prealable — la migration touche la base
+cd /home/gysj7444
+$PHP $SITE/artisan uk:sauvegarder --declencheur=manuelle
+  # (ou un export SQL depuis phpMyAdmin ; verifiez que la base est
+  #  bien dans l'archive, pas seulement les pieces)
+
+  # b) Deposer l'archive a la RACINE du site, puis
+cd $SITE
+unzip -l correctif-niveaux-20260911.zip     # voir sans rien ecrire
+unzip -o correctif-niveaux-20260911.zip
+rm -f correctif-niveaux-20260911.zip
+
+  # c) SUPPRIMER le modele devenu obsolete
+  #    Le niveau est desormais porte par la piece elle-meme ; laisser
+  #    ce fichier ne casse rien, mais il ne correspond plus a aucune
+  #    table apres la migration.
+rm -f $SITE/app/Models/RequestTypeGrade.php
+
+  # d) La migration
+$ART migrate:status --no-ansi | grep -i pending
+  # doit lister exactement :
+  #   2026_09_11_090000_pieces_propres_a_chaque_grade
+$ART migrate --force
+$ART migrate:status --no-ansi | grep -ci pending    # doit afficher 0
+
+  # e) Caches et droits
+$ART view:clear && $ART view:cache
+$ART config:clear && $ART config:cache
+find $SITE/app $SITE/resources $SITE/database $SITE/routes -type d -exec chmod 755 {} \;
+find $SITE/app $SITE/resources $SITE/database $SITE/routes -type f -exec chmod 644 {} \;
+
+  # f) Controle
+$ART tinker --execute="foreach (\App\Models\RequestType::selectRaw('grade, count(*) as n')->groupBy('grade')->get() as \$r) echo \$r->grade . ' : ' . \$r->n . PHP_EOL; echo 'sans niveau : ' . \App\Models\RequestType::whereNull('grade')->count() . PHP_EOL;"
+  # « sans niveau » doit afficher 0.
+
+
+=======================================================================
+  4. CE QUE FAIT LA MIGRATION
+=======================================================================
+
+  request_types
+    + colonne « grade » (nullable, indexee)
+    Remplie depuis la table de liaison si elle portait quelque chose,
+    sinon « licence » pour tout le reste.
+
+  request_type_grade
+    Table SUPPRIMEE. Elle devenait une seconde source de verite pour la
+    meme information ; les laisser cohabiter les aurait fait diverger.
+    Elle etait VIDE (0 ligne) : rien n'est perdu.
+
+  Aucune autre table n'est touchee. Aucun fichier deposé n'est detache.
+  La migration possede son retour arriere (section 7).
+
+
+=======================================================================
+  5. VERIFICATION APRES MISE EN LIGNE
+=======================================================================
+
+  a) Types de documents — la carte « Communes a tous » a disparu.
+     Cliquer sur Master n'emmene plus en Licence.
+
+  b) Entrer dans Licence — les pieces y sont, avec la pastille
+     « Tout Licence » ou le nom du parcours vise.
+
+  c) Entrer dans Master — bandeau d'avertissement, aucune piece.
+
+  d) Dans Licence > Depot, en bas : « Recopier ces 11 piece(s) vers
+     [Master] ». Recopier, puis verifier que Master a bien 11 pieces
+     et que Licence en a toujours 11.
+
+  e) Modifier une piece : le bloc « Qui doit fournir cette piece ? »
+     annonce le niveau et propose « Tout le niveau X » ou « Certains
+     parcours seulement » — la liste ne montre que les parcours de CE
+     niveau.
+
+  f) Cote etudiant, creer une demande hors depot (attestation…) :
+     un choix de parcours apparait, obligatoire. Sans lui, on ne
+     saurait pas quelles pieces reclamer.
+
+
+=======================================================================
+  6. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  160 tests, 404 assertions, tous verts.
+
+  PorteeDesPiecesTest a ete entierement reecrit : il verifiait
+  l'ancienne regle (cumul grade + parcours, piece commune a tous), qui
+  n'existe plus. PorteeDepuisUnNiveauTest a ete supprime pour la meme
+  raison — sa precaution (ne pas ecraser les portees des autres
+  niveaux) n'a plus d'objet, une piece n'appartenant qu'a un niveau.
+
+  Les nouveaux controles portent notamment sur :
+    - une piece de licence n'est jamais reclamee a un master ;
+    - un depot de master n'exige que les pieces de master ;
+    - un parcours d'un autre niveau est ecarte, meme par requete forgee ;
+    - modifier une piece de licence ne touche pas celle du master ;
+    - recopier deux fois n'empile pas les doublons.
+
+  Lancer :  php artisan test
+
+
+=======================================================================
+  7. RETOUR ARRIERE
+=======================================================================
+
+cd $SITE && $ART down
+$ART migrate:rollback --step=1 --force
+  # recreee la table request_type_grade et retire la colonne grade
+
+  Puis restaurer les 12 fichiers depuis la sauvegarde de la section 3a,
+  ou depuis le depot git.
+
+$ART view:clear && $ART view:cache && $ART up
+
+
+=======================================================================
+  LES QUATRE INTERDITS
+=======================================================================
+
+  1. Ne JAMAIS ecraser .htaccess avec la version locale
+     -> le site retombe en PHP 8.0 et casse immediatement.
+  2. Ne JAMAIS lancer migrate:fresh ni migrate:reset.
+  3. Ne JAMAIS lancer db:seed --class=RoleSeeder
+     -> reinitialiserait les 17 roles systeme.
+  4. Ne JAMAIS mettre 775 ou 777
+     -> suPHP refuse. 755 pour les dossiers, 644 pour les fichiers.
+
+=======================================================================

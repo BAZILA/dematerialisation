@@ -46,10 +46,19 @@ class DerogationInterfaceTest extends TestCase
         return $user->fresh();
     }
 
+    private ?\App\Models\Parcours $parcoursTest = null;
+
+    /** Le parcours porte le niveau, et le niveau decide des pieces. */
+    private function parcoursTest(): \App\Models\Parcours
+    {
+        return $this->parcoursTest ??= $this->parcours();
+    }
+
     private function typeDepot(string $libelle, bool $derogeable = false): RequestType
     {
         return RequestType::create([
-            'label' => $libelle, 'category' => 'depot', 'type_etudiant' => 'both',
+            'label' => $libelle, 'category' => 'depot',
+            'grade' => $this->parcoursTest()->grade, 'type_etudiant' => 'both',
             'is_required' => true, 'is_active' => true,
             'derogation_possible' => $derogeable,
         ]);
@@ -70,6 +79,7 @@ class DerogationInterfaceTest extends TestCase
 
         return StudentRequest::create([
             'student_id' => $user->student->id, 'category' => 'depot',
+            'parcours_id' => $this->parcoursTest()->id,
             'annee_academique_id' => $annee->id, 'status' => $statut, 'version' => 1,
         ]);
     }
@@ -222,6 +232,7 @@ class DerogationInterfaceTest extends TestCase
         $this->actingAs($this->superAdmin())->post('/admin/request-types', [
             'label' => 'Certificat de nationalité',
             'category' => 'depot',
+            'grade' => 'licence',
             'type_etudiant' => 'both',
             'is_required' => 1,
             'derogation_possible' => 1,
@@ -242,6 +253,7 @@ class DerogationInterfaceTest extends TestCase
         $this->actingAs($this->superAdmin())->post('/admin/request-types', [
             'label' => 'Photo d’identité',
             'category' => 'depot',
+            'grade' => 'licence',
             'type_etudiant' => 'both',
             'is_required' => 0,
             'derogation_possible' => 1,
@@ -261,6 +273,7 @@ class DerogationInterfaceTest extends TestCase
         $this->actingAs($this->superAdmin())->put("/admin/request-types/{$type->id}", [
             'label' => 'Certificat de nationalité',
             'category' => 'depot',
+            'grade' => 'licence',
             'type_etudiant' => 'both',
             'is_required' => 0,
             'derogation_possible' => 1,

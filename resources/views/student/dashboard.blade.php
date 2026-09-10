@@ -254,7 +254,12 @@
                 $all = $requestsByCategory[$key] ?? collect();
                 // ← CORRECTION : on prend la demande la plus récente TOUS STATUTS CONFONDUS
                 $req = $all->sortByDesc('created_at')->first();
-                $types = \App\Models\RequestType::forCategory($key, $typeEtudiant);
+                /* Les pièces dépendent du niveau du dossier : un master ne
+                   fournit pas ce qu'une licence fournit. Sans dossier, il
+                   n'y a pas encore de niveau, donc rien à afficher. */
+                $types = $req
+                    ? $req->typesAttendus()
+                    : new \Illuminate\Database\Eloquent\Collection();
                 $isDepot = $key === 'depot';
             @endphp
             <div class="tab-pane fade {{ $key === $activeTab ? 'show active' : '' }}" id="st-{{ $key }}">
@@ -780,11 +785,43 @@
                                                 </div>
                                             </div>
                                         @else
-                                            <form method="POST"
+                                            @php
+                                                /* Le parcours decide du niveau, et le niveau decide des
+                                                   pieces a fournir : un master ne fournit pas ce qu'une
+                                                   licence fournit. On le demande donc a la creation. */
+                                                $parcoursOuverts = \App\Models\Parcours::with('departement.faculte')
+                                                    ->where('is_active', true)->orderBy('nom')->get()
+                                                    ->groupBy(fn ($p) => $p->departement?->faculte?->nom ?? 'Autres');
+                                            @endphp
+                                            <form method="POST" class="mx-auto" style="max-width:420px;"
                                                 action="{{ route('student.requests.create') }}?tab={{ $key }}">
                                                 @csrf
                                                 <input type="hidden" name="category" value="{{ $key }}">
-                                                <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-lg"
+
+                                                <label class="form-label small text-start d-block"
+                                                    for="parc-{{ $key }}" style="color:var(--t2);">
+                                                    Votre parcours
+                                                </label>
+                                                <select name="parcours_id" id="parc-{{ $key }}"
+                                                    class="form-select mb-2" required>
+                                                    <option value="">— Choisissez votre parcours —</option>
+                                                    @foreach ($parcoursOuverts as $facNom => $liste)
+                                                        <optgroup label="{{ $facNom }}">
+                                                            @foreach ($liste as $p)
+                                                                <option value="{{ $p->id }}"
+                                                                    @selected(old('parcours_id') == $p->id)>
+                                                                    {{ $p->nom }}
+                                                                    ({{ \App\Models\Parcours::$grades[$p->grade]['label'] ?? $p->grade }})
+                                                                </option>
+                                                            @endforeach
+                                                        </optgroup>
+                                                    @endforeach
+                                                </select>
+                                                <div class="small text-start mb-3" style="color:var(--t2);">
+                                                    Il détermine les pièces qui vous seront demandées.
+                                                </div>
+
+                                                <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} btn-lg w-100"
                                                     data-loading-text="Création…">
                                                     <i class="fas fa-plus"></i> Créer une demande
                                                 </button>
@@ -1171,7 +1208,7 @@
     @foreach ($cats as $key => $label)
         @php
             $ar = ($requestsByCategory[$key] ?? collect())->whereIn('status', ['brouillon', 'en_correction'])->first();
-            $types = \App\Models\RequestType::forCategory($key, $typeEtudiant);
+            $types = $ar ? $ar->typesAttendus() : new \Illuminate\Database\Eloquent\Collection();
         @endphp
         @if ($ar)
             @foreach ($types as $type)

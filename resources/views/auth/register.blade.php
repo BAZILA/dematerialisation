@@ -65,18 +65,6 @@
                         @enderror
                     </div>
 
-                    {{-- Numéro carte (ancien uniquement) --}}
-                    <div id="field_carte" class="mb-3" style="display:none;">
-                        <label class="form-label">
-                            <i class="fas fa-id-badge"></i> Numéro de Carte Étudiant
-                        </label>
-                        <input type="text" class="form-control @error('numero_carte') is-invalid @enderror"
-                            name="numero_carte" value="{{ old('numero_carte') }}">
-                        @error('numero_carte')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-
                     {{-- Nom & Prénom --}}
                     <div class="row mb-3 g-3">
                         <div class="col-md-6">
@@ -113,6 +101,9 @@
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
+                        {{-- Même case, deux contenus : le bachelier y met son lieu
+                             de naissance, l'ancien son numéro de carte. La grille
+                             reste deux lignes de deux pour les deux profils. --}}
                         <div class="col-md-6" id="field_lieu">
                             <label class="form-label">
                                 <i class="fas fa-map-marker-alt"></i> Lieu de Naissance
@@ -120,6 +111,16 @@
                             <input type="text" class="form-control @error('lieu_naissance') is-invalid @enderror"
                                 name="lieu_naissance" value="{{ old('lieu_naissance') }}">
                             @error('lieu_naissance')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6" id="field_carte" style="display:none;">
+                            <label class="form-label">
+                                <i class="fas fa-id-badge"></i> Numéro de Carte Étudiant
+                            </label>
+                            <input type="text" class="form-control @error('numero_carte') is-invalid @enderror"
+                                name="numero_carte" value="{{ old('numero_carte') }}">
+                            @error('numero_carte')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>

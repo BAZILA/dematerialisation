@@ -1,0 +1,205 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Connexion par code reparee · edition des fiches · filet de secours
+=======================================================================
+
+  Archive : correctif-acces-et-fiches-20260911.zip   (26 Ko, 9 fichiers)
+  UNE migration, non destructive.
+
+  /!\ CE PAQUET REMPLACE « correctif-acces-20260911.zip ».
+      Si vous ne l'avez pas encore deploye, jetez-le et prenez celui-ci.
+      Si vous l'avez deploye, celui-ci s'installe par-dessus sans
+      probleme : la migration ne s'appliquera pas deux fois.
+
+
+=======================================================================
+  1. LA PANNE 500 A LA CONNEXION PAR CODE
+=======================================================================
+
+  Un usager sans compte qui se connectait par code recevait :
+
+    SQLSTATE[23000]: Column 'email' cannot be null
+
+  Le compte se cree a la volee a la premiere connexion, en reprenant
+  l'adresse du referentiel. Or les 1165 anciens etudiants ont ete
+  importes SANS adresse, et « users.email » etait NOT NULL.
+
+  Autrement dit : le module ne pouvait fonctionner pour presque
+  personne. Ce n'etait pas un cas rare.
+
+  Le courriel devient facultatif. L'identification se fait par
+  « numero_identifiant », jamais par l'adresse. L'index d'unicite est
+  conserve : MySQL accepte plusieurs NULL, les comptes sans adresse ne
+  se genent pas entre eux. Le service de notifications verifiait deja
+  « filled(email) » — un compte sans adresse ne recevra simplement rien.
+
+
+=======================================================================
+  2. LE FILET DE SECOURS   (nouveau)
+=======================================================================
+
+  LE RISQUE
+    Un compte cree par la connexion par code recoit un mot de passe
+    aleatoire de 40 caracteres que personne ne connait. Et
+    l'application n'offre AUCUN « mot de passe oublie » : la seule
+    route de reinitialisation existante concerne la 2FA des agents.
+
+    Consequence : le jour ou vous eteignez « Acces des usagers par
+    code », tous ces comptes deviennent inaccessibles. Sans mot de
+    passe, sans moyen d'en demander un, et souvent sans adresse pour en
+    recevoir un — avec leurs dossiers dedans. C'est un interrupteur
+    dans vos Parametres, a un clic.
+
+  OU SE TROUVE LA PORTE
+    /!\ L'ecran Utilisateurs ne liste QUE le personnel : il exclut
+        explicitement les roles « etudiant » et « candidat ». Le bouton
+        y serait donc visible pour ceux qui n'en ont pas besoin, et
+        absent pour ceux qu'il doit sauver.
+
+    Le bouton en forme de cle se trouve donc dans
+    Reference > Identites, sur la ligne de chaque personne AYANT
+    deja un compte — c'est le seul ecran ou ces comptes apparaissent.
+    Il figure aussi dans Utilisateurs, pour le personnel.
+    Un mot de passe provisoire de 12 caracteres est genere et affiche
+    UNE SEULE FOIS, en haut de l'ecran.
+
+    Il transite par la session, jamais par la base ni par le journal
+    d'audit — un test le verifie explicitement. Rechargez la page et il
+    disparait definitivement : notez-le avant.
+
+    Reserve a « utilisateurs.gerer ». Un super-administrateur ne peut
+    etre reinitialise que par un autre super-administrateur : sinon un
+    gestionnaire prendrait la main sur toute la plateforme.
+
+
+=======================================================================
+  3. EDITION DES FICHES DU REFERENTIEL   (nouveau)
+=======================================================================
+
+  Jusqu'ici on pouvait AJOUTER et SUPPRIMER une identite, jamais la
+  CORRIGER. Or l'identite civile sert de cle de connexion : une faute
+  de frappe sur un nom ou une date empechait l'usager d'entrer, sans
+  aucun recours.
+
+  Reference > Identites > bouton crayon sur chaque ligne.
+  Bacheliers et anciens etudiants.
+
+  DEUX PRECAUTIONS INTEGREES
+
+  a) La copie suit.
+     Des qu'un compte existe, l'identite vit a DEUX endroits : la fiche
+     du referentiel, et la fiche « student » qui en porte une copie —
+     c'est elle qui alimente les documents tamponnes. Les laisser
+     diverger produirait un diplome au mauvais nom. Toute correction
+     est donc repercutee sur les deux.
+
+  b) La cle ne peut pas disparaitre.
+     Un bachelier se reconnait par son numero de suivi OU son numero de
+     releve. Les retirer tous les deux le rendrait introuvable :
+     l'enregistrement est refuse, avec explication.
+
+  Le bouton reste disponible meme quand un compte existe — c'est
+  justement la que la correction est la plus utile. Un bandeau previent
+  alors que l'identite du compte va suivre.
+
+  Chaque correction est journalisee (identites.modification).
+
+
+=======================================================================
+  4. AUSSI DANS CE PAQUET
+=======================================================================
+
+  FORMULAIRE D'IDENTITE — deux lignes de deux, pour les deux profils
+
+    Le numero de carte occupe desormais la MEME case que le lieu de
+    naissance du bachelier :
+
+      Nouveau Bachelier          Ancien Etudiant
+        Nom     | Prenom           Nom     | Prenom
+        Date    | Lieu             Date    | N° de carte
+
+
+=======================================================================
+  5. DEPLOIEMENT
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+cd $SITE
+unzip -l correctif-acces-et-fiches-20260911.zip     # voir sans rien ecrire
+unzip -o correctif-acces-et-fiches-20260911.zip
+rm -f correctif-acces-et-fiches-20260911.zip
+
+$ART migrate:status --no-ansi | grep -i pending
+  # doit lister au plus :
+  #   2026_09_11_140000_courriel_facultatif_pour_les_usagers
+$ART migrate --force
+$ART migrate:status --no-ansi | grep -ci pending     # doit afficher 0
+
+$ART view:clear && $ART view:cache
+$ART route:clear && $ART route:cache
+
+find $SITE/app $SITE/resources $SITE/database $SITE/routes -type d -exec chmod 755 {} \;
+find $SITE/app $SITE/resources $SITE/database $SITE/routes -type f -exec chmod 644 {} \;
+
+  # Controle : la colonne accepte desormais NULL
+$ART tinker --execute="foreach (\DB::select('SHOW COLUMNS FROM users') as \$c) if (\$c->Field === 'email') echo 'email null=' . \$c->Null . PHP_EOL;"
+  # doit afficher : email null=YES
+
+  /!\ route:cache est indispensable ici : trois routes sont ajoutees.
+      Sans lui, les nouveaux boutons repondront 404.
+
+
+=======================================================================
+  6. VERIFICATION
+=======================================================================
+
+  a) Parametres > allumer « Acces des usagers par code » si besoin.
+     Puis /acces, profil « Ancien Etudiant », un numero de carte reel
+     avec nom, prenom et date. Le code doit s'afficher. Plus de 500.
+
+  b) Reference > Identites : le crayon ouvre la fiche, la correction
+     s'enregistre, et le bandeau apparait si un compte existe deja.
+
+  c) Reference > Identites, sur une ligne « Compte cree » : le bouton
+     cle affiche un mot de passe provisoire en haut de l'ecran.
+     Rechargez : il a disparu.
+
+  d) /register : basculer entre les deux profils, la grille reste deux
+     lignes de deux.
+
+
+=======================================================================
+  7. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  191 tests, 457 assertions, tous verts.   (77 au depart)
+
+  Nouveaux dans ce lot :
+    AccesSansCourrielTest .............. 6 controles sur la panne 500
+    EditionDesFichesTest ............... 8 controles, dont la copie qui
+                                         suit et la cle qu'on ne peut
+                                         pas faire disparaitre
+    ReinitialisationMotDePasseTest ..... 10 controles, dont le mot de
+                                         passe absent du journal, le
+                                         super-admin protege, et le fait
+                                         que le bouton soit ATTEIGNABLE
+                                         depuis l'ecran des identites
+    PerformanceEcransTest .............. 7 plafonds de requetes SQL
+
+  Lancer :  php artisan test
+
+
+=======================================================================
+  8. RETOUR ARRIERE
+=======================================================================
+
+cd $SITE && $ART down
+$ART migrate:rollback --step=1 --force
+$ART view:clear && $ART view:cache && $ART route:cache && $ART up
+
+  Puis restaurer les 8 fichiers depuis le depot git.
+
+=======================================================================
