@@ -12,6 +12,7 @@ class RequestType extends Model
     protected $fillable = [
         'label',
         'category',       // code de procédure (table procedures)
+        'grade',          // niveau d'études : licence, master… (obligatoire)
         'type_etudiant',  // 'nouveau' | 'ancien' | 'both'
         'description',
         'is_required', 'derogation_possible',
@@ -65,62 +66,40 @@ class RequestType extends Model
         return $this->belongsToMany(Parcours::class, 'parcours_request_type');
     }
 
-    /**
-     * Grades auxquels cette pièce est demandée (licence, master…).
-     * Se cumule avec la portée par parcours.
-     */
-    public function grades(): \Illuminate\Database\Eloquent\Relations\HasMany
+    /** Libellé lisible du niveau porteur. */
+    public function getGradeLabelAttribute(): string
     {
-        return $this->hasMany(RequestTypeGrade::class);
-    }
-
-    /** Codes des grades couverts, sous forme de tableau simple. */
-    public function gradesCodes(): array
-    {
-        return ($this->relationLoaded('grades') ? $this->grades : $this->grades()->get())
-            ->pluck('grade')->all();
+        return Parcours::$grades[$this->grade]['label'] ?? $this->grade ?? '—';
     }
 
     /* ── Portée : commune, par grade, ou par parcours ───── */
 
     /**
-     * Pièce demandée à tous les candidats ?
-     * Vrai seulement si AUCUNE restriction n'est posée — ni grade,
-     * ni parcours. Une pièce réservée aux masters n'est pas commune.
+     * Pièce réclamée à TOUS les parcours de son niveau ?
+     *
+     * « Commune » se lit désormais à l'intérieur d'un niveau : une pièce
+     * commune à la licence n'est jamais demandée à un master. Les
+     * niveaux partagent les procédures, jamais les pièces.
      */
     public function estCommune(): bool
     {
-        $sansParcours = $this->relationLoaded('parcours')
+        return $this->relationLoaded('parcours')
             ? $this->parcours->isEmpty()
             : !$this->parcours()->exists();
-
-        $sansGrade = $this->relationLoaded('grades')
-            ? $this->grades->isEmpty()
-            : !$this->grades()->exists();
-
-        return $sansParcours && $sansGrade;
     }
 
     public function getPorteeLabelAttribute(): string
     {
+        $niveau = $this->grade_label;
+
         if ($this->estCommune()) {
-            return 'Commune à tous les parcours';
+            return "Tout le niveau {$niveau}";
         }
 
-        $morceaux = [];
+        $noms = ($this->relationLoaded('parcours') ? $this->parcours : $this->parcours()->get())
+            ->pluck('nom');
 
-        $grades = collect($this->gradesCodes())
-            ->map(fn ($g) => Parcours::$grades[$g]['label'] ?? $g);
-        if ($grades->isNotEmpty()) {
-            $morceaux[] = 'Tout ' . $grades->implode(', ');
-        }
-
-        $noms = $this->parcours->pluck('nom');
-        if ($noms->isNotEmpty()) {
-            $morceaux[] = $noms->implode(', ');
-        }
-
-        return 'Propre à : ' . implode(' + ', $morceaux);
+        return $noms->isEmpty() ? "Tout le niveau {$niveau}" : $noms->implode(', ');
     }
 
     /**
@@ -133,25 +112,25 @@ class RequestType extends Model
     {
         $ids = array_values(array_filter(array_map('intval', $parcoursIds)));
 
-        // Les grades se déduisent des parcours visés : demander « tous les
-        // masters » ne doit pas obliger à les énumérer un par un.
+        // Le niveau se déduit des vœux : candidater en master n'appelle
+        // jamais les pièces de la licence, et réciproquement.
         $grades = $ids
             ? Parcours::whereIn('id', $ids)->pluck('grade')->filter()->unique()->values()->all()
             : [];
 
-        return static::with('parcours', 'grades')
+        // Aucun vœu exprimé : rien à réclamer tant qu'on ignore le niveau.
+        if (!$grades) {
+            return new \Illuminate\Database\Eloquent\Collection();
+        }
+
+        return static::with('parcours')
             ->where('category', 'candidature')
             ->where('is_active', true)
-            ->where(function ($q) use ($ids, $grades) {
-                // Commune : aucune restriction, ni parcours ni grade
-                $q->where(fn ($sq) => $sq->whereDoesntHave('parcours')->whereDoesntHave('grades'));
-
-                if ($grades) {
-                    $q->orWhereHas('grades', fn ($g) => $g->whereIn('grade', $grades));
-                }
-                if ($ids) {
-                    $q->orWhereHas('parcours', fn ($p) => $p->whereIn('parcours.id', $ids));
-                }
+            ->whereIn('grade', $grades)
+            ->where(function ($q) use ($ids) {
+                // Commune au niveau : aucun parcours désigné.
+                $q->whereDoesntHave('parcours')
+                  ->orWhereHas('parcours', fn ($p) => $p->whereIn('parcours.id', $ids));
             })
             ->orderBy('order')->orderBy('id')
             ->get();
@@ -163,18 +142,38 @@ class RequestType extends Model
      * Types actifs pour une procédure et un profil étudiant.
      * Une procédure non ouverte aux nouveaux → rien pour un nouveau.
      */
-    public static function forCategory(string $category, string $typeEtudiant = 'both'): \Illuminate\Database\Eloquent\Collection
-    {
+    public static function forCategory(
+        string $category,
+        string $typeEtudiant = 'both',
+        ?string $grade = null,
+        ?int $parcoursId = null
+    ): \Illuminate\Database\Eloquent\Collection {
         $proc = Procedure::where('code', $category)->first();
         if ($typeEtudiant === 'nouveau' && $proc && !$proc->pour_nouveaux) {
-            return collect();
+            return new \Illuminate\Database\Eloquent\Collection();
         }
 
-        return static::where('category', $category)
+        // Sans niveau connu, on ne peut rien réclamer de juste : mieux
+        // vaut une liste vide qu'un dossier exigeant les pièces d'un
+        // autre cursus.
+        if (!$grade) {
+            return new \Illuminate\Database\Eloquent\Collection();
+        }
+
+        return static::with('parcours')
+            ->where('category', $category)
             ->where('is_active', true)
+            ->where('grade', $grade)
             ->where(function ($q) use ($typeEtudiant) {
                 $q->where('type_etudiant', 'both')
                   ->orWhere('type_etudiant', $typeEtudiant);
+            })
+            ->where(function ($q) use ($parcoursId) {
+                // Commune au niveau, ou visant précisément ce parcours.
+                $q->whereDoesntHave('parcours');
+                if ($parcoursId) {
+                    $q->orWhereHas('parcours', fn ($p) => $p->where('parcours.id', $parcoursId));
+                }
             })
             ->orderBy('order')
             ->orderBy('id')

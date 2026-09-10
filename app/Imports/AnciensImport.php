@@ -53,7 +53,12 @@ class AnciensImport implements ToCollection, WithHeadingRow
 
             $a = AncienEtudiant::firstOrNew(['numero_carte' => $carte]);
             $existed = $a->exists;
-            $a->fill($data);
+
+            /* Une colonne absente du fichier ne doit rien effacer : « mettre à
+               jour » n'est pas « remplacer ». Un second fichier plus court
+               aurait sinon vidé téléphone, adresse et spécialité de fiches
+               déjà complètes. */
+            $a->fill($existed ? array_filter($data, fn ($v) => $v !== null) : $data);
             if (!$existed) {
                 $a->is_registered = false;
             }

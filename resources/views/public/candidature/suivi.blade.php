@@ -3,8 +3,15 @@
 
 @section('css')
     <style>
-        body.guest-mode .content { align-items: flex-start !important; padding-top: 28px; padding-bottom: 44px; }
-        .suivi-wrap { width: 100%; max-width: 1280px; position: relative; z-index: 1; }
+        /* « align-items: flex-start » réglait le rognage du haut quand le
+           dossier dépasse l'écran, mais collait aussi la simple barre de
+           recherche en haut d'une page vide. Une marge automatique centre
+           sans jamais rogner : les marges auto neutralisent l'étirement. */
+        body.guest-mode .content { align-items: stretch !important; padding-top: 28px; padding-bottom: 44px; }
+        .suivi-wrap { width: 100%; max-width: 1280px; margin-block: auto; position: relative; z-index: 1; }
+        /* Sans dossier affiché, la page ne porte qu'un champ de 16 caractères :
+           l'étaler sur 1280 px le fait flotter dans le vide. */
+        .suivi-wrap.suivi-seul { max-width: 560px; }
 
         /* Deux colonnes sur PC : le dossier à gauche, la synthèse à droite */
         .suivi-grid { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
@@ -63,7 +70,7 @@
 @endsection
 
 @section('content')
-    <div class="suivi-wrap">
+    <div class="suivi-wrap {{ $candidature ? '' : 'suivi-seul' }}">
         <div class="text-center mb-4">
             <img src="{{ asset('assets/uk/logo-sigle-bg.png') }}" style="height:52px;" alt="Université de Kara">
             <h1 style="font-family:var(--font-head);font-size:22px;font-weight:800;margin-top:14px;color:var(--t1);">Suivi de candidature</h1>

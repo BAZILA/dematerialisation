@@ -95,19 +95,34 @@
                 <form id="formUser" method="POST" enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" name="_method" id="u_method" value="POST">
+                    {{-- L'attribut action ne se poste pas : sans ce témoin, une
+                         modification refusée rouvrirait la fenêtre en création. --}}
+                    <input type="hidden" name="_cible" id="u_cible" value="{{ old('_cible') }}">
                     <div class="modal-header"><h6 class="modal-title" id="uTitle">Nouvel utilisateur</h6>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
+                        @if ($errors->any())
+                            <div class="alert alert-danger py-2 small">
+                                <i class="fas fa-circle-exclamation"></i>
+                                <strong>Enregistrement refusé.</strong>
+                                <ul class="mb-0 mt-1 ps-3">
+                                    @foreach ($errors->all() as $erreur)
+                                        <li>{{ $erreur }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                         <div class="row g-3">
                             <div class="col-6"><label class="form-label">Prénom <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="prenom" required></div>
+                                <input type="text" class="form-control" name="prenom" value="{{ old('prenom') }}" required></div>
                             <div class="col-6"><label class="form-label">Nom <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="nom" required></div>
+                                <input type="text" class="form-control" name="nom" value="{{ old('nom') }}" required></div>
                         </div>
                         <div class="mt-3" id="u_ident_wrap"><label class="form-label">Identifiant de connexion <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" name="numero_identifiant" placeholder="Ex : DAAS01"></div>
+                            <input type="text" class="form-control" name="numero_identifiant" placeholder="Ex : DAAS01"
+                                value="{{ old('numero_identifiant') }}"></div>
                         <div class="mt-3"><label class="form-label">Email <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control" name="email" required></div>
+                            <input type="email" class="form-control" name="email" value="{{ old('email') }}" required></div>
                         <div class="mt-3">
                             <label class="form-label">Rôles <span class="text-danger">*</span>
                                 <small class="text-muted">(plusieurs possibles — le premier coché sert de rôle principal)</small>
@@ -116,7 +131,8 @@
                                 @foreach ($roles as $r)
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="roles[]"
-                                            value="{{ $r->name }}" id="ur_{{ $r->id }}" data-role-case>
+                                            value="{{ $r->name }}" id="ur_{{ $r->id }}" data-role-case
+                                            @checked(in_array($r->name, old('roles', [])))>
                                         <label class="form-check-label small" for="ur_{{ $r->id }}">
                                             {{ $roleLabels[$r->name] ?? $r->name }}
                                             <code class="text-muted" style="font-size:10.5px;">{{ $r->name }}</code>
@@ -135,7 +151,8 @@
                         <div class="mt-3"><label class="form-label">Signature <small class="text-muted">(image PNG/JPG, fond transparent conseillé)</small></label>
                             <input type="file" class="form-control" name="signature" accept=".png,.jpg,.jpeg"></div>
                         <div class="form-check form-switch mt-3" id="u_active_wrap" style="display:none;">
-                            <input class="form-check-input" type="checkbox" name="is_active" value="1" id="u_active" checked>
+                            <input class="form-check-input" type="checkbox" name="is_active" value="1" id="u_active"
+                                {{ $errors->any() ? (old('is_active') ? 'checked' : '') : 'checked' }}>
                             <label class="form-check-label" for="u_active">Compte actif</label></div>
                     </div>
                     <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
@@ -150,10 +167,10 @@
     <script>
         const U_STORE = "{{ route('admin.utilisateurs.store') }}";
 
-        function openUser(mode, el) {
+        /* Bascule création / modification. Ne touche PAS aux valeurs : une
+           réouverture après refus doit conserver ce que l'usager avait tapé. */
+        function configurerFormUser(isEdit, action) {
             const f = document.getElementById('formUser');
-            f.reset();
-            const isEdit = mode === 'edit';
             document.getElementById('uTitle').textContent = isEdit ? "Modifier l'utilisateur" : 'Nouvel utilisateur';
             document.getElementById('u_method').value = isEdit ? 'PUT' : 'POST';
             document.getElementById('u_active_wrap').style.display = isEdit ? '' : 'none';
@@ -162,8 +179,16 @@
             document.getElementById('u_pwd_hint').style.display = isEdit ? '' : 'none';
             f.numero_identifiant.required = !isEdit;
             f.password.required = !isEdit;
+            f.action = action;
+            document.getElementById('u_cible').value = isEdit ? action : '';
+        }
+
+        function openUser(mode, el) {
+            const f = document.getElementById('formUser');
+            f.reset();
+            const isEdit = mode === 'edit';
+            configurerFormUser(isEdit, isEdit ? el.dataset.url : U_STORE);
             if (isEdit) {
-                f.action = el.dataset.url;
                 f.prenom.value = el.dataset.prenom || '';
                 f.nom.value = el.dataset.nom || '';
                 f.email.value = el.dataset.email || '';
@@ -171,9 +196,19 @@
                 f.querySelectorAll('[data-role-case]').forEach(c => { c.checked = actuels.includes(c.value); });
                 document.getElementById('u_active').checked = el.dataset.active === '1';
             } else {
-                f.action = U_STORE;
                 f.querySelectorAll('[data-role-case]').forEach(c => { c.checked = false; });
             }
         }
+
+        @if ($errors->any())
+            /* Refus de validation : la fenêtre s'était refermée et la saisie
+               partait avec elle. On la rouvre sur les valeurs conservées.
+               Le mot de passe, lui, n'est jamais réinjecté dans la page. */
+            document.addEventListener('DOMContentLoaded', function() {
+                var edition = @js(old('_method') === 'PUT');
+                configurerFormUser(edition, @js(old('_cible')) || U_STORE);
+                new bootstrap.Modal(document.getElementById('modalUser')).show();
+            });
+        @endif
     </script>
 @endsection

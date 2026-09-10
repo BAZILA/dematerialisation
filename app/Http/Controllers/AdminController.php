@@ -91,7 +91,7 @@ class AdminController extends Controller
 
             // Courbe : soumissions par mois de l'année consultée
             'by_month' => $base()->whereNotNull('submitted_at')
-                ->selectRaw("DATE_FORMAT(submitted_at, '%Y-%m') as mois, COUNT(*) as n")
+                ->selectRaw(\App\Support\SqlPortable::mois('submitted_at') . ' as mois, COUNT(*) as n')
                 ->groupBy('mois')->orderBy('mois')->pluck('n', 'mois')->toArray(),
         ];
 

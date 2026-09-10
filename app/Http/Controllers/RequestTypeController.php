@@ -55,16 +55,16 @@ class RequestTypeController extends Controller
                     'label'    => $info['label'],
                     'parcours' => $duNiveau->count(),
                     'ouvertes' => $ouvertes,
-                    'pieces'   => \App\Models\RequestTypeGrade::where('grade', $code)->count(),
+                    'pieces'   => RequestType::where('grade', $code)->where('is_active', true)->count(),
                 ];
             })->values();
 
-        // Pièces sans aucune restriction : elles valent pour tout le monde
-        $nbCommunes = RequestType::whereDoesntHave('parcours')
-            ->whereDoesntHave('grades')->where('is_active', true)->count();
+        /* Un niveau sans aucune pièce laisse passer des dossiers vides :
+           l'écran doit le dire, pas le laisser découvrir. */
+        $niveauxVides = $niveaux->where('pieces', 0)->pluck('label')->values();
 
         return view('admin.request_types.index',
-            compact('niveaux', 'nbCommunes', 'annee', 'procedures'));
+            compact('niveaux', 'niveauxVides', 'annee', 'procedures'));
     }
 
     /**
@@ -87,14 +87,10 @@ class RequestTypeController extends Controller
 
         $procedures = \App\Models\Procedure::where('is_active', true)->orderBy('ordre')->get();
 
-        $types = RequestType::with('parcours', 'grades')
-            ->where(function ($q) use ($grade, $idsParcours) {
-                $q->where(fn ($sq) => $sq->whereDoesntHave('parcours')->whereDoesntHave('grades'))
-                  ->orWhereHas('grades', fn ($g) => $g->where('grade', $grade));
-                if ($idsParcours) {
-                    $q->orWhereHas('parcours', fn ($p) => $p->whereIn('parcours.id', $idsParcours));
-                }
-            })
+        /* Les pièces de CE niveau, et rien d'autre. Les niveaux partagent
+           les procédures, jamais les pièces. */
+        $types = RequestType::with('parcours')
+            ->where('grade', $grade)
             ->orderBy('order')->orderBy('id')
             ->get()->groupBy('category');
 
@@ -195,69 +191,38 @@ class RequestTypeController extends Controller
     }
 
     /**
-     * Portée d'une pièce de candidature. Trois cas :
-     *   commune ...... aucune restriction, réclamée à tout le monde ;
-     *   par grade .... « tous les masters », sans énumérer les parcours ;
-     *   par parcours . nommés un par un.
-     * Grade et parcours se cumulent : on peut viser tous les masters
-     * ET ajouter une pièce propre au master d'informatique.
+     * Portée d'une pièce, à l'intérieur de son niveau.
+     *
+     * Le niveau est porté par la pièce elle-même : une pièce de licence
+     * n'est jamais réclamée à un master. Reste à dire, DANS ce niveau,
+     * qui doit la fournir :
+     *   commune ...... tous les parcours du niveau ;
+     *   restreinte ... seulement les parcours désignés, qui doivent
+     *                  appartenir à ce niveau.
+     *
+     * Vaut pour toutes les procédures, pas seulement les candidatures :
+     * un dépôt de licence peut exiger un certificat médical du seul
+     * parcours STAPS.
      */
     private function syncPortee(Request $request, RequestType $type): void
     {
-        if ($type->category !== 'candidature') {
-            $type->parcours()->detach();
-            $type->grades()->delete();
+        if ($request->input('portee') !== 'specifique') {
+            $type->parcours()->detach();   // commune à tout le niveau
 
             return;
         }
 
-        $specifique = $request->input('portee') === 'specifique';
+        $soumis = array_map('intval', array_filter((array) $request->input('parcours_ids', [])));
 
-        $parcoursSoumis = $specifique
-            ? array_map('intval', array_filter((array) $request->input('parcours_ids', [])))
-            : [];
+        /* Un parcours d'un AUTRE niveau n'a rien à faire ici : il rendrait
+           la pièce invisible pour tout le monde, puisque la sélection
+           filtre d'abord sur le niveau de la pièce. On les écarte. */
+        $duNiveau = \App\Models\Parcours::where('grade', $type->grade)
+            ->whereIn('id', $soumis)->pluck('id')->all();
 
-        $gradesSoumis = $specifique
-            ? array_values(array_intersect(
-                (array) $request->input('grades', []),
-                array_keys(\App\Models\Parcours::$grades)
-              ))
-            : [];
-
-        /* Édition depuis l'écran d'un niveau : le formulaire ne montre que
-           ce niveau et ses parcours. Sans précaution, enregistrer y
-           effacerait les portées des AUTRES niveaux, qui ne sont pas dans
-           la requête. On ne touche donc qu'au périmètre affiché. */
-        $niveau = $request->input('niveau');
-        $depuisUnNiveau = $niveau && isset(\App\Models\Parcours::$grades[$niveau]);
-
-        if ($depuisUnNiveau) {
-            $idsDuNiveau = \App\Models\Parcours::where('grade', $niveau)->pluck('id')->all();
-
-            $horsNiveau = $type->parcours()->pluck('parcours.id')
-                ->reject(fn ($id) => in_array((int) $id, $idsDuNiveau, true))
-                ->map(fn ($id) => (int) $id)->all();
-
-            $parcoursSoumis = array_values(array_unique(array_merge(
-                $horsNiveau,
-                array_intersect($parcoursSoumis, $idsDuNiveau)
-            )));
-
-            $autresGrades = $type->grades()->pluck('grade')
-                ->reject(fn ($g) => $g === $niveau)->all();
-
-            $gradesSoumis = array_values(array_unique(array_merge(
-                $autresGrades,
-                array_intersect($gradesSoumis, [$niveau])
-            )));
-        }
-
-        $type->parcours()->sync($parcoursSoumis);
-
-        $type->grades()->delete();
-        foreach ($gradesSoumis as $grade) {
-            $type->grades()->create(['grade' => $grade]);
-        }
+        // Plus rien de valide : la pièce redevient commune au niveau,
+        // plutôt que de disparaître silencieusement du dossier.
+        $type->parcours()->sync($duNiveau);
     }
 
     /* ── Store ─────────────────────────────────────────── */
@@ -270,14 +235,14 @@ class RequestTypeController extends Controller
             'type_etudiant' => 'required|in:nouveau,ancien,both',
             'description' => 'nullable|string|max:500',
             'is_required' => 'nullable|boolean',
+            'derogation_possible' => 'nullable|boolean',
             'has_stamp' => 'nullable|boolean',
             'fills_verso' => 'nullable|boolean',
             'order' => 'nullable|integer|min:0',
             'portee' => 'nullable|in:commune,specifique',
             'parcours_ids' => 'nullable|array',
             'parcours_ids.*' => 'integer|exists:parcours,id',
-            'grades' => 'nullable|array',
-            'grades.*' => 'string|max:30',
+            'grade' => ['required', Rule::in(array_keys(\App\Models\Parcours::$grades))],
         ]);
 
         if ($data['category'] !== 'depot') {
@@ -287,11 +252,16 @@ class RequestTypeController extends Controller
         $type = RequestType::create([
             'label' => $data['label'],
             'category' => $data['category'],
+            'grade' => $data['grade'],
             'type_etudiant' => $data['type_etudiant'],
             'description' => $data['description'] ?? null,
-            'is_required' => $request->boolean('is_required', true),
-            'has_stamp' => $request->boolean('has_stamp', false),
-            'fills_verso' => $request->boolean('fills_verso', false),
+            'is_required' => $request->boolean('is_required'),
+            // Une pièce facultative n'a rien à différer : le report ne survit
+            // pas au retrait du caractère obligatoire, même par requête forgée.
+            'derogation_possible' => $request->boolean('is_required')
+                && $request->boolean('derogation_possible'),
+            'has_stamp' => $request->boolean('has_stamp'),
+            'fills_verso' => $request->boolean('fills_verso'),
             'is_active' => true,
             'order' => $data['order'] ?? 99,
         ]);
@@ -312,6 +282,7 @@ class RequestTypeController extends Controller
             'type_etudiant' => 'required|in:nouveau,ancien,both',
             'description' => 'nullable|string|max:500',
             'is_required' => 'nullable|boolean',
+            'derogation_possible' => 'nullable|boolean',
             'has_stamp' => 'nullable|boolean',
             'fills_verso' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
@@ -319,8 +290,7 @@ class RequestTypeController extends Controller
             'portee' => 'nullable|in:commune,specifique',
             'parcours_ids' => 'nullable|array',
             'parcours_ids.*' => 'integer|exists:parcours,id',
-            'grades' => 'nullable|array',
-            'grades.*' => 'string|max:30',
+            'grade' => ['required', Rule::in(array_keys(\App\Models\Parcours::$grades))],
         ]);
 
         if ($data['category'] !== 'depot') {
@@ -330,12 +300,20 @@ class RequestTypeController extends Controller
         $requestType->update([
             'label' => $data['label'],
             'category' => $data['category'],
+            'grade' => $data['grade'],
             'type_etudiant' => $data['type_etudiant'],
             'description' => $data['description'] ?? null,
-            'is_required' => $request->boolean('is_required', true),
-            'has_stamp' => $request->boolean('has_stamp', false),
-            'fills_verso' => $request->boolean('fills_verso', false),
-            'is_active' => $request->boolean('is_active', true),
+            // Une case décochée n'est pas envoyée par le navigateur : avec
+            // « true » en valeur de repli, décocher revenait à cocher et la
+            // désactivation ne passait jamais.
+            'is_required' => $request->boolean('is_required'),
+            // Une pièce facultative n'a rien à différer : le report ne survit
+            // pas au retrait du caractère obligatoire, même par requête forgée.
+            'derogation_possible' => $request->boolean('is_required')
+                && $request->boolean('derogation_possible'),
+            'has_stamp' => $request->boolean('has_stamp'),
+            'fills_verso' => $request->boolean('fills_verso'),
+            'is_active' => $request->boolean('is_active'),
             'order' => $data['order'] ?? $requestType->order,
         ]);
 
@@ -351,10 +329,25 @@ class RequestTypeController extends Controller
     {
         $cat = $requestType->category;
 
-        if ($requestType->requestFiles()->count() > 0) {
+        /* Supprimer une pièce qui a déjà servi effacerait l'historique :
+           les dossiers traités ne diraient plus ce qu'on leur avait demandé.
+           On refuse, et on oriente vers la désactivation. */
+        $fichiers = $requestType->requestFiles()->count();
+        if ($fichiers > 0) {
             return $this->backToTab($cat)->withErrors(
-                "Impossible de supprimer « {$requestType->label} » : " .
-                $requestType->requestFiles()->count() . " fichier(s) y sont associés. Désactivez-le plutôt."
+                "Impossible de supprimer « {$requestType->label} » : {$fichiers} fichier(s) "
+                . "y sont associés. Désactivez-la plutôt — elle disparaîtra des nouveaux "
+                . "dossiers sans effacer les anciens."
+            );
+        }
+
+        // Même raison pour un engagement de report : le dossier doit pouvoir
+        // continuer à nommer la pièce qu'il attend.
+        $engagements = \App\Models\Derogation::where('request_type_id', $requestType->id)->count();
+        if ($engagements > 0) {
+            return $this->backToTab($cat)->withErrors(
+                "Impossible de supprimer « {$requestType->label} » : {$engagements} dossier(s) "
+                . "se sont engagés à la fournir plus tard. Désactivez-la plutôt."
             );
         }
 
@@ -362,6 +355,73 @@ class RequestTypeController extends Controller
         $requestType->delete();
 
         return $this->backToTab($cat)->with('success', "« {$label} » supprimé.");
+    }
+
+    /* ── Duplication vers un autre niveau ───────────────── */
+
+    /**
+     * Recopie les pièces d'une procédure vers un autre niveau.
+     *
+     * Les niveaux ne partagent plus de pièces : monter la liste du
+     * master reviendrait à ressaisir celle de la licence. On la copie,
+     * puis on ajuste — c'est la copie qui rend l'indépendance vivable.
+     *
+     * La portée par parcours n'est PAS reprise : les parcours de départ
+     * n'existent pas dans le niveau d'arrivée. Les copies naissent donc
+     * communes à leur niveau, à restreindre ensuite.
+     */
+    public function dupliquerVersNiveau(Request $request, string $grade)
+    {
+        abort_unless(isset(\App\Models\Parcours::$grades[$grade]), 404);
+
+        $data = $request->validate([
+            'vers'     => ['required', Rule::in(array_keys(\App\Models\Parcours::$grades))],
+            'category' => ['required', Rule::exists('procedures', 'code')],
+        ]);
+
+        if ($data['vers'] === $grade) {
+            return back()->withErrors('Le niveau de destination doit être différent.');
+        }
+
+        $sources = RequestType::where('grade', $grade)
+            ->where('category', $data['category'])->orderBy('order')->get();
+
+        if ($sources->isEmpty()) {
+            return back()->withErrors("Ce niveau n'a aucune pièce pour cette procédure.");
+        }
+
+        // Ne pas recréer ce qui porte déjà le même libellé : la copie doit
+        // pouvoir être relancée sans empiler les doublons.
+        $dejaLa = RequestType::where('grade', $data['vers'])
+            ->where('category', $data['category'])->pluck('label')
+            ->map(fn ($l) => mb_strtolower(trim($l)))->all();
+
+        $copiees = 0;
+        foreach ($sources as $source) {
+            if (in_array(mb_strtolower(trim($source->label)), $dejaLa, true)) {
+                continue;
+            }
+
+            $copie = $source->replicate(['created_at', 'updated_at']);
+            $copie->grade = $data['vers'];
+            $copie->save();
+            $copiees++;
+        }
+
+        $ignorees = $sources->count() - $copiees;
+        $vers = \App\Models\Parcours::$grades[$data['vers']]['label'] ?? $data['vers'];
+
+        $msg = $copiees === 0
+            ? "Rien à copier : « {$vers} » possède déjà ces pièces."
+            : "{$copiees} pièce(s) copiée(s) vers « {$vers} »."
+              . ($ignorees ? " {$ignorees} déjà présente(s), laissée(s) de côté." : '')
+              . ' Les copies sont communes à leur niveau : restreignez-les si besoin.';
+
+        \App\Models\AuditLog::record('pieces.dupliquees', null,
+            "Pièces « {$data['category']} » copiées de {$grade} vers {$data['vers']} ({$copiees})");
+
+        return redirect()->route('admin.request-types.niveau',
+            ['grade' => $data['vers'], 'tab' => $data['category']])->with('success', $msg);
     }
 
     /* ── Toggle actif ───────────────────────────────────── */

@@ -31,6 +31,9 @@ class DepotsExport implements FromCollection, WithHeadings, WithMapping
             'faculte', 'departement', 'parcours', 'grade', 'annee_etudes', 'semestres', 'annee_academique',
             'statut', 'date_soumission', 'date_validation', 'valide_par',
             'nb_pieces', 'nb_pieces_tamponnees',
+            // Ce qui manquait au dépôt et reste dû : sans ces colonnes,
+            // l'export dirait qu'un dossier différé est un dossier complet.
+            'pieces_differees', 'pieces_encore_dues',
         ];
     }
 
@@ -64,6 +67,10 @@ class DepotsExport implements FromCollection, WithHeadings, WithMapping
             $r->validator?->staff_name,
             $r->files->count(),
             $r->files->where('is_stamped', true)->count(),
+            $r->derogations->count(),
+            $r->derogations->where('statut', 'engagee')
+                ->map(fn ($d) => $d->requestType?->label)
+                ->filter()->implode(' | '),
         ];
     }
 }

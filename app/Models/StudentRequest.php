@@ -155,10 +155,32 @@ class StudentRequest extends Model
             ->values();
     }
 
+    /**
+     * Niveau d'études dont relève ce dossier.
+     *
+     * Il vient du parcours choisi : c'est lui qui décide des pièces à
+     * fournir, un master ne devant pas fournir ce qu'une licence fournit.
+     */
+    public function grade(): ?string
+    {
+        return $this->parcours?->grade;
+    }
+
+    /** Les pièces attendues pour CE dossier, à son niveau. */
+    public function typesAttendus(): \Illuminate\Database\Eloquent\Collection
+    {
+        return RequestType::forCategory(
+            $this->category,
+            $this->student->user->type_etudiant,
+            $this->grade(),
+            $this->parcours_id
+        );
+    }
+
     /** @return \Illuminate\Support\Collection<int,RequestType> */
     public function piecesObligatoiresManquantes()
     {
-        return RequestType::forCategory($this->category, $this->student->user->type_etudiant)
+        return $this->typesAttendus()
             ->where('is_required', true)
             ->reject(fn (RequestType $t) => (bool) $this->fileForType($t))
             ->values();
@@ -166,15 +188,11 @@ class StudentRequest extends Model
 
     public function allRequiredFilesUploaded(): bool
     {
-        $required = RequestType::forCategory(
-            $this->category,
-            $this->student->user->type_etudiant
-        )->where('is_required', true);
-
-        foreach ($required as $type) {
+        foreach ($this->typesAttendus()->where('is_required', true) as $type) {
             if (!$this->fileForType($type))
                 return false;
         }
+
         return true;
     }
 

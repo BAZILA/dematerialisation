@@ -13,6 +13,18 @@ use Illuminate\Support\Facades\Hash;
 abstract class TestCase extends BaseTestCase
 {
     /**
+     * AnneeAcademique memoise l'annee active dans une propriete statique,
+     * valable le temps d'une requete HTTP. Les tests partagent un seul
+     * processus : sans remise a zero, l'annee d'un test survit au suivant
+     * et fausse silencieusement toutes les fenetres d'ouverture.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        AnneeAcademique::flushMemo();
+    }
+
+    /**
      * Référentiel minimal : rôles, permissions et réglages.
      * Les tests qui touchent aux droits ou aux modules en ont besoin.
      */

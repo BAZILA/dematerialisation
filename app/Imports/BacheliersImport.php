@@ -50,25 +50,44 @@ class BacheliersImport implements ToCollection, WithHeadingRow
                 'email'          => $this->s($row['email'] ?? null),
             ];
 
-            // Dédoublonnage : priorité au N° de suivi, sinon N° relevé, sinon N° table
-            $key = null;
+            /* Dédoublonnage.
+               On interroge TOUS les identifiants présents, pas seulement le
+               premier trouvé : un second fichier qui ajoute le n° de suivi à
+               une fiche déjà importée par n° de relevé aurait sinon créé un
+               doublon, la recherche portant sur une clé encore vide en base. */
+            $b = null;
             foreach (['numero_suivi', 'numero_releve', 'numero_table'] as $k) {
-                if ($data[$k]) { $key = [$k => $data[$k]]; break; }
+                if ($data[$k]) {
+                    $b = Bachelier::where($k, $data[$k])->first();
+                    if ($b) {
+                        break;
+                    }
+                }
             }
 
-            if ($key) {
-                $b = Bachelier::firstOrNew($key);
-                $existed = $b->exists;
-                $b->fill($data);
-                if (!$existed) {
-                    $b->is_registered = false;
-                }
-                $b->save();
-                $existed ? $this->updated++ : $this->created++;
-            } else {
-                Bachelier::create($data + ['is_registered' => false]);
-                $this->created++;
+            /* Aucun identifiant sur la ligne : sans repli, réimporter le même
+               fichier dupliquerait toute la promotion. L'identité civile fait
+               alors office de clé. */
+            if (!$b) {
+                // whereDate : la colonne peut porter une heure selon le
+                // moteur, une comparaison brute manquerait alors la fiche.
+                $b = Bachelier::where('nom', $nom)->where('prenom', $prenom)
+                    ->whereDate('date_naissance', $date)->first();
             }
+
+            $existed = (bool) $b;
+            $b = $b ?: new Bachelier();
+
+            /* Une colonne absente du fichier ne doit rien effacer : « mettre à
+               jour » n'est pas « remplacer ». Sur une fiche existante on ne
+               reprend que les valeurs réellement fournies. */
+            $b->fill($existed ? array_filter($data, fn ($v) => $v !== null) : $data);
+
+            if (!$existed) {
+                $b->is_registered = false;
+            }
+            $b->save();
+            $existed ? $this->updated++ : $this->created++;
         }
     }
 

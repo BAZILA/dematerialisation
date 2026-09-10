@@ -157,9 +157,20 @@
 
                 {{-- ═══ Pièces attendues ═══ --}}
                 @if ($liste->isEmpty())
-                    <div class="text-center text-muted py-5">
-                        <i class="fas fa-inbox fs-3 d-block mb-2" style="opacity:.4;"></i>
-                        Aucune pièce définie pour « {{ $proc->nom }} » à ce niveau.
+                    <div class="text-center py-5">
+                        <i class="fas fa-inbox fs-3 d-block mb-2" style="opacity:.4;color:var(--t3);"></i>
+                        <div class="text-muted mb-3">
+                            Aucune pièce définie pour « {{ $proc->nom }} » en {{ $info['label'] }}.
+                        </div>
+                        {{-- Un niveau sans pièce laisse passer des dossiers vides :
+                             on le dit ici, à l'endroit exact où ça se corrige. --}}
+                        <div class="alert alert-warning d-inline-block text-start mb-0"
+                            style="font-size:12.5px;max-width:560px;">
+                            <i class="fas fa-triangle-exclamation"></i>
+                            Tant qu'aucune pièce n'est définie, un dossier « {{ $proc->nom }} »
+                            de ce niveau <strong>peut être soumis vide</strong>.
+                            Ajoutez-en une, ou recopiez celles d'un autre niveau ci-dessous.
+                        </div>
                     </div>
                 @else
                     <div class="table-responsive">
@@ -176,9 +187,10 @@
                             <tbody>
                                 @foreach ($liste as $type)
                                     @php
-                                        $estCommune  = $type->parcours->isEmpty() && $type->grades->isEmpty();
-                                        $surCeNiveau = $type->grades->contains('grade', $grade);
-                                        $parcoursIci = $type->parcours->whereIn('id', $parcoursDuNiveau->pluck('id'));
+                                        // La pièce appartient à ce niveau : reste à savoir
+                                        // si tout le niveau la fournit, ou certains parcours.
+                                        $estCommune  = $type->parcours->isEmpty();
+                                        $parcoursIci = $type->parcours;
                                     @endphp
                                     <tr>
                                         <td>
@@ -189,17 +201,11 @@
                                         </td>
                                         <td>
                                             @if ($estCommune)
-                                                <span class="portee-pastille p-tous">Tout le monde</span>
+                                                <span class="portee-pastille p-niveau">Tout {{ $info['label'] }}</span>
                                             @else
-                                                @if ($surCeNiveau)
-                                                    <span class="portee-pastille p-niveau">Tout {{ $info['label'] }}</span>
-                                                @endif
                                                 @foreach ($parcoursIci as $p)
                                                     <span class="portee-pastille p-parcours">{{ $p->nom }}</span>
                                                 @endforeach
-                                                @if (!$surCeNiveau && $parcoursIci->isEmpty())
-                                                    <span class="portee-pastille p-tous">Rattachée à un autre niveau</span>
-                                                @endif
                                             @endif
                                         </td>
                                         <td class="text-center">
@@ -218,11 +224,40 @@
                                         </td>
                                         <td class="text-end">
                                             @can('parametres.gerer')
-                                                <button class="btn btn-sm btn-outline-primary"
-                                                    data-bs-toggle="modal" data-bs-target="#modalEdit{{ $type->id }}"
-                                                    title="Modifier">
-                                                    <i class="fas fa-pen"></i>
-                                                </button>
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary"
+                                                        data-bs-toggle="modal" data-bs-target="#modalEdit{{ $type->id }}"
+                                                        title="Modifier">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+
+                                                    {{-- Masquer sans supprimer : le geste courant --}}
+                                                    <form method="POST" class="d-inline"
+                                                        action="{{ route('admin.request-types.toggle', $type) }}">
+                                                        @csrf @method('PATCH')
+                                                        <input type="hidden" name="niveau" value="{{ $grade }}">
+                                                        <input type="hidden" name="tab" value="{{ $proc->code }}">
+                                                        <button type="submit"
+                                                            class="btn btn-outline-{{ $type->is_active ? 'secondary' : 'success' }}"
+                                                            title="{{ $type->is_active ? 'Désactiver' : 'Activer' }}">
+                                                            <i class="fas fa-{{ $type->is_active ? 'eye-slash' : 'eye' }}"></i>
+                                                        </button>
+                                                    </form>
+
+                                                    {{-- Suppression définitive : refusée par le contrôleur dès
+                                                         qu'une pièce a servi. Réservée aux cas extrêmes. --}}
+                                                    <form method="POST" class="d-inline"
+                                                        action="{{ route('admin.request-types.destroy', $type) }}"
+                                                        onsubmit="return confirm('Supprimer définitivement « {{ addslashes($type->label) }} » ? Cette action est irréversible. Pour la retirer sans perdre l'historique, désactivez-la plutôt.');">
+                                                        @csrf @method('DELETE')
+                                                        <input type="hidden" name="niveau" value="{{ $grade }}">
+                                                        <input type="hidden" name="tab" value="{{ $proc->code }}">
+                                                        <button type="submit" class="btn btn-outline-danger"
+                                                            title="Supprimer définitivement">
+                                                            <i class="fas fa-trash-can"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             @endcan
                                         </td>
                                     </tr>
@@ -231,6 +266,40 @@
                         </table>
                     </div>
                 @endif
+
+                {{-- ═══ Recopier vers un autre niveau ═══
+                     Les niveaux ne partagent plus de pièces : sans copie,
+                     monter la liste du master reviendrait à ressaisir celle
+                     de la licence à l'identique. --}}
+                @can('parametres.gerer')
+                    @if ($liste->isNotEmpty() && count($grades) > 1)
+                        <form method="POST" class="mt-4 pt-3 border-top"
+                            action="{{ route('admin.request-types.niveau.dupliquer', $grade) }}"
+                            onsubmit="return confirm('Recopier ces pièces vers le niveau choisi ?');">
+                            @csrf
+                            <input type="hidden" name="category" value="{{ $proc->code }}">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="small" style="color:var(--t2);">
+                                    <i class="fas fa-copy"></i>
+                                    Recopier ces {{ $liste->count() }} pièce(s) vers
+                                </span>
+                                <select name="vers" class="form-select form-select-sm" style="width:auto;" required>
+                                    @foreach ($grades as $code => $g)
+                                        @if ($code !== $grade)
+                                            <option value="{{ $code }}">{{ $g['label'] }}</option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                                <button class="btn btn-sm btn-outline-secondary">Recopier</button>
+                            </div>
+                            <small class="text-muted d-block mt-1">
+                                Les copies naissent communes à leur niveau — la restriction par
+                                parcours n'est pas reprise, les parcours n'étant pas les mêmes.
+                                Une pièce portant déjà le même libellé là-bas est laissée de côté.
+                            </small>
+                        </form>
+                    @endif
+                @endcan
             </div>
         @endforeach
     </div>

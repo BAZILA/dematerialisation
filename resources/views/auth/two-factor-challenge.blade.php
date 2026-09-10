@@ -39,7 +39,7 @@
         <form method="POST" action="{{ route('2fa.verify') }}">
             @csrf
             <input type="text" name="code" id="champCode" class="tfa-code mb-3" maxlength="6" pattern="\d{6}"
-                inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" autofocus required>
+                inputmode="numeric" autocomplete="one-time-code" aria-label="Code à six chiffres" autofocus required>
             <button type="submit" class="btn-uk"><i class="fas fa-unlock"></i> Vérifier</button>
         </form>
 

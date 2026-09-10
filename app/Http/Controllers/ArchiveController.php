@@ -69,7 +69,10 @@ class ArchiveController extends Controller
 
         $dossiers = $this->base($request)
             ->with(['student.user', 'student.bachelier', 'student.ancienEtudiant',
-                    'parcours.departement.faculte', 'files', 'validator', 'anneeAcademique'])
+                    'parcours.departement.faculte', 'files', 'validator', 'anneeAcademique',
+                    // Un dossier validé peut l'avoir été avec une pièce encore
+                    // due : l'archive doit le dire, sinon elle ment.
+                    'derogations.requestType'])
             ->orderByDesc('annee_academique_id')
             ->orderBy('parcours_id')->orderBy('semestre')
             ->paginate(\App\Models\Setting::perPage(25))->withQueryString();

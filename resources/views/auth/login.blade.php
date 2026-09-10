@@ -50,16 +50,16 @@
                 <form method="POST" action="{{ route('login.post') }}">
                     @csrf
                     <div class="mb-3">
-                        <label class="form-label"><i class="fas fa-id-card"></i> Identifiant</label>
+                        <label class="form-label" for="idLogin"><i class="fas fa-id-card"></i> Identifiant</label>
                         <input type="text" class="form-control @error('numero_identifiant') is-invalid @enderror"
-                            name="numero_identifiant" placeholder="Ex : ADMIN001" value="{{ old('numero_identifiant') }}" autofocus required>
+                            name="numero_identifiant" id="idLogin" value="{{ old('numero_identifiant') }}" autofocus required>
                         @error('numero_identifiant')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label"><i class="fas fa-key"></i> Mot de passe</label>
+                        <label class="form-label" for="pwdLogin"><i class="fas fa-key"></i> Mot de passe</label>
                         <div class="input-group">
-                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="pwdLogin" name="password" placeholder="••••••••" required>
+                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="pwdLogin" name="password" required>
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwd('pwdLogin',this)"><i class="fas fa-eye"></i></button>
                         </div>
                         @error('password')<div class="text-danger small mt-1">{{ $message }}</div>@enderror

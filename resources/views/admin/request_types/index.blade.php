@@ -76,28 +76,19 @@
             </div>
         @endforeach
 
-        {{-- Les pièces sans portée : elles suivent tous les niveaux --}}
-        <div class="col-md-6 col-xl-4">
-            <a href="{{ route('admin.request-types.niveau', $niveaux->first()['code'] ?? 'licence') }}"
-                class="niv-card" style="border-style:dashed;">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="niv-icone" style="background:var(--t3);"><i class="fas fa-layer-group"></i></div>
-                    <div>
-                        <div class="niv-nom">Communes à tous</div>
-                        <div class="small" style="color:var(--t3);">Réclamées quel que soit le niveau</div>
-                    </div>
-                </div>
-                <div class="niv-chiffres">
-                    <div class="niv-chiffre">
-                        <b>{{ $nbCommunes }}</b>
-                        <span>pièce{{ $nbCommunes > 1 ? 's' : '' }} sans restriction</span>
-                    </div>
-                </div>
-                <div class="small mt-3" style="color:var(--t3);">
-                    <i class="fas fa-arrow-right"></i> Visibles depuis n'importe quel niveau.
-                </div>
-            </a>
-        </div>
     </div>
+
+    @if ($niveauxVides->isNotEmpty())
+        {{-- Un niveau sans pièce accepte des dossiers vides : le dire ici,
+             plutôt que de le laisser découvrir par un dossier soumis à blanc. --}}
+        <div class="alert alert-warning mt-4" style="font-size:13px;">
+            <i class="fas fa-triangle-exclamation"></i>
+            <strong>Aucune pièce exigée</strong> pour :
+            <strong>{{ $niveauxVides->implode(', ') }}</strong>.
+            Tant qu'aucune pièce n'y est définie, les dossiers de ce ou ces niveaux
+            peuvent être soumis vides. Entrez dans le niveau pour en ajouter, ou
+            recopiez celles d'un autre niveau depuis son écran.
+        </div>
+    @endif
 
 @endsection

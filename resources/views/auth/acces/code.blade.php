@@ -114,10 +114,10 @@
 
             <form method="POST" action="{{ route('acces.code.post') }}" class="mt-3">
                 @csrf
-                <label class="form-label" style="font-size:13px;">Saisissez-le pour continuer</label>
-                <input type="text" name="code" maxlength="20" autocomplete="one-time-code"
+                <label class="form-label" for="champAcces" style="font-size:13px;">Saisissez-le pour continuer</label>
+                <input type="text" name="code" id="champAcces" maxlength="20" autocomplete="one-time-code"
                     class="form-control ac-champ @error('code') is-invalid @enderror"
-                    placeholder="XXXX-XXXX" autofocus required>
+                    autofocus required>
                 @error('code')
                     <div class="invalid-feedback text-center">{{ $message }}</div>
                 @enderror

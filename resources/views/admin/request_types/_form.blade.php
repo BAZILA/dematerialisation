@@ -70,57 +70,50 @@
         </small>
     </div>
 
-    {{-- Portée (candidatures uniquement) : commune ou propre à des parcours --}}
+    {{-- Portée de la pièce, À L'INTÉRIEUR de son niveau --}}
     @php
         $uid = $item?->id ?? 'new';
-        $aUnePortee = $item && ($item->parcours->isNotEmpty() || $item->grades->isNotEmpty());
-        $porteeActuelle = old('portee', $aUnePortee ? 'specifique' : 'commune');
+
+        /* Le niveau vient de l'écran d'où l'on édite : une pièce appartient
+           à un niveau et à un seul. Les niveaux partagent les procédures,
+           jamais les pièces. */
+        $niveauCourant = $niveauCourant ?? $item?->grade ?? array_key_first($grades ?? []);
+        $niveauLabel = \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant;
+
+        $porteeActuelle = old('portee', $item && $item->parcours->isNotEmpty() ? 'specifique' : 'commune');
         $parcoursCoches = collect(old('parcours_ids', $item?->parcours->pluck('id')->all() ?? []))
             ->map(fn($v) => (int) $v)
             ->all();
-        $gradesCoches = collect(old('grades', $item?->grades->pluck('grade')->all() ?? []))
-            ->map(fn($v) => (string) $v)
-            ->all();
 
-        // Édité depuis l'écran d'un niveau : on ne montre QUE ce niveau et
-        // ses parcours. Proposer les autres n'aurait pas de sens ici, et
-        // le contrôleur préserve de son côté les portées non affichées.
-        $niveauCourant = $niveauCourant ?? null;
-        $gradesAffiches = $niveauCourant
-            ? array_intersect_key($grades ?? [], [$niveauCourant => true])
-            : ($grades ?? []);
-
-        // Portées hors du niveau courant : on les annonce, sans les toucher
-        $horsNiveau = [];
-        if ($niveauCourant && $item) {
-            $autresGrades = collect($item->grades->pluck('grade'))
-                ->reject(fn($g) => $g === $niveauCourant)
-                ->map(fn($g) => 'Tout ' . (\App\Models\Parcours::$grades[$g]['label'] ?? $g));
-            $autresParcours = $item->parcours
-                ->filter(fn($p) => $p->grade !== $niveauCourant)
-                ->pluck('nom');
-            $horsNiveau = $autresGrades->merge($autresParcours)->all();
-        }
+        // Seuls les parcours de CE niveau ont un sens ici : en désigner un
+        // d'ailleurs rendrait la pièce invisible pour tout le monde.
+        $parcoursDuNiveau = collect($parcoursParFaculte ?? [])
+            ->map(fn($liste) => collect($liste)->where('grade', $niveauCourant)->values())
+            ->filter(fn($liste) => $liste->isNotEmpty());
     @endphp
-    <div class="col-12" id="portee-row-{{ $uid }}"
-        style="display: {{ old('category', $item?->category) === 'candidature' ? '' : 'none' }};">
-        <label class="form-label">Portée de la pièce <span class="text-danger">*</span></label>
 
-        {{-- « Commune » couvre TOUS les niveaux, pas seulement celui d'où
-             l'on édite. La confusion est facile depuis l'écran d'un niveau :
-             on le dit franchement. --}}
+    <input type="hidden" name="grade" value="{{ $niveauCourant }}">
+
+    <div class="col-12">
+        <label class="form-label">
+            Qui doit fournir cette pièce ? <span class="text-danger">*</span>
+        </label>
+
+        <div class="alert alert-light border py-2 px-3 mb-2" style="font-size:12.5px;">
+            <i class="fas fa-graduation-cap"></i>
+            Cette pièce appartient au niveau <strong>{{ $niveauLabel }}</strong>.
+            Elle ne sera <strong>jamais</strong> réclamée à un autre niveau.
+        </div>
+
         <div class="d-flex flex-column gap-2 mb-2">
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="portee" value="commune"
                     id="portee-com-{{ $uid }}" {{ $porteeActuelle === 'commune' ? 'checked' : '' }}
                     onchange="togglePortee(this)">
                 <label class="form-check-label" for="portee-com-{{ $uid }}">
-                    <strong>Commune à tous les niveaux</strong>
+                    <strong>Tout le niveau {{ $niveauLabel }}</strong>
                     <span class="d-block small" style="color:var(--t2);">
-                        Réclamée à chaque candidat de l'université — licence, master, doctorat…
-                        @if ($niveauCourant)
-                            Pas seulement en {{ \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant }}.
-                        @endif
+                        Chaque parcours de ce niveau la fournit, y compris ceux créés plus tard.
                     </span>
                 </label>
             </div>
@@ -129,64 +122,17 @@
                     id="portee-spe-{{ $uid }}" {{ $porteeActuelle === 'specifique' ? 'checked' : '' }}
                     onchange="togglePortee(this)">
                 <label class="form-check-label" for="portee-spe-{{ $uid }}">
-                    <strong>Restreinte</strong>
+                    <strong>Certains parcours seulement</strong>
                     <span class="d-block small" style="color:var(--t2);">
-                        @if ($niveauCourant)
-                            À tout {{ \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant }},
-                            ou à certains de ses parcours seulement.
-                        @else
-                            À un niveau entier, ou à des parcours nommés.
-                        @endif
+                        Les autres parcours de {{ $niveauLabel }} ne la verront pas.
                     </span>
                 </label>
             </div>
         </div>
 
         <div id="portee-list-{{ $uid }}" style="display: {{ $porteeActuelle === 'specifique' ? '' : 'none' }};">
-
-            {{-- Par NIVEAU : évite d'énumérer chaque parcours, et couvre
-                 automatiquement ceux qui seront ouverts plus tard. --}}
-            <div class="mb-3">
-                <div class="small fw-semibold mb-2" style="color:var(--t2);">
-                    <i class="fas fa-graduation-cap"></i> Par niveau
-                </div>
-                <div class="d-flex gap-3 flex-wrap">
-                    @foreach ($gradesAffiches as $code => $info)
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="grades[]"
-                                value="{{ $code }}" id="gr-{{ $uid }}-{{ $code }}"
-                                {{ in_array($code, $gradesCoches, true) ? 'checked' : '' }}>
-                            <label class="form-check-label small" for="gr-{{ $uid }}-{{ $code }}">
-                                Tout {{ $info['label'] }}
-                            </label>
-                        </div>
-                    @endforeach
-                </div>
-                <small class="text-muted d-block mt-1">
-                    @if ($niveauCourant)
-                        Cocher réclame la pièce à chaque parcours de ce niveau,
-                        y compris ceux créés par la suite.
-                    @else
-                        Cocher « Tout Master » réclame la pièce à chaque parcours de master,
-                        y compris ceux créés par la suite.
-                    @endif
-                </small>
-
-                @if ($horsNiveau)
-                    <div class="alert alert-secondary py-2 px-3 mt-2 mb-0" style="font-size:12px;">
-                        <i class="fas fa-lock"></i>
-                        Cette pièce est aussi rattachée ailleurs :
-                        <strong>{{ implode(', ', $horsNiveau) }}</strong>.
-                        Ces portées ne sont pas modifiables depuis cet écran et seront conservées.
-                    </div>
-                @endif
-            </div>
-
-            <div class="small fw-semibold mb-2" style="color:var(--t2);">
-                <i class="fas fa-list-check"></i> Par parcours précis
-            </div>
             <div class="border rounded p-2" style="max-height:220px;overflow-y:auto;">
-                @forelse ($parcoursParFaculte ?? [] as $facNom => $liste)
+                @forelse ($parcoursDuNiveau as $facNom => $liste)
                     <div class="small fw-semibold mt-2 mb-1" style="color:var(--t2);">{{ $facNom }}</div>
                     @foreach ($liste as $p)
                         <div class="form-check">
@@ -195,17 +141,18 @@
                                 {{ in_array($p->id, $parcoursCoches, true) ? 'checked' : '' }}>
                             <label class="form-check-label small" for="pp-{{ $uid }}-{{ $p->id }}">
                                 {{ $p->nom }}
-                                <span class="text-muted">({{ \App\Models\Parcours::$grades[$p->grade]['label'] ?? $p->grade }})</span>
                             </label>
                         </div>
                     @endforeach
                 @empty
-                    <div class="small text-muted">Aucun parcours actif.</div>
+                    <div class="small text-muted">
+                        Aucun parcours actif en {{ $niveauLabel }}. Sans parcours, la pièce
+                        reste commune au niveau.
+                    </div>
                 @endforelse
             </div>
-            <small class="text-muted">
-                Les deux portées se cumulent : un niveau coché ET des parcours nommés
-                réclament la pièce dans les deux cas.
+            <small class="text-muted d-block mt-1">
+                Ne cocher aucun parcours revient à la rendre commune à tout le niveau.
             </small>
         </div>
     </div>
@@ -226,10 +173,23 @@
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" name="is_required" value="1"
                     id="req-{{ $item?->id ?? 'new' }}"
-                    {{ old('is_required', $item?->is_required ?? true) ? 'checked' : '' }}>
+                    {{ old('is_required', $item?->is_required ?? true) ? 'checked' : '' }}
+                    onchange="ukMajDerogation('{{ $item?->id ?? 'new' }}');">
                 <label class="form-check-label" for="req-{{ $item?->id ?? 'new' }}">
                     <strong>Obligatoire</strong>
                     <br><small class="text-muted ">Bloque la soumission si absent</small>
+                </label>
+            </div>
+
+            {{-- Report possible : seule une pièce obligatoire a quelque chose à différer --}}
+            <div class="form-check form-switch" id="blocDerog-{{ $item?->id ?? 'new' }}">
+                <input class="form-check-input" type="checkbox" name="derogation_possible" value="1"
+                    id="derog-{{ $item?->id ?? 'new' }}"
+                    {{ old('derogation_possible', $item?->derogation_possible ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="derog-{{ $item?->id ?? 'new' }}">
+                    <strong>Report autorisé</strong>
+                    <br><small class="text-muted ">L'usager peut soumettre sans elle en s'engageant à la
+                        fournir. La pièce reste due.</small>
                 </label>
             </div>
 
@@ -282,11 +242,8 @@
         if (profileRow) {
             profileRow.style.display = selectEl.value === 'depot' ? '' : 'none';
         }
-        // La portée (commune / propre à un parcours) ne concerne que les candidatures
-        const porteeRow = modal?.querySelector('[id^="portee-row"]');
-        if (porteeRow) {
-            porteeRow.style.display = selectEl.value === 'candidature' ? '' : 'none';
-        }
+        // La portée vaut désormais pour TOUTES les procédures : un dépôt de
+        // licence peut n'exiger un certificat médical que du parcours STAPS.
     }
 
     function togglePortee(radioEl) {
@@ -296,4 +253,22 @@
             list.style.display = radioEl.value === 'specifique' ? '' : 'none';
         }
     }
+
+    /* Une pièce facultative n'a rien à différer : le report ne s'offre
+       que sur une pièce obligatoire, et se retire avec elle. */
+    function ukMajDerogation(suffixe) {
+        const requis = document.getElementById('req-' + suffixe);
+        const bloc = document.getElementById('blocDerog-' + suffixe);
+        const cible = document.getElementById('derog-' + suffixe);
+        if (!requis || !bloc || !cible) return;
+
+        bloc.style.display = requis.checked ? '' : 'none';
+        if (!requis.checked) cible.checked = false;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[id^="blocDerog-"]').forEach(function(bloc) {
+            ukMajDerogation(bloc.id.substring('blocDerog-'.length));
+        });
+    });
 </script>

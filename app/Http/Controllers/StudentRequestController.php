@@ -18,8 +18,12 @@ class StudentRequestController extends Controller
 
     public function create(Request $request)
     {
+        /* Le parcours decide du niveau, et le niveau decide des pieces :
+           sans lui on ne saurait pas quoi reclamer. Le depot le recueille
+           par son assistant ; les autres procedures le demandent ici. */
         $request->validate([
-            'category' => ['required', \Illuminate\Validation\Rule::exists('procedures', 'code')],
+            'category'    => ['required', \Illuminate\Validation\Rule::exists('procedures', 'code')],
+            'parcours_id' => ['nullable', 'exists:parcours,id'],
         ]);
 
         $student = Auth::user()->student;
@@ -60,9 +64,17 @@ class StudentRequestController extends Controller
                 ->withErrors("Aucune année académique active. Contactez l'administration.");
         }
 
+        $parcoursId = $request->input('parcours_id');
+        if (!$parcoursId) {
+            return $this->tabRedirect($category)->withErrors(
+                "Indiquez votre parcours : c'est lui qui determine les pieces a fournir."
+            );
+        }
+
         StudentRequest::create([
             'student_id' => $student->id,
             'category' => $category,
+            'parcours_id' => $parcoursId,
             'annee_academique_id' => $annee->id,
             'status' => 'brouillon',
             'version' => 1,

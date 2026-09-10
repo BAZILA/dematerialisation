@@ -87,6 +87,67 @@
                 </div>
             </div>
 
+            {{-- Pièces différées : le dossier a avancé, mais elles restent dues --}}
+            @php
+                $piecesDifferees = $studentRequest->derogations()
+                    ->with('requestType', 'leveur')->orderBy('id')->get();
+                $encoreDues = $piecesDifferees->where('statut', 'engagee');
+            @endphp
+            @if ($piecesDifferees->isNotEmpty())
+                <div class="card mb-4" style="border-left:3px solid rgba(245,158,11,.9);">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span style="color:var(--t1);font-weight:600;">
+                            <i class="fas fa-clock" style="color:#B45309;"></i> Pièces à fournir plus tard
+                        </span>
+                        @if ($encoreDues->isNotEmpty())
+                            <span class="badge"
+                                style="background:rgba(245,158,11,.15);color:#B45309;border:1px solid rgba(245,158,11,.35);">
+                                {{ $encoreDues->count() }} encore due{{ $encoreDues->count() > 1 ? 's' : '' }}
+                            </span>
+                        @endif
+                    </div>
+                    <div class="card-body">
+                        <p class="small" style="color:var(--t2);">
+                            L'usager s'est engagé à déposer ces pièces dès leur obtention. Elles restent
+                            dues : constatez la réception pour lever la mention. Le dossier peut être
+                            rejeté normalement si l'engagement n'est pas tenu.
+                        </p>
+                        <ul class="list-unstyled mb-0">
+                            @foreach ($piecesDifferees as $differee)
+                                <li class="d-flex align-items-center flex-wrap gap-2 py-2"
+                                    style="border-top:1px solid var(--line);">
+                                    <span class="badge bg-{{ $differee->statut_badge }}">
+                                        {{ $differee->statut_label }}
+                                    </span>
+                                    <span style="color:var(--t1);">
+                                        {{ $differee->requestType->label ?? 'Document' }}
+                                    </span>
+                                    <small style="color:var(--t2);">
+                                        engagée le {{ $differee->engagee_at?->format('d/m/Y') }}
+                                        @if ($differee->levee_at)
+                                            · reçue le {{ $differee->levee_at->format('d/m/Y') }}
+                                            @if ($differee->leveur)
+                                                par {{ $differee->leveur->numero_identifiant }}
+                                            @endif
+                                        @endif
+                                    </small>
+                                    @if ($differee->estEnCours())
+                                        <form method="POST" class="ms-auto"
+                                            action="{{ route('admin.derogations.lever', $differee) }}"
+                                            onsubmit="return confirm('Confirmer que cette pièce a bien été reçue ?');">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                                <i class="fas fa-check"></i> Pièce reçue
+                                            </button>
+                                        </form>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+            @endif
+
             {{-- Documents --}}
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">

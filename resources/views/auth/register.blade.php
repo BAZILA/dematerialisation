@@ -71,7 +71,7 @@
                             <i class="fas fa-id-badge"></i> Numéro de Carte Étudiant
                         </label>
                         <input type="text" class="form-control @error('numero_carte') is-invalid @enderror"
-                            name="numero_carte" value="{{ old('numero_carte') }}" placeholder="Ex : CARTE0000001">
+                            name="numero_carte" value="{{ old('numero_carte') }}">
                         @error('numero_carte')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -84,7 +84,7 @@
                                 <i class="fas fa-user"></i> Nom
                             </label>
                             <input type="text" class="form-control @error('nom') is-invalid @enderror" name="nom"
-                                value="{{ old('nom') }}" placeholder="MENSAH" required>
+                                value="{{ old('nom') }}" required>
                             @error('nom')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -94,7 +94,7 @@
                                 <i class="fas fa-user"></i> Prénom
                             </label>
                             <input type="text" class="form-control @error('prenom') is-invalid @enderror" name="prenom"
-                                value="{{ old('prenom') }}" placeholder="Kofi" required>
+                                value="{{ old('prenom') }}" required>
                             @error('prenom')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -118,7 +118,7 @@
                                 <i class="fas fa-map-marker-alt"></i> Lieu de Naissance
                             </label>
                             <input type="text" class="form-control @error('lieu_naissance') is-invalid @enderror"
-                                name="lieu_naissance" value="{{ old('lieu_naissance') }}" placeholder="Lomé">
+                                name="lieu_naissance" value="{{ old('lieu_naissance') }}">
                             @error('lieu_naissance')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror

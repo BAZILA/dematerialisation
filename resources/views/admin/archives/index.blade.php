@@ -170,6 +170,14 @@
                                     <span class="badge bg-secondary"><i class="fas fa-paperclip"></i> {{ $d->files->count() }}</span>
                                     @php $st = $d->files->where('is_stamped', true)->count(); @endphp
                                     @if ($st)<span class="badge bg-primary"><i class="fas fa-stamp"></i> {{ $st }}</span>@endif
+                                    @php $dues = $d->derogations->where('statut', 'engagee'); @endphp
+                                    @if ($dues->isNotEmpty())
+                                        <span class="badge"
+                                            style="background:rgba(245,158,11,.15);color:#B45309;border:1px solid rgba(245,158,11,.35);"
+                                            title="Pièce(s) encore due(s) : {{ $dues->map(fn ($x) => $x->requestType?->label)->filter()->implode(', ') }}">
+                                            <i class="fas fa-clock"></i> {{ $dues->count() }} due{{ $dues->count() > 1 ? 's' : '' }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="small">{{ optional($d->validated_at)->format('d/m/Y') }}</td>
                                 <td class="text-center">

@@ -166,6 +166,38 @@
             font-size: 15px; flex-shrink: 0;
         }
 
+        /* ── Groupes repliables ──
+           La configuration comptait onze entrees a plat : on ne trouvait
+           plus rien. Elles se rangent desormais sous quatre en-tetes que
+           l'on ouvre a la demande. */
+        .sb-groupe { margin-bottom: 2px; }
+        .sb-groupe-tete {
+            display: flex; align-items: center; gap: 13px; width: 100%;
+            padding: 10px 12px; margin-bottom: 3px;
+            background: none; border: none; border-radius: 10px;
+            color: var(--sb-text); font-size: 14px; font-weight: 500;
+            font-family: inherit; text-align: left; cursor: pointer;
+            white-space: nowrap;
+            transition: color var(--dur), background var(--dur);
+        }
+        .sb-groupe-tete:hover { color: var(--sb-text-hover); background: rgba(255, 255, 255, .05); }
+        .sb-chevron {
+            margin-left: auto; font-size: 11px; color: var(--sb-muted);
+            transition: transform var(--dur);
+        }
+        .sb-groupe.ouvert > .sb-groupe-tete .sb-chevron { transform: rotate(180deg); }
+        /* Un groupe qui contient la page courante reste lisible meme ferme */
+        .sb-groupe.porte-actif > .sb-groupe-tete { color: var(--sb-text-hover); }
+
+        .sb-groupe-corps { display: none; padding-left: 12px; }
+        .sb-groupe.ouvert > .sb-groupe-corps { display: block; }
+        .sb-groupe-corps .sb-link { font-size: 13.5px; }
+
+        /* Replie en icones seules, un groupe n'a plus de place pour se
+           deployer : ses entrees redeviennent une simple liste. */
+        body.sb-collapsed .sb-groupe-tete { display: none; }
+        body.sb-collapsed .sb-groupe-corps { display: block; padding-left: 0; }
+
         .sb-foot { border-top: 1px solid var(--sb-line); padding: 12px; flex-shrink: 0; }
         .sb-user { display: flex; align-items: center; gap: 11px; padding: 6px; border-radius: var(--r); }
         .sb-avatar {
@@ -521,60 +553,123 @@
                     @if ($sectionConfig)
                         <div class="sb-section">Configuration</div>
                     @endif
-                    @canany(['procedures.voir', 'parametres.gerer'])
-                        <a href="{{ route('admin.procedures.index') }}" class="sb-link {{ request()->routeIs('admin.procedures.*') ? 'active' : '' }}" title="Procédures">
-                            <span class="sb-icon"><i class="fas fa-diagram-project"></i></span><span class="sb-label">Procédures</span>
-                        </a>
-                    @endcanany
-                    @canany(['types.voir', 'parametres.gerer'])
-                        <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
-                            <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
-                        </a>
-                    @endcanany
-                    @canany(['academique.voir', 'academique.gerer'])
-                        <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
-                            <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
-                        </a>
-                    @endcanany
-                    @canany(['annees.voir', 'annees.gerer'])
-                        <a href="{{ route('admin.annees.index') }}" class="sb-link {{ request()->routeIs('admin.annees.*') ? 'active' : '' }}" title="Années académiques">
-                            <span class="sb-icon"><i class="fas fa-calendar-days"></i></span><span class="sb-label">Années académiques</span>
-                        </a>
-                    @endcanany
-                    @canany(['identites.voir', 'identites.importer'])
-                        <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import / export)">
-                            <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
-                        </a>
-                    @endcanany
-                    @canany(['utilisateurs.voir', 'utilisateurs.gerer'])
-                        <a href="{{ route('admin.utilisateurs.index') }}" class="sb-link {{ request()->routeIs('admin.utilisateurs.*') ? 'active' : '' }}" title="Utilisateurs">
-                            <span class="sb-icon"><i class="fas fa-users-gear"></i></span><span class="sb-label">Utilisateurs</span>
-                        </a>
-                    @endcanany
-                    @canany(['perimetres.voir', 'perimetres.affecter', 'utilisateurs.gerer'])
-                        <a href="{{ route('admin.perimetres.index') }}" class="sb-link {{ request()->routeIs('admin.perimetres.*') ? 'active' : '' }}" title="Périmètres agents">
-                            <span class="sb-icon"><i class="fas fa-location-crosshairs"></i></span><span class="sb-label">Périmètres agents</span>
-                        </a>
-                    @endcanany
-                    @if (\App\Models\Paiement::moduleActif())
-                    @canany(['paiements.voir', 'paiements.confirmer'])
-                        <a href="{{ route('admin.paiements.index') }}" class="sb-link {{ request()->routeIs('admin.paiements.*') ? 'active' : '' }}" title="Paiements">
-                            <span class="sb-icon"><i class="fas fa-money-bill-transfer"></i></span><span class="sb-label">Paiements</span>
-                        </a>
-                    @endcanany
+
+                    @php
+                        $u = auth()->user();
+                        /* Un groupe vide ferait croire à l'agent qu'il lui
+                           manque un droit : on ne l'affiche pas du tout. */
+                        $grDossiers = $u->canAny(['procedures.voir', 'parametres.gerer',
+                            'types.voir', 'annees.voir', 'annees.gerer']);
+                        $grReferentiel = $u->canAny(['academique.voir', 'academique.gerer',
+                            'identites.voir', 'identites.importer']);
+                        $grPersonnel = $u->canAny(['utilisateurs.voir', 'utilisateurs.gerer',
+                            'perimetres.voir', 'perimetres.affecter', 'roles.voir', 'roles.gerer']);
+                        $grSysteme = $u->isSuperAdmin()
+                            || (\App\Models\Paiement::moduleActif()
+                                && $u->canAny(['paiements.voir', 'paiements.confirmer']));
+                    @endphp
+
+                    @if ($grDossiers)
+                        <div class="sb-groupe" data-groupe="dossiers">
+                            <button type="button" class="sb-groupe-tete" onclick="ukBasculerGroupe(this)">
+                                <span class="sb-icon"><i class="fas fa-folder-tree"></i></span>
+                                <span class="sb-label">Dossiers</span>
+                                <i class="fas fa-chevron-down sb-chevron sb-label"></i>
+                            </button>
+                            <div class="sb-groupe-corps">
+                                @canany(['procedures.voir', 'parametres.gerer'])
+                                    <a href="{{ route('admin.procedures.index') }}" class="sb-link {{ request()->routeIs('admin.procedures.*') ? 'active' : '' }}" title="Procédures">
+                                        <span class="sb-icon"><i class="fas fa-diagram-project"></i></span><span class="sb-label">Procédures</span>
+                                    </a>
+                                @endcanany
+                                @canany(['types.voir', 'parametres.gerer'])
+                                    <a href="{{ route('admin.request-types.index') }}" class="sb-link {{ request()->routeIs('admin.request-types.*') ? 'active' : '' }}" title="Types de documents">
+                                        <span class="sb-icon"><i class="fas fa-sliders"></i></span><span class="sb-label">Types de documents</span>
+                                    </a>
+                                @endcanany
+                                @canany(['annees.voir', 'annees.gerer'])
+                                    <a href="{{ route('admin.annees.index') }}" class="sb-link {{ request()->routeIs('admin.annees.*') ? 'active' : '' }}" title="Années académiques">
+                                        <span class="sb-icon"><i class="fas fa-calendar-days"></i></span><span class="sb-label">Années académiques</span>
+                                    </a>
+                                @endcanany
+                            </div>
+                        </div>
                     @endif
-                    @canany(['roles.voir', 'roles.gerer'])
-                        <a href="{{ route('admin.roles.index') }}" class="sb-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" title="Rôles & permissions">
-                            <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Rôles &amp; permissions</span>
-                        </a>
-                    @endcanany
-                    @if (auth()->user()->isSuperAdmin())
-                        <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.settings*') || request()->routeIs('superadmin.cachet*') ? 'active' : '' }}" title="Paramètres">
-                            <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
-                        </a>
-                        <a href="{{ route('superadmin.sauvegardes.index') }}" class="sb-link {{ request()->routeIs('superadmin.sauvegardes.*') ? 'active' : '' }}" title="Sauvegardes">
-                            <span class="sb-icon"><i class="fas fa-box-archive"></i></span><span class="sb-label">Sauvegardes</span>
-                        </a>
+
+                    @if ($grReferentiel)
+                        <div class="sb-groupe" data-groupe="referentiel">
+                            <button type="button" class="sb-groupe-tete" onclick="ukBasculerGroupe(this)">
+                                <span class="sb-icon"><i class="fas fa-database"></i></span>
+                                <span class="sb-label">Données de référence</span>
+                                <i class="fas fa-chevron-down sb-chevron sb-label"></i>
+                            </button>
+                            <div class="sb-groupe-corps">
+                                @canany(['academique.voir', 'academique.gerer'])
+                                    <a href="{{ route('admin.academique.index') }}" class="sb-link {{ request()->routeIs('admin.academique.*') ? 'active' : '' }}" title="Référentiel académique">
+                                        <span class="sb-icon"><i class="fas fa-sitemap"></i></span><span class="sb-label">Référentiel académique</span>
+                                    </a>
+                                @endcanany
+                                @canany(['identites.voir', 'identites.importer'])
+                                    <a href="{{ route('admin.identites.index') }}" class="sb-link {{ request()->routeIs('admin.identites.*') ? 'active' : '' }}" title="Identités (import / export)">
+                                        <span class="sb-icon"><i class="fas fa-file-import"></i></span><span class="sb-label">Identités</span>
+                                    </a>
+                                @endcanany
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($grPersonnel)
+                        <div class="sb-groupe" data-groupe="personnel">
+                            <button type="button" class="sb-groupe-tete" onclick="ukBasculerGroupe(this)">
+                                <span class="sb-icon"><i class="fas fa-users-gear"></i></span>
+                                <span class="sb-label">Personnel et accès</span>
+                                <i class="fas fa-chevron-down sb-chevron sb-label"></i>
+                            </button>
+                            <div class="sb-groupe-corps">
+                                @canany(['utilisateurs.voir', 'utilisateurs.gerer'])
+                                    <a href="{{ route('admin.utilisateurs.index') }}" class="sb-link {{ request()->routeIs('admin.utilisateurs.*') ? 'active' : '' }}" title="Utilisateurs">
+                                        <span class="sb-icon"><i class="fas fa-user-tie"></i></span><span class="sb-label">Utilisateurs</span>
+                                    </a>
+                                @endcanany
+                                @canany(['perimetres.voir', 'perimetres.affecter', 'utilisateurs.gerer'])
+                                    <a href="{{ route('admin.perimetres.index') }}" class="sb-link {{ request()->routeIs('admin.perimetres.*') ? 'active' : '' }}" title="Périmètres agents">
+                                        <span class="sb-icon"><i class="fas fa-location-crosshairs"></i></span><span class="sb-label">Périmètres agents</span>
+                                    </a>
+                                @endcanany
+                                @canany(['roles.voir', 'roles.gerer'])
+                                    <a href="{{ route('admin.roles.index') }}" class="sb-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" title="Rôles & permissions">
+                                        <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Rôles &amp; permissions</span>
+                                    </a>
+                                @endcanany
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($grSysteme)
+                        <div class="sb-groupe" data-groupe="systeme">
+                            <button type="button" class="sb-groupe-tete" onclick="ukBasculerGroupe(this)">
+                                <span class="sb-icon"><i class="fas fa-gears"></i></span>
+                                <span class="sb-label">Système</span>
+                                <i class="fas fa-chevron-down sb-chevron sb-label"></i>
+                            </button>
+                            <div class="sb-groupe-corps">
+                                @if (\App\Models\Paiement::moduleActif())
+                                    @canany(['paiements.voir', 'paiements.confirmer'])
+                                        <a href="{{ route('admin.paiements.index') }}" class="sb-link {{ request()->routeIs('admin.paiements.*') ? 'active' : '' }}" title="Paiements">
+                                            <span class="sb-icon"><i class="fas fa-money-bill-transfer"></i></span><span class="sb-label">Paiements</span>
+                                        </a>
+                                    @endcanany
+                                @endif
+                                @if (auth()->user()->isSuperAdmin())
+                                    <a href="{{ route('superadmin.settings') }}" class="sb-link {{ request()->routeIs('superadmin.settings*') || request()->routeIs('superadmin.cachet*') ? 'active' : '' }}" title="Paramètres">
+                                        <span class="sb-icon"><i class="fas fa-gears"></i></span><span class="sb-label">Paramètres</span>
+                                    </a>
+                                    <a href="{{ route('superadmin.sauvegardes.index') }}" class="sb-link {{ request()->routeIs('superadmin.sauvegardes.*') ? 'active' : '' }}" title="Sauvegardes">
+                                        <span class="sb-icon"><i class="fas fa-box-archive"></i></span><span class="sb-label">Sauvegardes</span>
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
                     @endif
 
                     <div class="sb-section">Mon compte</div>
@@ -689,6 +784,15 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        /* Appelée depuis l'attribut onclick des en-têtes : doit rester globale. */
+        function ukBasculerGroupe(bouton) {
+            var groupe = bouton.closest('.sb-groupe');
+            if (!groupe) return;
+
+            var ouvert = groupe.classList.toggle('ouvert');
+            try { localStorage.setItem('sbGroupe:' + groupe.dataset.groupe, ouvert ? '1' : '0'); } catch (e) {}
+        }
+
         (function () {
             const body = document.body;
             const sb = document.getElementById('sb');
@@ -711,6 +815,19 @@
             document.querySelectorAll('.sb-link').forEach(l => l.addEventListener('click', () => {
                 if (isMobile()) { sb.classList.remove('open'); overlay.classList.remove('open'); }
             }));
+
+            /* ── Groupes du menu ──
+               Le groupe qui contient la page courante s'ouvre toujours : on ne
+               doit jamais avoir à deviner où se trouve l'écran affiché. Les
+               autres retrouvent l'état laissé à la visite précédente. */
+            document.querySelectorAll('.sb-groupe').forEach(function(groupe) {
+                var porteActif = !!groupe.querySelector('.sb-link.active');
+                var memoire = null;
+                try { memoire = localStorage.getItem('sbGroupe:' + groupe.dataset.groupe); } catch (e) {}
+
+                groupe.classList.toggle('porte-actif', porteActif);
+                groupe.classList.toggle('ouvert', porteActif || memoire === '1');
+            });
 
             /* ── Le menu ne doit pas remonter en haut à chaque navigation ──
                Chaque clic charge une page entière : sans ça, le défilement

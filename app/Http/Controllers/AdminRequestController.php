@@ -42,7 +42,8 @@ class AdminRequestController extends Controller
             abort(403, "Aucune catégorie de demandes ne vous est attribuée.");
         }
 
-        $query = StudentRequest::with('student.user', 'parcours.departement.faculte', 'files');
+        $query = StudentRequest::with('student.user', 'parcours.departement.faculte', 'files',
+            'derogations.requestType');
 
         if ($category !== 'all') {
             $query->where('category', $category);
@@ -174,6 +175,7 @@ class AdminRequestController extends Controller
             'anneeAcademique',
             'validator',
             'files',
+            'derogations.requestType',
         ]);
 
         if ($category !== 'all') {

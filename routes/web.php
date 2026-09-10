@@ -169,6 +169,9 @@ Route::middleware('auth')->group(function () {
             Route::middleware('permission:types.voir|parametres.gerer')->group(function () {
                 Route::get('/', [RequestTypeController::class, 'index'])->name('index');
                 Route::get('/niveau/{grade}', [RequestTypeController::class, 'niveau'])->name('niveau');
+                // Recopier les pièces d'une procédure vers un autre niveau
+                Route::post('/niveau/{grade}/dupliquer',
+                    [RequestTypeController::class, 'dupliquerVersNiveau'])->name('niveau.dupliquer');
             });
             // Ouvrir/fermer une procédure pour un niveau ou l'un de ses parcours
             Route::middleware('permission:annees.gerer|parametres.gerer')->group(function () {

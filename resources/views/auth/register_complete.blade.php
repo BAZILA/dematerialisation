@@ -82,7 +82,7 @@
                             <i class="fas fa-envelope"></i> Adresse E-mail
                         </label>
                         <input type="email" class="form-control @error('email') is-invalid @enderror" name="email"
-                            value="{{ old('email') }}" placeholder="exemple@mail.com" required>
+                            value="{{ old('email') }}" required>
                         @error('email')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -94,7 +94,7 @@
                         </label>
                         <div class="input-group">
                             <input type="password" class="form-control @error('password') is-invalid @enderror"
-                                id="pwd" name="password" placeholder="Minimum 8 caractères" required>
+                                id="pwd" name="password" required>
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwd('pwd',this)">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -109,7 +109,7 @@
                             <i class="fas fa-lock"></i> Confirmer le Mot de Passe
                         </label>
                         <input type="password" class="form-control" name="password_confirmation"
-                            placeholder="Répétez le mot de passe" required>
+                            required>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100" style="height:44px;font-size:15px;"

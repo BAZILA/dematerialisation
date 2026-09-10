@@ -235,6 +235,14 @@
                                 <span class="badge bg-secondary">
                                     <i class="fas fa-paperclip"></i> {{ $req->files->count() }}
                                 </span>
+                                @php $dues = $req->derogations->where('statut', 'engagee'); @endphp
+                                @if ($dues->isNotEmpty())
+                                    <span class="badge"
+                                        style="background:rgba(245,158,11,.15);color:#B45309;border:1px solid rgba(245,158,11,.35);"
+                                        title="Pièce(s) encore due(s) : {{ $dues->map(fn ($x) => $x->requestType?->label)->filter()->implode(', ') }}">
+                                        <i class="fas fa-clock"></i> {{ $dues->count() }}
+                                    </span>
+                                @endif
                             </td>
                             <td>
                                 @if ($req->submitted_at)

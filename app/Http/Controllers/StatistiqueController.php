@@ -149,11 +149,11 @@ class StatistiqueController extends Controller
 
         $delaiHeures = $this->base($request)
             ->whereNotNull('submitted_at')->whereNotNull('validated_at')
-            ->avg(DB::raw('TIMESTAMPDIFF(HOUR, submitted_at, validated_at)'));
+            ->avg(DB::raw(\App\Support\SqlPortable::ecartHeures('submitted_at', 'validated_at')));
 
         $parMois = $this->base($request)
             ->whereNotNull('submitted_at')
-            ->select(DB::raw("DATE_FORMAT(submitted_at, '%Y-%m') as mois"), DB::raw('COUNT(*) as n'))
+            ->select(DB::raw(\App\Support\SqlPortable::mois('submitted_at') . ' as mois'), DB::raw('COUNT(*) as n'))
             ->groupBy('mois')->orderBy('mois')->pluck('n', 'mois')->all();
 
         return [

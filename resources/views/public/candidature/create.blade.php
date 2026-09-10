@@ -3,8 +3,14 @@
 
 @section('css')
     <style>
-        body.guest-mode .content { align-items: flex-start !important; padding-top: 20px; padding-bottom: 40px; }
-        .cand-wrap { width: 100%; max-width: 1280px; position: relative; z-index: 1; }
+        /* Une marge automatique centre verticalement sans rogner le haut
+           quand le formulaire dépasse l'écran : les marges auto neutralisent
+           l'étirement, là où « flex-start » collait tout en haut. */
+        body.guest-mode .content { align-items: stretch !important; padding-top: 20px; padding-bottom: 40px; }
+        .cand-wrap { width: 100%; max-width: 1280px; margin-block: auto; position: relative; z-index: 1; }
+        /* Candidatures fermées : la page ne porte qu'un message et un bouton.
+           1280 px de large le laissaient flotter dans le vide. */
+        .cand-wrap.cand-message { max-width: 520px; }
 
         .cand-grid { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
         @media (min-width: 992px)  { .cand-grid { grid-template-columns: minmax(0, 1fr) 340px; } }
@@ -108,7 +114,7 @@
 @endsection
 
 @section('content')
-    <div class="cand-wrap">
+    <div class="cand-wrap {{ $ouverte ? '' : 'cand-message' }}">
         <div class="text-center mb-3">
             <img src="{{ asset('assets/uk/logo-sigle-bg.png') }}" style="height:46px;" alt="Université de Kara">
             <h1 style="font-family:var(--font-head);font-size:21px;font-weight:800;margin-top:10px;color:var(--t1);">Candidature en ligne</h1>

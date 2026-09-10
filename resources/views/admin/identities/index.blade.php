@@ -94,10 +94,18 @@
 
     <div class="alert alert-info mt-4" style="font-size:12.5px;">
         <i class="fas fa-circle-info"></i>
-        L'import fait un <strong>dédoublonnage</strong> sur la clé unique
-        (<code>numero_releve</code> pour les bacheliers, <code>numero_carte</code> pour les anciens) :
-        les enregistrements existants sont <strong>mis à jour</strong>, les nouveaux <strong>ajoutés</strong>.
-        Les lignes incomplètes sont ignorées et listées.
+        <strong>Dédoublonnage.</strong> Une fiche déjà présente est <strong>mise à jour</strong>,
+        une nouvelle est <strong>ajoutée</strong>.
+        <ul class="mb-1 mt-1 ps-3">
+            <li><strong>Bacheliers</strong> — reconnus par <code>numero_suivi</code>,
+                <code>numero_releve</code> ou <code>numero_table</code> : le premier de ces
+                numéros qui correspond à une fiche existante suffit. Sans aucun de ces
+                numéros, la fiche est reconnue sur nom + prénom + date de naissance.</li>
+            <li><strong>Anciens étudiants</strong> — reconnus par <code>numero_carte</code>,
+                qui est <strong>obligatoire</strong> : une ligne sans ce numéro est ignorée.</li>
+        </ul>
+        Une colonne absente du fichier <strong>n'efface rien</strong> : les valeurs déjà
+        enregistrées sont conservées. Les lignes incomplètes sont ignorées et listées.
     </div>
 
     {{-- ═══ Référentiel chargé : consultation + ajout manuel ═══ --}}

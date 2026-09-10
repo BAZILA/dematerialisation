@@ -1009,13 +1009,34 @@
                                     <h6 class="mb-0"><i class="fas fa-paper-plane"></i> Soumettre</h6>
                                 </div>
                                 <div class="card-body">
-                                    @php $allOk = $req->allRequiredFilesUploaded(); @endphp
+                                    @php
+                                        /* Certaines pièces mettent des semaines à être délivrées, et la
+                                           période, elle, se ferme. L'administration ouvre au report celles
+                                           qui s'y prêtent : l'usager s'engage à les fournir plus tard et
+                                           son dossier avance. Les autres restent bloquantes, comme avant. */
+                                        $derogeables = $req->piecesDerogeables();
+                                        $idsDerogeables = $derogeables->pluck('id')->all();
+                                        $bloquantes = $req->piecesObligatoiresManquantes()
+                                            ->reject(fn ($t) => in_array($t->id, $idsDerogeables, true))
+                                            ->values();
+                                        $dejaEngagees = $req->derogationsEnCours()->pluck('request_type_id')->all();
+                                        $allOk = $bloquantes->isEmpty();
+                                    @endphp
                                     <ul class="list-unstyled mb-3">
                                         @foreach ($types->where('is_required', true) as $dt)
-                                            @php $f = $req->fileForType($dt); @endphp
+                                            @php
+                                                $f = $req->fileForType($dt);
+                                                $reportable = !$f && in_array($dt->id, $idsDerogeables, true);
+                                            @endphp
                                             <li class="d-flex align-items-center gap-2 mb-2">
-                                                <i class="fas {{ $f ? 'fa-check-circle text-success' : 'fa-circle' }} small"
-                                                    style="{{ !$f ? 'color:var(--t3);opacity:.4;' : '' }}"></i>
+                                                @if ($f)
+                                                    <i class="fas fa-check-circle text-success small"></i>
+                                                @elseif ($reportable)
+                                                    <i class="fas fa-clock small" style="color:var(--amber);"
+                                                        title="Peut être fournie plus tard"></i>
+                                                @else
+                                                    <i class="fas fa-circle small" style="color:var(--t3);opacity:.4;"></i>
+                                                @endif
                                                 <span class="small" style="color:var(--t1);">{{ $dt->label }}</span>
                                                 @if ($isDepot && $dt->has_stamp)
                                                     <i class="fas fa-stamp ms-auto"
@@ -1028,16 +1049,46 @@
                                     @if (!$allOk)
                                         <p class="small mb-2" style="color:var(--amber);">
                                             <i class="fas fa-exclamation-triangle"></i>
-                                            Uploadez tous les documents obligatoires.
+                                            Pièces encore exigées :
+                                            <strong
+                                                style="color:var(--t1);">{{ $bloquantes->pluck('label')->implode(', ') }}</strong>
                                         </p>
                                         <button class="btn btn-secondary w-100" disabled>
                                             <i class="fas fa-lock"></i> Soumettre
                                         </button>
                                     @else
-                                        <form method="POST"
+                                        <form method="POST" id="formSoumission-{{ $req->id }}"
                                             action="{{ route('student.requests.submit') }}?tab={{ $key }}">
                                             @csrf
                                             <input type="hidden" name="student_request_id" value="{{ $req->id }}">
+                                            @if ($derogeables->isNotEmpty())
+                                                {{-- Pièces que l'administration autorise à fournir plus tard --}}
+                                                <div class="p-3 rounded mb-3"
+                                                    style="background:var(--surface-2);border:1px solid var(--amber);">
+                                                    <div class="small mb-2" style="color:var(--t2);">
+                                                        <i class="fas fa-clock" style="color:var(--amber);"></i>
+                                                        <strong style="color:var(--t1);">Pièces à fournir plus tard</strong>
+                                                    </div>
+                                                    <p class="small mb-2" style="color:var(--t2);">
+                                                        Ces pièces manquent encore. Vous pouvez soumettre sans elles en
+                                                        vous engageant à les déposer dès leur obtention. Elles restent
+                                                        dues : votre dossier portera la mention jusqu'à leur remise.
+                                                    </p>
+                                                    @foreach ($derogeables as $dg)
+                                                        <div class="form-check mb-1">
+                                                            <input class="form-check-input" type="checkbox" name="derogations[]"
+                                                                value="{{ $dg->id }}" id="derog-{{ $req->id }}-{{ $dg->id }}"
+                                                                @checked(in_array($dg->id, $dejaEngagees, true))
+                                                                onchange="ukMajSoumission({{ $req->id }});">
+                                                            <label class="form-check-label small"
+                                                                for="derog-{{ $req->id }}-{{ $dg->id }}" style="color:var(--t1);">
+                                                                Je ne dispose pas encore de
+                                                                <strong>{{ $dg->label }}</strong> et m'engage à la fournir.
+                                                            </label>
+                                                        </div>
+                                                    @endforeach
+                                                </div>
+                                            @endif
                                             @if ($isDepot)
                                                 {{-- Engagement obligatoire avant soumission --}}
                                                 <div class="p-3 rounded mb-3"
@@ -1054,26 +1105,21 @@
                                                     <div class="form-check">
                                                         <input class="form-check-input" type="checkbox" name="engagement"
                                                             value="1" id="engage-{{ $req->id }}"
-                                                            onchange="document.getElementById('submitBtn-{{ $req->id }}').disabled = !this.checked;">
+                                                            onchange="ukMajSoumission({{ $req->id }});">
                                                         <label class="form-check-label small" for="engage-{{ $req->id }}"
                                                             style="color:var(--t1);">
                                                             Lu et approuvé
                                                         </label>
                                                     </div>
                                                 </div>
-                                                <button type="submit" id="submitBtn-{{ $req->id }}"
-                                                    class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100" disabled
-                                                    onclick="return confirm('Confirmer la soumission de votre dépôt ?')"
-                                                    data-loading-text="Soumission…">
-                                                    <i class="fas fa-check"></i> Soumettre
-                                                </button>
-                                            @else
-                                                <button type="submit" class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100"
-                                                    onclick="return confirm('Confirmer la soumission ?')"
-                                                    data-loading-text="Soumission…">
-                                                    <i class="fas fa-check"></i> Soumettre
-                                                </button>
                                             @endif
+                                            <button type="submit" id="submitBtn-{{ $req->id }}"
+                                                class="btn btn-{{ $catColors[$key] ?? 'primary' }} w-100"
+                                                @disabled($isDepot || $derogeables->isNotEmpty())
+                                                onclick="return confirm(@js($isDepot ? 'Confirmer la soumission de votre dépôt ?' : 'Confirmer la soumission ?'))"
+                                                data-loading-text="Soumission…">
+                                                <i class="fas fa-check"></i> Soumettre
+                                            </button>
                                         </form>
                                     @endif
                                     @if ($isDepot && $types->where('has_stamp', true)->isNotEmpty())
@@ -1196,9 +1242,35 @@
 
 @section('js')
     <script>
+        /* Le bouton « Soumettre » ne s'ouvre que lorsque tout ce qui engage
+           l'usager est coché : l'engagement de dépôt, et chaque pièce qu'il
+           choisit de fournir plus tard. Le serveur revérifie de son côté ;
+           ceci évite seulement un aller-retour pour rien. */
+        function ukMajSoumission(id) {
+            var form = document.getElementById('formSoumission-' + id);
+            var btn = document.getElementById('submitBtn-' + id);
+            if (!form || !btn) return;
+
+            var engagement = form.querySelector('input[name="engagement"]');
+            var pret = !engagement || engagement.checked;
+
+            form.querySelectorAll('input[name="derogations[]"]').forEach(function(c) {
+                if (!c.checked) pret = false;
+            });
+
+            btn.disabled = !pret;
+        }
+
+        function ukSyncSoumissions() {
+            document.querySelectorAll('form[id^="formSoumission-"]').forEach(function(f) {
+                ukMajSoumission(f.id.substring('formSoumission-'.length));
+            });
+        }
+
         (function() {
             // Montage (ré-exécutable après un rafraîchissement AJAX du bloc dépôt)
             function mountDash() {
+                ukSyncSoumissions();
                 document.querySelectorAll('#stTabs .nav-link').forEach(link => {
                     link.addEventListener('shown.bs.tab', function() {
                         const url = new URL(window.location);
