@@ -1,0 +1,692 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Migration d'O2switch vers le VPS  (dematerialisation.univkara.tg)
+  7 novembre 2026
+=======================================================================
+
+  CE QU'ON SAIT DU VPS
+    Rocky Linux 8.10, panneau CWP, compte « alpha » SANS sudo.
+    PHP 8.3.33 en ligne de commande (/usr/bin/php), toutes les
+    extensions necessaires sont presentes.
+    MariaDB active. Apache ecoute sur 80 et 443.
+    17 Go de RAM, 962 Go libres. SELinux desactive.
+    git, unzip, tar, rsync presents. Composer et certbot absents.
+    Le sous-domaine repond deja en HTTPS, DERRIERE CLOUDFLARE.
+
+  CE QUI NE CHANGE PAS
+    L'ancienne adresse est sur un AUTRE domaine
+    (dematerialisation.univ-kara.org). Les deux peuvent donc tourner en
+    meme temps : on monte le VPS, on le teste a loisir, et O2switch
+    continue de servir les usagers pendant ce temps. Aucune bascule DNS
+    a risque. On ne touche a l'ancien que tout a la fin.
+
+  LES TROIS POINTS DELICATS
+    1. APP_KEY. Les secrets de double authentification sont chiffres
+       avec elle. Elle doit etre RECOPIEE A L'IDENTIQUE. Ne jamais
+       lancer « key:generate » sur le VPS.
+    2. Pas de root. La racine web ne peut pas etre deplacee vers
+       public/. On met donc l'application HORS du web, et la racine web
+       ne recoit que le contenu de public/. C'est la configuration la
+       plus sure accessible sans root.
+    3. Cloudflare. Le mode SSL et la limite de taille des envois sont
+       entre les mains de la personne qui gere le DNS. Voir section 12.
+
+
+=======================================================================
+  0. LE CODE — FAIT le 7 novembre
+=======================================================================
+
+  Le code est commite et pousse sur la branche phase-1-socle
+  (commit 590c4f0). Verifie : app/Models/Concerns/ReparerNomDeFichier,
+  la migration de retrait des dossiers de test, FicheVersoService,
+  bootstrap/app.php, SettingSeeder et la vue du tableau de bord
+  etudiant sont tous presents sur origin. Le .env n'est pas dans le
+  depot.
+
+  Le depot est PUBLIC : le clone sur le VPS ne demande aucun jeton.
+
+  Aucun secret n'a jamais ete commite — la recherche dans l'historique
+  complet ne ramene que des exemples (« <mot_de_passe_fort> »).
+
+  /!\ UNE SEULE RESERVE, liee au depot public : database/seeders/
+      UserSeeder.php cree un super-administrateur ADMIN001 avec le mot
+      de passe « admin123456 », desormais lisible par tout le monde.
+      Ce compte a ete supprime en septembre. Verifiez en section 11
+      qu'il n'est pas revenu, et ne lancez JAMAIS « db:seed » complet
+      sur la production : il le recreerait.
+
+  A FAIRE une fois la migration terminee et validee : remettre le
+  depot en prive. Il n'avait besoin d'etre public que pour eviter le
+  jeton d'acces. Un code source public ne livre aucun secret ici, mais
+  il montre a qui veut les regles de validation et le detail des
+  routes d'une application qui porte les donnees de 1165 etudiants.
+
+
+=======================================================================
+  1. SONDER LE SERVEUR WEB — a faire avant la suite
+=======================================================================
+
+  Deux choses decident de la suite et ne se devinent pas : la version de
+  PHP qu'utilise APACHE (elle peut differer de celle en ligne de
+  commande) et l'UTILISATEUR sous lequel il execute PHP (il decide des
+  droits a poser sur storage/).
+
+cat > ~/dematerialisation.univkara.tg/_sonde.php <<'FIN'
+<?php
+header('Content-Type: text/plain; charset=utf-8');
+echo "php          : ", PHP_VERSION, "\n";
+echo "utilisateur  : ", (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['name'] : get_current_user()), "\n";
+echo "sapi         : ", PHP_SAPI, "\n";
+echo "racine web   : ", $_SERVER['DOCUMENT_ROOT'] ?? '?', "\n";
+echo "upload_max   : ", ini_get('upload_max_filesize'), "\n";
+echo "post_max     : ", ini_get('post_max_size'), "\n";
+echo "memory_limit : ", ini_get('memory_limit'), "\n";
+echo "max_exec     : ", ini_get('max_execution_time'), "\n";
+echo "user_ini     : ", ini_get('user_ini.filename') ?: '(desactive)', "\n";
+echo "https vu     : ", ($_SERVER['HTTPS'] ?? 'non'), " | X-Forwarded-Proto: ", ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'absent'), "\n";
+echo "ip vue       : ", $_SERVER['REMOTE_ADDR'] ?? '?', "\n";
+foreach (['pdo_mysql','mbstring','gd','zip','intl','fileinfo','openssl','curl','xml','tokenizer','bcmath','exif'] as $e) {
+    printf("%-12s : %s\n", $e, extension_loaded($e) ? 'ok' : 'MANQUANT');
+}
+FIN
+
+  Ouvrez dans le navigateur :
+      https://dematerialisation.univkara.tg/_sonde.php
+
+  Retirez la sonde des que c'est lu :
+rm -f ~/dematerialisation.univkara.tg/_sonde.php
+
+
+  --- RESULTAT DU 7 NOVEMBRE ---------------------------------------
+
+    php          : 8.3.33          la meme version qu'en ligne de
+                                   commande. Rien a changer dans CWP.
+    utilisateur  : alpha           les droits 755/644 suffisent.
+                                   La section 9b ne s'applique pas.
+    sapi         : cgi-fcgi        PHP-FPM : les php_value du
+                                   .htaccess sont sans effet, mais
+                                   .user.ini fonctionne.
+    user_ini     : .user.ini       confirme, le mecanisme est actif.
+    racine web   : /home/alpha/dematerialisation.univkara.tg
+    https vu     : on
+    X-Forwarded-Proto : https      Cloudflare transmet correctement :
+                                   trustProxies fera son travail,
+                                   aucune boucle de redirection a
+                                   craindre.
+    ip vue       : 172.71.232.155  une adresse Cloudflare, comme
+                                   attendu derriere le proxy.
+    extensions   : toutes presentes.
+
+    A CORRIGER (section 9c) :
+    upload_max 2M, post_max 8M, memory_limit 128M, max_exec 30s.
+    Ce sont les valeurs par defaut, bien trop basses : c'est
+    exactement le mur qui avait produit « Action impossible » en
+    septembre. Le tamponnage d'un PDF ne tient ni en 128 Mo ni en
+    30 secondes. A relever AVANT tout essai de depot.
+
+
+=======================================================================
+  2. PREPARER LE COMPTE
+=======================================================================
+
+  a) Les variables. A REDEFINIR a chaque nouvelle session SSH.
+
+APP=/home/alpha/apps/demat
+WEB=/home/alpha/dematerialisation.univkara.tg
+PHP=/usr/bin/php
+ART="$PHP $APP/artisan"
+echo "APP=$APP"; echo "WEB=$WEB"; ls -d $WEB
+
+  Aucune des valeurs ne doit etre vide, et $WEB doit exister.
+
+  b) Composer, dans le compte, sans root. La somme de controle est
+     verifiee : une archive alteree s'arrete ici.
+
+mkdir -p ~/bin ~/apps
+curl -sSL https://getcomposer.org/download/latest-stable/composer.phar -o ~/bin/composer
+echo "$(curl -sSL https://getcomposer.org/download/latest-stable/composer.phar.sha256sum | cut -d' ' -f1)  $HOME/bin/composer" | sha256sum -c -
+chmod +x ~/bin/composer
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+export PATH="$HOME/bin:$PATH"
+composer --version
+
+  La ligne sha256sum doit afficher « OK ». Sinon, ARRETEZ.
+
+
+=======================================================================
+  3. LA BASE DE DONNEES — depuis le panneau CWP
+=======================================================================
+
+  Dans le user panel CWP (celui ou vous avez vu « Modules
+  complementaires ») : MySQL Manager > creer une base et un
+  utilisateur, puis donner TOUS les droits a cet utilisateur sur
+  cette base.
+
+    base         : alpha_demat          (CWP prefixe par « alpha_ »)
+    utilisateur  : alpha_demat
+    mot de passe : long, genere au hasard, note de cote
+
+  /!\ N'UTILISEZ PAS le bouton « Laravel » des modules
+      complementaires. Il installerait un Laravel NEUF et ecraserait
+      le dossier. Notre application existe deja.
+
+  Verifier que la connexion passe :
+
+mysql -u alpha_demat -p alpha_demat -e "SELECT VERSION(), DATABASE();"
+
+
+=======================================================================
+  4. RECUPERER LA PRODUCTION DEPUIS O2SWITCH
+=======================================================================
+
+  Sur O2SWITCH (pas sur le VPS) :
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+DB_NAME=$(grep '^DB_DATABASE=' $SITE/.env | cut -d= -f2 | tr -d '"')
+DB_USER=$(grep '^DB_USERNAME=' $SITE/.env | cut -d= -f2 | tr -d '"')
+STAMP=$(date +%Y%m%d-%H%M)
+cd /home/gysj7444
+
+  # La base
+mysqldump -u "$DB_USER" -p --single-transaction --routines --default-character-set=utf8mb4 "$DB_NAME" > demat-$STAMP.sql
+
+  # Les pieces deposees, le cachet, les signatures, les gabarits
+tar czf demat-fichiers-$STAMP.tgz -C $SITE/storage/app private
+
+  # Controle
+ls -lh demat-$STAMP.sql demat-fichiers-$STAMP.tgz
+grep -c "INSERT INTO" demat-$STAMP.sql              # > 0
+tar tzf demat-fichiers-$STAMP.tgz > /dev/null && echo "archive lisible"
+
+  # L'APP_KEY — a recopier telle quelle, c'est elle qui dechiffre la 2FA
+grep '^APP_KEY=' $SITE/.env
+
+  Telechargez les deux fichiers sur votre ordinateur (gestionnaire de
+  fichiers cPanel), puis deposez-les dans /home/alpha/ sur le VPS.
+  Ils sont petits : quelques centaines de Ko et quelques Mo.
+
+  /!\ Ces deux fichiers contiennent les donnees personnelles de
+      1 165 etudiants et les mots de passe chiffres. Ne les laissez pas
+      trainer : on les efface en section 11.
+
+
+=======================================================================
+  5. INSTALLER L'APPLICATION SUR LE VPS
+=======================================================================
+
+git clone -b phase-1-socle https://github.com/BAZILA/dematerialisation.git $APP
+cd $APP
+git log --oneline -1          # doit afficher 590c4f0 (ou plus recent)
+
+composer install --no-dev --optimize-autoloader --no-interaction
+
+  « --no-dev » : phpunit, faker et consorts n'ont rien a faire en
+  production. L'application n'a besoin d'AUCUNE compilation Node :
+  aucune vue n'utilise @vite.
+
+
+=======================================================================
+  6. LE FICHIER .env DU VPS
+=======================================================================
+
+cd $APP
+cp .env.example .env
+nano .env
+
+  --- A renseigner -------------------------------------------------
+
+APP_NAME="Université de Kara — Dématérialisation"
+APP_ENV=production
+APP_KEY=<COLLEZ ICI, A L'IDENTIQUE, la valeur relevee en section 4>
+APP_DEBUG=false
+APP_URL=https://dematerialisation.univkara.tg
+APP_LOCALE=fr
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=alpha_demat
+DB_USERNAME=alpha_demat
+DB_PASSWORD=<le mot de passe de la section 3>
+
+SESSION_DRIVER=file
+SESSION_SECURE_COOKIE=true
+CACHE_STORE=file
+QUEUE_CONNECTION=sync
+FILESYSTEM_DISK=local
+LOG_LEVEL=error
+
+MYSQLDUMP_PATH=/usr/bin/mysqldump
+
+  # Courriel : reprenez EXACTEMENT les lignes MAIL_* du .env d'O2switch
+MAIL_MAILER=smtp
+MAIL_HOST=...
+MAIL_PORT=...
+MAIL_USERNAME=...
+MAIL_PASSWORD=...
+MAIL_ENCRYPTION=...
+MAIL_FROM_ADDRESS=...
+MAIL_FROM_NAME="Université de Kara"
+
+  ------------------------------------------------------------------
+
+  /!\ NE LANCEZ PAS « key:generate ». La clef vient d'O2switch.
+      Verifiez qu'elle est bien la, et qu'elle commence par « base64: » :
+
+grep '^APP_KEY=' $APP/.env
+
+  Confirmer le chemin de mysqldump, qui sert aux sauvegardes :
+
+which mysqldump
+  # S'il differe de /usr/bin/mysqldump, corrigez MYSQLDUMP_PATH.
+
+
+=======================================================================
+  7. IMPORTER LA BASE ET LES FICHIERS
+=======================================================================
+
+cd /home/alpha
+
+  # a) La base
+mysql -u alpha_demat -p --default-character-set=utf8mb4 alpha_demat < demat-AAAAMMJJ-HHMM.sql
+
+  # b) Les pieces deposees (l'archive contient le dossier « private »)
+tar xzf demat-fichiers-AAAAMMJJ-HHMM.tgz -C $APP/storage/app
+
+  # c) Controle
+ls -la $APP/storage/app/private
+$ART tinker --execute="echo 'anciens : ', \App\Models\AncienEtudiant::count(), PHP_EOL, 'pieces configurees : ', \App\Models\RequestType::count(), PHP_EOL, 'personnel : ', \App\Models\User::whereNotIn('role',['etudiant','candidat'])->count(), PHP_EOL;"
+
+  Attendu : 1165 anciens, vos pieces, votre personnel.
+
+  # d) Appliquer les migrations qui manqueraient
+$ART migrate --pretend        # montre sans rien faire
+$ART migrate --force          # applique
+
+  /!\ Si la migration « retirer_les_dossiers_de_test » n'a pas encore
+      ete passee sur O2switch, elle s'executera ICI et supprimera les
+      dossiers. Relisez la sortie de --pretend avant --force.
+
+
+=======================================================================
+  8. PUBLIER LA RACINE WEB
+=======================================================================
+
+  L'application vit dans $APP, HORS du web. La racine web ne recoit que
+  le contenu de public/. Ainsi .env, le code, la base de code et les
+  pieces deposees ne sont atteignables par AUCUNE URL, meme si une
+  regle de reecriture venait a sauter.
+
+  a) Mettre de cote la page d'accueil provisoire
+
+mv $WEB/index.html $WEB/index.html.ancien 2>/dev/null
+
+  b) Copier le contenu de public/
+
+cp -r $APP/public/. $WEB/
+ls -la $WEB
+
+  Vous devez voir : index.php, .htaccess, favicon.ico, robots.txt,
+  assets/.
+
+  c) Faire pointer index.php sur l'application
+
+cat > $WEB/index.php <<'FIN'
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
+
+define('LARAVEL_START', microtime(true));
+
+// L'application vit hors de la racine web : rien de sensible n'est
+// servi par Apache, seul ce fichier fait le pont.
+$base = __DIR__ . '/../apps/demat';
+
+if (file_exists($maintenance = $base . '/storage/framework/maintenance.php')) {
+    require $maintenance;
+}
+
+require $base . '/vendor/autoload.php';
+
+/** @var Application $app */
+$app = require_once $base . '/bootstrap/app.php';
+
+$app->handleRequest(Request::capture());
+FIN
+
+  d) Verifier que le .htaccess de Laravel est bien arrive
+
+head -5 $WEB/.htaccess
+
+  S'il est absent (certains gestionnaires de fichiers masquent les
+  fichiers commencant par un point) :
+
+cp $APP/public/.htaccess $WEB/.htaccess
+
+
+=======================================================================
+  9. DROITS ET LIMITES D'ENVOI
+=======================================================================
+
+  a) Droits de base — jamais 777
+
+find $APP -type d -exec chmod 755 {} \;
+find $APP -type f -exec chmod 644 {} \;
+chmod 600 $APP/.env
+find $WEB -type d -exec chmod 755 {} \;
+find $WEB -type f -exec chmod 644 {} \;
+
+  b) Ecriture sur storage/ et bootstrap/cache
+
+     RIEN A FAIRE. La sonde a montre que PHP tourne sous « alpha »,
+     proprietaire des fichiers : 755 suffit. Pas de 775, pas de 777.
+
+     Verifier quand meme que l'application peut ecrire :
+
+$PHP -r 'var_dump(is_writable("/home/alpha/apps/demat/storage/logs"), is_writable("/home/alpha/apps/demat/bootstrap/cache"));'
+     # les deux doivent afficher bool(true)
+
+  c) Limites PHP — INDISPENSABLE, les valeurs par defaut sont trop
+     basses (2 Mo d'envoi, 128 Mo de memoire, 30 secondes)
+
+     PHP tourne en cgi-fcgi : les php_value du .htaccess n'ont aucun
+     effet. .user.ini, lui, est actif — la sonde l'a confirme.
+
+cat > $WEB/.user.ini <<'FIN'
+upload_max_filesize = 32M
+post_max_size = 40M
+memory_limit = 512M
+max_execution_time = 120
+FIN
+
+     post_max_size doit rester SUPERIEUR a upload_max_filesize :
+     l'envoi transporte le fichier PLUS le reste du formulaire. C'est
+     post_max_size qui decide en premier.
+
+     memory_limit a 512M et max_execution_time a 120 : le tamponnage
+     d'un PDF charge le document en memoire page par page. A 128 Mo et
+     30 secondes, un dossier d'une dizaine de pieces echoue.
+
+     Empecher qu'Apache serve ce fichier, qu'il afficherait en clair :
+
+cat >> $WEB/.htaccess <<'FIN'
+
+# Les limites PHP de ce dossier n'ont pas a etre lisibles de l'exterieur.
+<FilesMatch "^\.user\.ini$">
+    Require all denied
+</FilesMatch>
+FIN
+
+     La prise en compte n'est pas immediate : .user.ini est relu toutes
+     les 5 minutes. Pour verifier, redeposez la sonde de la section 1
+     et relisez les quatre valeurs.
+
+     /!\ Cloudflare impose SA PROPRE limite, independante de celle-ci,
+         et c'est elle qui tranche en premier : un envoi trop gros est
+         refuse par Cloudflare avec une erreur 413 que l'application ne
+         voit jamais passer. Voir section 12.
+
+
+=======================================================================
+  10. CACHES ET TACHE PLANIFIEE
+=======================================================================
+
+cd $APP
+$ART optimize:clear
+$ART config:cache
+$ART route:cache
+$ART view:cache
+
+  La tache planifiee, depuis le user panel CWP > Cron Jobs, chaque
+  minute :
+
+* * * * * /usr/bin/php /home/alpha/apps/demat/artisan schedule:run >> /home/alpha/cron-demat.log 2>&1
+
+  Elle fait tourner la sauvegarde automatique quotidienne et la relance
+  des dossiers laisses incomplets. Sans elle, ni l'une ni l'autre ne
+  partent.
+
+  Verifier au bout de deux minutes :
+
+tail -5 /home/alpha/cron-demat.log
+$PHP $APP/artisan schedule:list
+
+
+=======================================================================
+  11. VERIFICATION
+=======================================================================
+
+  a) En ligne de commande
+
+$ART about | head -20
+$ART tinker --execute="echo 'anciens : ', \App\Models\AncienEtudiant::count(), PHP_EOL, 'personnel : ', \App\Models\User::whereNotIn('role',['etudiant','candidat'])->count(), PHP_EOL, 'dossiers : ', \App\Models\StudentRequest::count(), PHP_EOL;"
+
+  b) Que rien de sensible ne soit servi. Les trois doivent repondre
+     403 ou 404 — JAMAIS 200 :
+
+for u in /.env /storage/logs/laravel.log /../apps/demat/.env; do
+  printf "%-32s %s\n" "$u" "$(curl -s -o /dev/null -w '%{http_code}' https://dematerialisation.univkara.tg$u)"
+done
+
+     Si l'un repond 200, ARRETEZ et dites-le-moi.
+
+  c) Dans le navigateur
+
+     - la page d'accueil s'affiche ;
+     - connexion avec votre compte super-administrateur ;
+     - Reference > Identites : les 1165 fiches ;
+     - Types de documents : vos pieces par grade ;
+     - Parametres : vos reglages ;
+     - ouvrir une piece deposee : elle se telecharge ;
+     - tamponner un document d'essai : le cachet s'applique.
+
+  c-bis) Que le compte ADMIN001 du seeder ne soit pas revenu — son mot
+     de passe est public depuis que le depot l'est (section 0) :
+
+$ART tinker --execute="echo \App\Models\User::where('numero_identifiant','ADMIN001')->exists() ? 'ADMIN001 EXISTE — a supprimer' : 'ok, absent', PHP_EOL;"
+
+  d) Si un compte a la double authentification activee, testez-le.
+     C'est le seul vrai controle que l'APP_KEY a bien ete recopiee.
+     S'il echoue : l'APP_KEY est fausse, reprenez la section 6.
+
+  e) Effacer les copies de production, qui contiennent des donnees
+     personnelles
+
+shred -u /home/alpha/demat-*.sql 2>/dev/null || rm -f /home/alpha/demat-*.sql
+rm -f /home/alpha/demat-fichiers-*.tgz
+rm -f ~/dematerialisation.univkara.tg/_sonde.php
+
+
+=======================================================================
+  12. A DEMANDER A LA PERSONNE QUI GERE CLOUDFLARE
+=======================================================================
+
+  Le sous-domaine passe par Cloudflare (104.21.36.11, 172.67.182.178).
+  Trois reglages ne sont pas accessibles depuis le VPS.
+
+  1. MODE SSL : « Full (strict) », ou a defaut « Full ».
+     PAS « Flexible ». En Flexible, Cloudflare parle au serveur en
+     clair pendant que l'application se croit en HTTPS : les
+     redirections tournent en boucle et la connexion devient
+     impossible. « Full (strict) » exige un certificat valide sur le
+     VPS — si le serveur n'en a pas, demandez a l'administrateur root
+     d'installer un certificat Cloudflare Origin, gratuit et valable
+     15 ans.
+
+  2. LIMITE DE TAILLE DES ENVOIS. Au-dela, Cloudflare refuse avec une
+     erreur 413 que l'application ne voit jamais passer. Demandez la
+     limite en vigueur, et dites-la-moi : je reglerai .user.ini en
+     dessous pour que l'usager recoive un message clair au lieu d'une
+     page d'erreur Cloudflare.
+
+  3. REGLE DE CONTOURNEMENT DU CACHE sur /admin/* et /student/*, si le
+     cache est actif. Une page de suivi mise en cache afficherait a un
+     usager l'etat du dossier d'un autre.
+
+  A DEMANDER A L'ADMINISTRATEUR ROOT DU VPS :
+
+  4. Faire pointer la racine du sous-domaine directement sur
+     /home/alpha/apps/demat/public. C'est la configuration normale
+     d'une application Laravel. Notre montage de la section 8 est un
+     contournement qui fonctionne, mais qui oblige a recopier public/
+     a chaque mise a jour qui le modifie.
+
+  5. Restreindre les proxys de confiance aux plages d'adresses de
+     Cloudflare. Aujourd'hui l'application fait confiance a n'importe
+     quel proxy (trustProxies '*', bootstrap/app.php ligne 16). Si le
+     serveur est joignable par son IP directement, un visiteur peut
+     declarer l'adresse IP de son choix : le journal d'audit et la
+     limitation du nombre d'essais de connexion enregistrent alors une
+     adresse inventee. Sans acces root on ne peut pas verifier si le
+     port 80 du VPS est joignable hors Cloudflare — c'est a lui de le
+     dire.
+
+
+=======================================================================
+  13. LES MISES A JOUR, APRES
+=======================================================================
+
+APP=/home/alpha/apps/demat
+WEB=/home/alpha/dematerialisation.univkara.tg
+PHP=/usr/bin/php
+ART="$PHP $APP/artisan"
+
+cd $APP
+$ART down                      # page de maintenance
+git pull
+composer install --no-dev --optimize-autoloader --no-interaction
+$ART migrate --force
+$ART optimize:clear && $ART config:cache && $ART route:cache && $ART view:cache
+$ART up
+
+  SI la mise a jour touche public/ (rare : seulement les images de
+  assets/ ou le .htaccess), recopier la racine web SANS ecraser le pont
+  index.php :
+
+rsync -a --exclude index.php $APP/public/ $WEB/
+
+
+=======================================================================
+  14. RETOUR ARRIERE
+=======================================================================
+
+  Il n'y a rien a defaire : O2switch n'a pas ete touche et continue de
+  servir les usagers pendant toute l'operation. Si le VPS ne convient
+  pas, on l'abandonne et rien n'est perdu.
+
+  Pour remettre la page provisoire a la place de l'application :
+
+mv $WEB/index.html.ancien $WEB/index.html
+rm -f $WEB/index.php
+
+  Pour repartir de zero sur le VPS :
+
+rm -rf /home/alpha/apps/demat
+mysql -u alpha_demat -p -e "DROP DATABASE alpha_demat; CREATE DATABASE alpha_demat CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+
+=======================================================================
+  14 bis. CE QUI S'EST REELLEMENT PASSE — 7 novembre 2026
+=======================================================================
+
+  MIGRATION FAITE. L'application repond sur
+  https://dematerialisation.univkara.tg
+  O2switch reste en ligne en parallele, intact.
+
+  Etat verifie
+    /login repond 200, / redirige en 302
+    .env, .user.ini et les journaux : 404 ou 403, rien ne fuit
+    1165 anciens etudiants, 146 pieces configurees, 6 agents
+    pieces deposees transferees (branding, candidatures, requests,
+      signatures)
+    connexion super-administrateur : OK
+    aucune migration en attente
+    limites PHP : 32M / 40M / 512M / 120 s, confirmees par sonde
+    cron schedule:run en place, sauvegarde programmee a 02:00 UTC
+    sauvegarde lancee a la main : archive de 311 Ko en 0,56 s
+    pas de boucle de redirection : le mode SSL de Cloudflare convient
+
+  TROIS PIEGES RENCONTRES, ET LEUR CAUSE REELLE
+
+  1. « ERROR at line 1: Unknown command '\-' » a l'import.
+     Ce n'etait PAS une corruption du transfert : les empreintes md5
+     etaient identiques des deux cotes. mariadb-dump 11.4 ecrit en
+     premiere ligne « /*M!999999\- enable the sandbox mode */ », une
+     commande que le client 10.3 du VPS ne connait pas.
+     Correction : sed '1{/^\/\*M!999999/d}' avant l'import.
+
+  2. Le .env ecrit depuis Windows est arrive en CRLF, sur 71 lignes.
+     Le \r invisible s'accrochait a la fin de chaque valeur.
+     Correction : sed -i 's/\r$//' .env, puis config:cache.
+
+  3. SMTP Gmail refuse : « 534-5.7.9 WebLoginRequired ».
+     Le mot de passe d'application est pourtant valide (16 caracteres,
+     verifie apres le retrait du \r). Un mot de passe errone donnerait
+     535, pas 534 : c'est Google qui bloque la connexion depuis l'IP
+     du VPS. Les memes identifiants fonctionnaient depuis O2switch.
+     Non resolu — voir ci-dessous.
+
+  CE QUI RESTE
+
+  a) COURRIEL. A tenter : approuver l'alerte de securite dans la boite
+     programmation.univkara@gmail.com, passer par
+     https://accounts.google.com/DisplayUnlockCaptcha puis reessayer
+     dans les dix minutes, enfin regenerer le mot de passe
+     d'application. Si Google refuse toujours, ne pas s'acharner :
+     certaines plages d'hebergeurs sont bloquees sans recours.
+     La vraie solution est une boite no-reply@univkara.tg. Le montage
+     actuel — un compte Gmail gratuit d'un AUTRE projet, plafonne a
+     ~500 envois par jour, ecrivant au nom de l'universite depuis une
+     adresse @gmail.com — ne tiendra pas pour 1165 etudiants.
+     Sans blocage immediat : si l'interrupteur des notifications est
+     desactive dans Parametres, rien ne part de toute facon.
+
+  b) ESSAI DE TAMPONNAGE. Le seul controle qui eprouve vraiment les
+     512 Mo et les 120 secondes. A faire.
+
+  c) CLOUDFLARE (section 12) : limite de taille des envois, et
+     contournement du cache sur /admin/* et /student/*.
+
+  d) DEPOT GITHUB a remettre en PRIVE. Il n'a ete rendu public que
+     pour eviter un jeton d'acces au moment du clone.
+
+  e) SAUVEGARDES HORS DU VPS. Une archive qui vit sur la machine
+     qu'elle sauvegarde ne protege pas de la perte de cette machine.
+     O2switch reste disponible pour en heberger une copie.
+
+  f) MARIADB 10.3 est en fin de vie depuis mai 2023 : plus aucun
+     correctif de securite. Demander a l'administrateur root un
+     passage en 10.11 LTS.
+
+  g) O2SWITCH : rediriger l'ancienne adresse, puis arreter — seulement
+     une fois le VPS eprouve a l'usage.
+
+
+=======================================================================
+  15. ORDRE DES OPERATIONS — resume
+=======================================================================
+
+   0. Commiter et pousser le code                      FAIT
+   1. Sonde PHP                                        FAIT
+   2. Variables + Composer                             (VPS)
+   3. Creer la base                                    (CWP)
+   4. Dump + archive + APP_KEY                         (O2switch)
+   5. Cloner + composer install                        (VPS)
+   6. Ecrire le .env, APP_KEY recopiee                 (VPS)
+   7. Importer base et fichiers, migrer                (VPS)
+   8. Publier la racine web                            (VPS)
+   9. Droits + .user.ini                               (VPS)
+  10. Caches + cron                                    (VPS / CWP)
+  11. Verifier, puis effacer les copies                (VPS)
+  12. Demandes a Cloudflare et au root                 (tiers)
+
+  Les etapes 0 et 1 sont faites. La suite s'enchaine sans point
+  d'arret jusqu'a la verification.
+
+  Le seul vrai risque restant est le mode SSL de Cloudflare
+  (section 12, point 1) : en « Flexible », la connexion sera
+  impossible quoi qu'on fasse sur le VPS. Posez la question en
+  parallele, sans attendre d'etre bloque.
+
+=======================================================================
