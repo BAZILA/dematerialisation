@@ -28,6 +28,14 @@ class StudentRequest extends Model
     ];
 
     protected $casts = [
+        /* Les cles etrangeres ne sont pas converties d'office, contrairement
+           a la cle primaire. Selon le pilote et sa configuration, MySQL peut
+           les rendre sous forme de TEXTE : « 12 » !== 12 est alors vrai, et
+           le proprietaire legitime d'un dossier se voyait refuser l'acces.
+           On les fixe en entiers, pour que toute comparaison tienne. */
+        'student_id' => 'integer',
+        'parcours_id' => 'integer',
+        'annee_academique_id' => 'integer',
         'submitted_at' => 'datetime',
         'validated_at' => 'datetime',
         'rendez_vous_at' => 'datetime',
@@ -175,6 +183,33 @@ class StudentRequest extends Model
             $this->grade(),
             $this->parcours_id
         );
+    }
+
+    /**
+     * Les pieces a AFFICHER : celles attendues a ce niveau, plus toute
+     * piece reellement deposee — meme si sa fiche a change depuis.
+     *
+     * « Attendues » et « deposees » ne se recouvrent pas toujours. Une
+     * piece desactivee, supprimee du niveau ou deplacee apres le depot
+     * sortirait de la liste attendue ; si l'ecran ne parcourait que
+     * celle-ci, le fichier deja fourni deviendrait invisible pour l'agent
+     * qui doit le traiter. Pour un systeme d'archives, ce qui a ete
+     * depose ne doit jamais disparaitre de la vue.
+     *
+     * La soumission, elle, continue de s'appuyer sur typesAttendus() :
+     * on n'exige que ce que le niveau reclame aujourd'hui.
+     */
+    public function typesAAfficher(): \Illuminate\Database\Eloquent\Collection
+    {
+        $this->loadMissing('files.requestType');
+
+        $deposes = $this->files->pluck('requestType')->filter();
+
+        return $this->typesAttendus()
+            ->concat($deposes)
+            ->unique('id')
+            ->sortBy([['order', 'asc'], ['id', 'asc']])
+            ->values();
     }
 
     /** @return \Illuminate\Support\Collection<int,RequestType> */

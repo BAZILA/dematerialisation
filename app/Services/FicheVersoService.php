@@ -5,7 +5,8 @@ namespace App\Services;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Remplit automatiquement le VERSO (page 2) de la fiche d'inscription UK.
+ * Remplit automatiquement le VERSO de la fiche d'inscription UK — c'est-a-dire
+ * sa DERNIERE page, et non la deuxieme : une fiche peut en compter trois.
  *
  * La fiche est déjà imprimée : on écrit UNIQUEMENT dans les cases existantes
  * (texte centré), on pose la date, la mention de vérification, un cachet
@@ -17,7 +18,9 @@ use Illuminate\Support\Facades\Log;
  */
 class FicheVersoService
 {
-    private const VERSO_PAGE = 2;
+    /* Le verso est la DERNIERE page du fichier, pas la deuxieme : une fiche
+       sur trois pages aurait sinon recu son remplissage au milieu, sur une
+       page sans aucune case prevue pour lui. */
 
     /* ── Tableau « Études antérieures » (cases pré-imprimées) ──── */
     private const FIRST_ROW_TOP = 66.0;  // Y du haut de la 1re ligne de données
@@ -65,6 +68,36 @@ class FicheVersoService
     /* Tout en noir */
     private const INK = [0, 0, 0];
 
+    /* Decalage vertical du BLOC DU BAS, en mm (negatif = vers le haut).
+
+       Le tableau des etudes, en haut, tombe juste. Mais sur la fiche que
+       les etudiants telechargent reellement, le texte d'engagement qui
+       precede le bloc de signature est plus court que sur le gabarit de
+       calage : tout ce qui suit remonte d'environ 4,5 mm. La date, le nom
+       du verificateur et la signature se retrouvaient ecrits une ligne
+       sous leurs traits.
+
+       Reglable dans Parametres > Fiche : si l'universite modifie la fiche,
+       on recale sans redeployer. */
+    private const DECALAGE_BAS_DEFAUT = -4.5;
+    private const DECALAGE_BAS_MAX    = 30.0;
+
+    private ?float $decalageBas = null;
+
+    /** Position verticale d'un element du bloc du bas, decalage applique. */
+    private function bas(float $y): float
+    {
+        if ($this->decalageBas === null) {
+            $valeur = \App\Models\Setting::get('fiche.decalage_bas_mm', self::DECALAGE_BAS_DEFAUT);
+            $valeur = is_numeric($valeur) ? (float) $valeur : self::DECALAGE_BAS_DEFAUT;
+
+            // Une faute de frappe ne doit pas envoyer le texte hors de la page.
+            $this->decalageBas = max(-self::DECALAGE_BAS_MAX, min(self::DECALAGE_BAS_MAX, $valeur));
+        }
+
+        return $y + $this->decalageBas;
+    }
+
     /**
      * @param  array       $etudes         Lignes [annee_debut, annee_fin, universite, domaine, etablissement, parcours, credits]
      * @param  string|null $cachetPath     Image cachet officiel (PNG) — chemin absolu
@@ -99,7 +132,7 @@ class FicheVersoService
             $pdf->setAutoPageBreak(false);
 
             $pageCount = $pdf->setSourceFile($inputPath);
-            $versoPage = min(self::VERSO_PAGE, $pageCount);
+            $versoPage = $pageCount;   // la derniere page, quelle que soit la longueur
 
             for ($p = 1; $p <= $pageCount; $p++) {
                 $tpl  = $pdf->importPage($p);
@@ -119,7 +152,7 @@ class FicheVersoService
                     $this->drawCachet($pdf, $size['width'], $size['height'], $cachetPath);
                 } else {
                     // Les AUTRES pages reçoivent le cachet officiel (centre/haut)
-                    $this->drawCachetCorner($pdf, $size['width'], $size['height'], $cachetPath, $validatorName);
+                    $this->drawCachetCorner($pdf, $size['width'], $size['height'], $cachetPath);
                 }
             }
 
@@ -177,14 +210,14 @@ class FicheVersoService
     {
         $pdf->SetTextColor(0, 0, 0);
         $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(self::DATE_X, self::DATE_Y);
+        $pdf->SetXY(self::DATE_X, $this->bas(self::DATE_Y));
         $pdf->Cell(50, 4, now()->format('d/m/Y'), 0, 0, 'L');
     }
 
     /* ── Cachet rectangulaire « LU ET APPROUVÉ » (vectoriel) ──── */
     private function drawApprovalStamp(\setasign\Fpdi\Tcpdf\Fpdi $pdf, ?string $acceptedAt, ?string $reference): void
     {
-        $x = self::STAMP_X; $y = self::STAMP_Y; $w = self::STAMP_W; $h = self::STAMP_H;
+        $x = self::STAMP_X; $y = $this->bas(self::STAMP_Y); $w = self::STAMP_W; $h = self::STAMP_H;
         [$r, $g, $b] = self::GREEN;
         $ts = $acceptedAt ? \Carbon\Carbon::parse($acceptedAt) : now();
 
@@ -228,11 +261,11 @@ class FicheVersoService
     {
         $pdf->SetTextColor(0, 0, 0);
         $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->SetXY(self::VERIF_NAME_X, self::VERIF_NAME_Y);
+        $pdf->SetXY(self::VERIF_NAME_X, $this->bas(self::VERIF_NAME_Y));
         $pdf->Cell(self::VERIF_NAME_W, 4, $validatorName ?: '', 0, 0, 'C', false, '', 1);
 
         $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(self::VERIF_DATE_X, self::VERIF_DATE_Y);
+        $pdf->SetXY(self::VERIF_DATE_X, $this->bas(self::VERIF_DATE_Y));
         $pdf->Cell(self::VERIF_DATE_W, 4, now()->format('d/m/Y'), 0, 0, 'C');
     }
 
@@ -240,7 +273,7 @@ class FicheVersoService
     private function drawSignature(\setasign\Fpdi\Tcpdf\Fpdi $pdf, ?string $signaturePath): void
     {
         if ($signaturePath && file_exists($signaturePath)) {
-            $pdf->Image($signaturePath, self::SIGN_X, self::SIGN_Y, self::SIGN_W, 0, '', '', '', false, 300);
+            $pdf->Image($signaturePath, self::SIGN_X, $this->bas(self::SIGN_Y), self::SIGN_W, 0, '', '', '', false, 300);
         }
     }
 
@@ -259,8 +292,15 @@ class FicheVersoService
         }
     }
 
-    /** Cachet officiel (zone centre/haut) sur les pages autres que le verso. */
-    private function drawCachetCorner(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, ?string $cachetPath, ?string $validatorName): void
+    /**
+     * Cachet officiel (zone centre/haut) sur les pages autres que le verso.
+     *
+     * Il n'est plus accompagne de « Valide par : {nom} ». Pose a une position
+     * aleatoire, ce texte tombait sur le contenu de la fiche — il recouvrait
+     * par exemple la profession des parents. Et il faisait doublon : le nom
+     * du verificateur figure deja au verso, sur la ligne prevue a cet effet.
+     */
+    private function drawCachetCorner(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, ?string $cachetPath): void
     {
         if (!$cachetPath || !file_exists($cachetPath)) {
             return;
@@ -276,12 +316,6 @@ class FicheVersoService
             $pdf->StopTransform();
         } catch (\Throwable $e) {
             Log::warning('FicheVersoService cachet coin: ' . $e->getMessage());
-        }
-        if ($validatorName) {
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->SetFont('helvetica', '', 6.5);
-            $pdf->SetXY($x - 6, $y - 4);
-            $pdf->Cell($w + 12, 3, 'Validé par : ' . $validatorName, 0, 0, 'C');
         }
     }
 

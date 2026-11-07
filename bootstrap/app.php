@@ -32,5 +32,26 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        /* Un envoi qui dépasse la limite « post_max_size » du serveur est
+           arrêté avant même d'atteindre la validation. Laravel lève alors
+           PostTooLargeException — avec un message VIDE par défaut.
+
+           Côté navigateur, un message vide vaut « faux » : l'écran de dépôt
+           retombait sur son texte de repli, « Action impossible », sans
+           rien dire de la cause. L'usager réessayait le même fichier, en
+           boucle, sans comprendre.
+
+           On nomme donc la cause, et on donne la limite réelle du serveur :
+           c'est elle qui décide, pas celle de l'application. */
+        $exceptions->render(function (\Illuminate\Http\Exceptions\PostTooLargeException $e, $request) {
+            $limite = ini_get('post_max_size') ?: 'inconnue';
+            $message = "Fichier trop volumineux pour le serveur (limite : {$limite}). "
+                . 'Réduisez sa taille — une numérisation en 150 dpi suffit — puis réessayez.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 413);
+            }
+
+            return back()->withErrors(['file' => $message]);
+        });
     })->create();

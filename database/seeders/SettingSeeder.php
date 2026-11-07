@@ -29,6 +29,7 @@ class SettingSeeder extends Seeder
             ['key' => 'notifications.sms.enabled', 'value' => '0', 'type' => 'boolean', 'group' => 'notifications', 'label' => 'Notifications SMS'],
 
             // Affichage
+            ['key' => 'fiche.decalage_bas_mm', 'value' => '-4.5', 'type' => 'string', 'group' => 'fiche', 'label' => 'Décalage du bas de la fiche (mm)', 'description' => "Remonte (valeur négative) ou descend (positive) la date, le nom du vérificateur, le cachet « Lu et approuvé » et la signature posés au verso. À ajuster si ces mentions ne tombent plus sur leurs traits — par exemple si l'université modifie la fiche. -4,5 convient à la fiche actuelle."],
             ['key' => 'affichage.per_page', 'value' => '20', 'type' => 'integer', 'group' => 'affichage', 'label' => 'Éléments par page', 'description' => "Nombre de lignes affichées par page dans les listes (demandes, archives, audit, utilisateurs…)."],
 
             // Recyclage (réinscription après interruption, par dérogation)

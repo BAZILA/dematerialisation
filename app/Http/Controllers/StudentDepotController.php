@@ -324,8 +324,17 @@ class StudentDepotController extends Controller
 
     private function authorizeOwner(StudentRequest $sr): void
     {
-        if ($sr->student_id !== Auth::user()->student->id) {
-            abort(403);
+        /* Comparaison en entiers : un identifiant rendu sous forme de texte
+           par la base faisait echouer « !== » pour le proprietaire lui-meme.
+
+           Et un message explicite : abort(403) sans texte renvoyait
+           {"message": ""}, que l'ecran de depot affichait comme « Action
+           impossible » — sans permettre de distinguer un refus de
+           l'application d'un blocage du pare-feu. */
+        $moi = Auth::user()?->student?->id;
+
+        if ($moi === null || (int) $sr->student_id !== (int) $moi) {
+            abort(403, "Ce dossier n'est pas rattache a votre compte.");
         }
     }
 }

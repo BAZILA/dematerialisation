@@ -817,7 +817,10 @@ class CandidatureController extends Controller
 
             // Sections : toutes, ou seulement celle demandée
             foreach ($cand->choix as $section) {
-                if ($parcoursId && $section->parcours_id !== $parcoursId) {
+                // $parcoursId arrive de l'URL, donc en texte : sans conversion,
+                // « 12 » !== 12 ecartait toutes les sections et l'archive
+                // d'un parcours sortait vide.
+                if ($parcoursId && (int) $section->parcours_id !== (int) $parcoursId) {
                     continue;
                 }
                 if (!$agent->coversParcours($section->parcours_id)) {

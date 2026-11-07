@@ -1,0 +1,153 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Retirer les comptes des bacheliers de DEMONSTRATION
+=======================================================================
+
+  Fiches visees (creees par BachelierSeeder, pas par un vrai import) :
+      BAC2023001   Kofi MENSAH
+      BAC2023002   Ama AZIATO    (compte AAZIATO)
+      BAC2023003   Sevi DOSSOU   (compte SDOSSOU)
+
+  Ciblage par NUMERO DE RELEVE, pas par heure : un vrai bachelier
+  inscrit entre-temps ne peut pas etre touche.
+
+
+-----------------------------------------------------------------------
+  1. VARIABLES + SAUVEGARDE (nouvelle, l'etat a change depuis 10 h 06)
+-----------------------------------------------------------------------
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+DB_NAME=$(grep '^DB_DATABASE=' $SITE/.env | cut -d= -f2 | tr -d '"')
+DB_USER=$(grep '^DB_USERNAME=' $SITE/.env | cut -d= -f2 | tr -d '"')
+STAMP=$(date +%Y%m%d-%H%M)
+echo "SITE=$SITE DB=$DB_NAME USER=$DB_USER STAMP=$STAMP"
+
+cd /home/gysj7444
+mysqldump -u "$DB_USER" -p --single-transaction --routines "$DB_NAME" > avant-retrait-demo-$STAMP.sql
+tar czf avant-retrait-demo-fichiers-$STAMP.tgz -C $SITE/storage/app/private requests candidatures
+ls -lh avant-retrait-demo-*$STAMP*
+
+
+-----------------------------------------------------------------------
+  2. OUVRIR MySQL EN MODE INTERACTIF
+-----------------------------------------------------------------------
+
+mysql -u "$DB_USER" -p "$DB_NAME"
+
+  Les blocs suivants se COLLENT a l'invite  MariaDB [...]>
+
+
+-----------------------------------------------------------------------
+  3. APERCU — n'efface rien
+-----------------------------------------------------------------------
+
+SELECT b.id AS fiche, b.numero_releve, b.nom, b.prenom, b.is_registered,
+       u.id AS compte, u.numero_identifiant, u.role, u.created_at
+FROM bacheliers b
+LEFT JOIN students s ON s.bachelier_id = b.id
+LEFT JOIN users u    ON u.id = s.user_id
+WHERE b.numero_releve IN ('BAC2023001','BAC2023002','BAC2023003');
+
+SELECT
+  (SELECT COUNT(*) FROM student_requests sr
+     JOIN students s   ON s.id = sr.student_id
+     JOIN bacheliers b ON b.id = s.bachelier_id
+     WHERE b.numero_releve IN ('BAC2023001','BAC2023002','BAC2023003')) AS dossiers,
+  (SELECT COUNT(*) FROM request_files rf
+     JOIN student_requests sr ON sr.id = rf.student_request_id
+     JOIN students s   ON s.id = sr.student_id
+     JOIN bacheliers b ON b.id = s.bachelier_id
+     WHERE b.numero_releve IN ('BAC2023001','BAC2023002','BAC2023003')) AS pieces_deposees;
+
+  -> Seuls AAZIATO et SDOSSOU (et eventuellement un compte de MENSAH)
+     doivent apparaitre. Sinon : ne pas continuer.
+
+
+-----------------------------------------------------------------------
+  4. SUPPRESSION — transaction, rien n'est definitif avant COMMIT
+-----------------------------------------------------------------------
+
+START TRANSACTION;
+
+DROP TEMPORARY TABLE IF EXISTS tmp_comptes;
+CREATE TEMPORARY TABLE tmp_comptes (id BIGINT UNSIGNED PRIMARY KEY);
+INSERT IGNORE INTO tmp_comptes (id)
+  SELECT u.id FROM users u
+  JOIN students s   ON s.user_id = u.id
+  JOIN bacheliers b ON b.id = s.bachelier_id
+  WHERE b.numero_releve IN ('BAC2023001','BAC2023002','BAC2023003')
+    AND u.role IN ('etudiant','candidat');
+
+SELECT COUNT(*) AS comptes_vises FROM tmp_comptes;
+
+UPDATE bacheliers SET is_registered = 0
+WHERE numero_releve IN ('BAC2023001','BAC2023002','BAC2023003');
+
+DELETE p FROM paiements p
+JOIN student_requests sr ON sr.id = p.payable_id
+JOIN students s          ON s.id = sr.student_id
+JOIN tmp_comptes t       ON t.id = s.user_id
+WHERE p.payable_type = 'App\\Models\\StudentRequest';
+
+DELETE mr FROM model_has_roles mr
+JOIN tmp_comptes t ON t.id = mr.model_id
+WHERE mr.model_type = 'App\\Models\\User';
+
+DELETE mp FROM model_has_permissions mp
+JOIN tmp_comptes t ON t.id = mp.model_id
+WHERE mp.model_type = 'App\\Models\\User';
+
+DELETE se FROM sessions se JOIN tmp_comptes t ON t.id = se.user_id;
+
+DELETE u FROM users u JOIN tmp_comptes t ON t.id = u.id;
+
+SELECT
+  (SELECT COUNT(*) FROM students s JOIN bacheliers b ON b.id = s.bachelier_id
+     WHERE b.numero_releve IN ('BAC2023001','BAC2023002','BAC2023003'))  AS comptes_demo_restants,
+  (SELECT COUNT(*) FROM bacheliers WHERE is_registered = 1
+     AND numero_releve IN ('BAC2023001','BAC2023002','BAC2023003'))      AS fiches_demo_inscrites,
+  (SELECT COUNT(*) FROM model_has_roles mr WHERE mr.model_type = 'App\\Models\\User'
+     AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = mr.model_id))    AS roles_orphelins,
+  (SELECT COUNT(*) FROM users WHERE role NOT IN ('etudiant','candidat')) AS personnel,
+  (SELECT COUNT(*) FROM anciens_etudiants)                               AS referentiel_anciens,
+  (SELECT COUNT(*) FROM request_types)                                   AS pieces_configurees;
+
+  -> Attendu : 0, 0, 0, puis votre personnel, 1165, vos pieces.
+     Aucune ligne « ERROR » plus haut.
+
+  Tout est bon :      COMMIT;
+  Le moindre doute :  ROLLBACK;
+
+
+-----------------------------------------------------------------------
+  5. OPTIONNEL — retirer aussi les 3 FICHES de demonstration
+-----------------------------------------------------------------------
+  Apres le COMMIT. Elles disparaissent alors de Reference > Identites.
+  Ne supprime qu'une fiche sans compte rattache.
+
+DELETE FROM bacheliers
+WHERE numero_releve IN ('BAC2023001','BAC2023002','BAC2023003')
+  AND NOT EXISTS (SELECT 1 FROM students s WHERE s.bachelier_id = bacheliers.id);
+
+exit
+
+
+-----------------------------------------------------------------------
+  6. FICHIERS DEVENUS ORPHELINS
+-----------------------------------------------------------------------
+  Les scripts sont encore dans /home/gysj7444/remise-a-zero/
+
+cp /home/gysj7444/remise-a-zero/nettoyer-fichiers-orphelins.php /home/gysj7444/remise-a-zero/nettoyer-fichiers-orphelins.lib.php $SITE/
+cd $SITE
+$PHP nettoyer-fichiers-orphelins.php
+$PHP nettoyer-fichiers-orphelins.php --supprimer
+rm -f $SITE/nettoyer-fichiers-orphelins.php $SITE/nettoyer-fichiers-orphelins.lib.php
+
+
+-----------------------------------------------------------------------
+  RETOUR ARRIERE
+-----------------------------------------------------------------------
+
+mysql -u "$DB_USER" -p "$DB_NAME" < /home/gysj7444/avant-retrait-demo-AAAAMMJJ-HHMM.sql
+tar xzf /home/gysj7444/avant-retrait-demo-fichiers-AAAAMMJJ-HHMM.tgz -C $SITE/storage/app/private

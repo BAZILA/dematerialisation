@@ -4,6 +4,30 @@
 
 @section('css')
     <style>
+        /* « min-w-0 » etait utilisee sans jamais avoir ete definie : c'est une
+           classe Tailwind, Bootstrap 5 ne la connait pas. Sans elle, une
+           colonne flexible ne retrecit pas sous la longueur de son contenu :
+           un nom de fichier long poussait la taille et le bouton de depot
+           hors de l'ecran sur mobile. */
+        .min-w-0 { min-width: 0 !important; }
+
+        /* Pastille du fichier : le nom se tronque avec des points de
+           suspension, la taille et les actions restent toujours visibles. */
+        .piece-fichier { min-width: 0; flex-wrap: wrap; }
+        .piece-fichier .piece-nom {
+            min-width: 0; flex: 1 1 120px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        @media (max-width: 575.98px) {
+            /* Sur un telephone, 1,5 rem de marge de chaque cote mangeait la
+               place du nom de fichier. */
+            #dashRoot .list-group-item.px-4 { padding-left: 12px !important; padding-right: 12px !important; }
+            #dashRoot .list-group-item .d-flex.gap-3 { gap: 10px !important; }
+            /* La taille passe sous le nom plutot que de le compresser a rien. */
+            .piece-fichier .piece-nom { flex-basis: 100%; }
+        }
+
         .dash-hero {
             background: linear-gradient(120deg, var(--brand) 0%, #1f7a48 100%);
             border-radius: var(--r-lg); padding: 26px 30px; color: #fff;
@@ -258,7 +282,7 @@
                    fournit pas ce qu'une licence fournit. Sans dossier, il
                    n'y a pas encore de niveau, donc rien à afficher. */
                 $types = $req
-                    ? $req->typesAttendus()
+                    ? $req->typesAAfficher()
                     : new \Illuminate\Database\Eloquent\Collection();
                 $isDepot = $key === 'depot';
             @endphp
@@ -598,12 +622,12 @@
 
                                                         {{-- Fichier --}}
                                                         @if ($file)
-                                                            <div class="d-flex align-items-center gap-2 p-2 rounded mt-1"
+                                                            <div class="d-flex align-items-center gap-2 p-2 rounded mt-1 piece-fichier"
                                                                 style="border:1px solid var(--line-mid);background:var(--surface-2);">
                                                                 <i
                                                                     class="fas {{ $file->isPdf() ? 'fa-file-pdf text-danger' : 'fa-file-image text-primary' }}"></i>
-                                                                <span class="small flex-grow-1 text-truncate"
-                                                                    style="color:var(--t1);">
+                                                                <span class="small piece-nom" style="color:var(--t1);"
+                                                                    title="{{ $file->original_filename }}">
                                                                     {{ $file->original_filename }}
                                                                 </span>
                                                                 <span class="small"
@@ -1208,7 +1232,7 @@
     @foreach ($cats as $key => $label)
         @php
             $ar = ($requestsByCategory[$key] ?? collect())->whereIn('status', ['brouillon', 'en_correction'])->first();
-            $types = $ar ? $ar->typesAttendus() : new \Illuminate\Database\Eloquent\Collection();
+            $types = $ar ? $ar->typesAAfficher() : new \Illuminate\Database\Eloquent\Collection();
         @endphp
         @if ($ar)
             @foreach ($types as $type)
@@ -1296,6 +1320,41 @@
             });
 
             btn.disabled = !pret;
+        }
+
+        /* « Action impossible » ne disait rien : l'usager renvoyait le même
+           fichier en boucle, et personne ne pouvait diagnostiquer. On
+           nomme la cause, et on donne toujours le code HTTP — c'est lui qui
+           permet de savoir, à distance, où chercher. */
+        function ukMessageErreur(res, data) {
+            // Un message vide vaut « faux » en JavaScript : on le teste
+            // explicitement, sinon on retomberait sur le repli.
+            if (data && typeof data.message === 'string' && data.message.trim() !== '') {
+                return data.message;
+            }
+            if (data && data.errors) {
+                var premiere = Object.values(data.errors)[0];
+                if (premiere && premiere[0]) return premiere[0];
+            }
+
+            /* Pas de réponse exploitable : elle ne vient pas de
+               l'application, mais du serveur ou de son pare-feu. */
+            switch (res.status) {
+                case 413:
+                    return 'Fichier trop volumineux pour le serveur. Réduisez sa taille '
+                        + '(une numérisation en 150 dpi suffit) puis réessayez.';
+                case 419:
+                    return 'Votre session a expiré. Rechargez la page, puis recommencez.';
+                case 429:
+                    return 'Trop de tentatives rapprochées. Patientez une minute avant de réessayer.';
+                case 403:
+                case 406:
+                    return 'Envoi refusé par le serveur (erreur ' + res.status + '). '
+                        + 'Si cela se répète avec ce fichier, signalez ce code à l\'administration.';
+                default:
+                    return 'Envoi impossible (erreur ' + res.status + '). '
+                        + 'Réessayez ; si cela persiste, signalez ce code à l\'administration.';
+            }
         }
 
         function ukSyncSoumissions() {
@@ -1519,7 +1578,7 @@
                         toast(data.message || 'Enregistré.', 'success');
                         await reloadDash();
                     } else {
-                        toast(data.message || (data.errors ? Object.values(data.errors)[0][0] : 'Action impossible.'), 'danger');
+                        toast(ukMessageErreur(res, data), 'danger');
                         if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset._h; }
                     }
                 }).catch(() => {

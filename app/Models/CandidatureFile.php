@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class CandidatureFile extends Model
 {
+    use \App\Models\Concerns\ReparerNomDeFichier;
+
     protected $fillable = [
         'candidature_id', 'candidature_choix_id', 'request_type_id',
         'original_filename', 'stored_filename', 'file_path', 'mime_type', 'file_size',

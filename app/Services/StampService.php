@@ -43,7 +43,7 @@ class StampService
 
                 // Cachet image (si chargé) sur CHAQUE page ; sinon cachet vectoriel de repli
                 if ($cachetPath && file_exists($cachetPath)) {
-                    $this->drawCachetImage($pdf, $size['width'], $size['height'], $cachetPath, $validatorName);
+                    $this->drawCachetImage($pdf, $size['width'], $size['height'], $cachetPath);
                 } else {
                     $this->drawStamp($pdf, $size['width'], $size['height'], $validatorName);
                 }
@@ -129,10 +129,13 @@ class StampService
     }
 
     /**
-     * Appose l'image de cachet (chargée par le super-admin) en bas à droite
-     * de la page, + le nom du validateur. Utilisé sur CHAQUE page.
+     * Appose l'image de cachet (chargée par le super-admin) sur CHAQUE page.
+     *
+     * Sans « Validé par : {nom} » : posé à une position aléatoire, ce texte
+     * recouvrait le contenu du document. Qui a validé reste consigné dans le
+     * journal d'audit.
      */
-    private function drawCachetImage(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, string $cachetPath, ?string $validatorName = null): void
+    private function drawCachetImage(\setasign\Fpdi\Tcpdf\Fpdi $pdf, float $pw, float $ph, string $cachetPath): void
     {
         $w = 42;                                   // largeur du cachet (hauteur auto)
         // Zone CENTRE / HAUT, position aléatoire (jamais en bas)
@@ -146,13 +149,6 @@ class StampService
             $pdf->StopTransform();
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('StampService cachet image: ' . $e->getMessage());
-        }
-
-        if ($validatorName) {
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->SetFont('helvetica', '', 6.5);
-            $pdf->SetXY($x - 6, $y - 4);
-            $pdf->Cell($w + 12, 3, 'Validé par : ' . $validatorName, 0, 0, 'C');
         }
     }
 

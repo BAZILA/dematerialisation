@@ -86,6 +86,7 @@
             'acces'         => ['Accès par code', 'fa-key'],
             'recyclage'     => ['Recyclage',      'fa-arrows-rotate'],
             'sauvegarde'    => ['Sauvegarde',     'fa-shield-halved'],
+            'fiche'         => ['Fiche (verso)',  'fa-file-signature'],
             'affichage'     => ['Affichage',      'fa-table-list'],
         ];
 

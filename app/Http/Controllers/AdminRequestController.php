@@ -248,10 +248,13 @@ class AdminRequestController extends Controller
         $studentRequest->load('student.user', 'files.requestType', 'validator',
             'etudesAnterieures', 'parcours.departement.faculte', 'anneeAcademique');
 
-        $types = RequestType::forCategory(
-            $studentRequest->category,
-            $studentRequest->student->user->type_etudiant
-        );
+        /* L'appel precedent ne transmettait pas le niveau du dossier. Depuis
+           que chaque niveau a ses propres pieces, sans niveau la liste
+           revient vide : l'agent voyait « Documents soumis » sans aucun
+           document, alors que les fichiers etaient bien la.
+           On affiche desormais tout ce qui a ete depose, en plus de ce que
+           le niveau attend. */
+        $types = $studentRequest->typesAAfficher();
 
         return view('admin.requests.show', compact('studentRequest', 'types'));
     }
@@ -486,8 +489,12 @@ class AdminRequestController extends Controller
         abort_unless($request->user()->coversRequest($studentRequest), 403,
             "Cette demande est hors de votre périmètre d'affectation.");
 
+        /* Le message global n'est plus exige. Imposer 10 caracteres ralentissait
+           un geste frequent — « illisible », « mauvais fichier » — alors que le
+           detail se donne deja piece par piece, dans le commentaire de chaque
+           fichier. */
         $request->validate([
-            'rejection_message' => 'required|string|min:10',
+            'rejection_message' => 'nullable|string|max:1000',
             'file_valid' => 'nullable|array',
             'file_comments' => 'nullable|array',
             'file_comments.*' => 'nullable|string|max:500',
@@ -510,9 +517,16 @@ class AdminRequestController extends Controller
             ]);
         }
 
+        // Sans message, l'etudiant ne doit pas rester sans indication : on
+        // le renvoie vers les commentaires poses sur chaque piece.
+        $message = trim((string) $request->rejection_message);
+        if ($message === '') {
+            $message = 'Certaines pièces sont à corriger : consultez le commentaire indiqué sur chacune.';
+        }
+
         $studentRequest->update([
             'status' => 'en_correction',
-            'rejection_message' => $request->rejection_message,
+            'rejection_message' => $message,
             'validated_by' => Auth::id(),
             'validated_at' => now(),
         ]);

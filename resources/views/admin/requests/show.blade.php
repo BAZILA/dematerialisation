@@ -408,7 +408,7 @@
                                 <i class="fas fa-rotate-left"></i> Renvoyer pour correction
                             </label>
                             <textarea class="form-control form-control-sm mb-2" name="rejection_message" rows="3"
-                                placeholder="Expliquez ce qui doit être corrigé…" minlength="10"></textarea>
+                                placeholder="Facultatif — le détail peut se donner sur chaque pièce"></textarea>
                             <button type="button" class="btn btn-warning w-100 mb-3" id="btnCorr">
                                 <i class="fas fa-rotate-left"></i> Renvoyer
                             </button>
@@ -610,12 +610,8 @@
             });
 
             document.getElementById('btnCorr')?.addEventListener('click', () => {
-                const msg = document.querySelector('#corrForm [name="rejection_message"]');
-                if (!msg || msg.value.trim().length < 10) {
-                    msg?.classList.add('is-invalid');
-                    return;
-                }
-                msg.classList.remove('is-invalid');
+                // Plus de longueur minimale : le motif global est facultatif,
+                // le detail se donne sur chaque piece.
                 if (confirm('Renvoyer pour correction ?')) {
                     collectFiles(document.getElementById('hiddenFileData'));
                     window.btnLoading(document.getElementById('btnCorr'), 'Envoi…');

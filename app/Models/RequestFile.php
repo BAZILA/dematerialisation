@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class RequestFile extends Model
 {
+    use \App\Models\Concerns\ReparerNomDeFichier;
+
     use HasFactory;
 
     protected $fillable = [
