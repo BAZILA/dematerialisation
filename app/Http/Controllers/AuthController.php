@@ -8,10 +8,18 @@ use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
+    /** Échecs tolérés sur un même compte avant de le fermer un moment. */
+    private const ESSAIS_PAR_COMPTE = 8;
+
+    /** Durée de la fermeture, en secondes. */
+    private const VERROU_SECONDES = 900;
+
     /* ══════════════════════════════════════════════════════════════════════
      |  LOGIN
      ╚══════════════════════════════════════════════════════════════════════ */
@@ -24,16 +32,36 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'numero_identifiant' => 'required|string',
-            'password'           => 'required|string',
+            'numero_identifiant' => 'required|string|max:60',
+            'password'           => 'required|string|max:200',
         ]);
+
+        /* Verrou PAR COMPTE, en plus de la cadence par adresse IP posée
+           sur la route. Limiter par IP seule ne protège pas d'une attaque
+           répartie : mille machines essayant chacune quatre mots de passe
+           sur le même compte ne dépassent jamais la limite par IP. Ici,
+           c'est le compte visé qui se ferme, d'où que viennent les essais. */
+        $verrou = 'connexion:' . mb_strtolower($credentials['numero_identifiant']);
+        if (RateLimiter::tooManyAttempts($verrou, self::ESSAIS_PAR_COMPTE)) {
+            $minutes = (int) ceil(RateLimiter::availableIn($verrou) / 60);
+
+            \App\Models\AuditLog::record('auth.verrouille', null,
+                "Connexion refusée : trop d'échecs sur l'identifiant « {$credentials['numero_identifiant']} »");
+
+            return back()->withErrors([
+                'numero_identifiant' => "Trop de tentatives sur ce compte. Réessayez dans {$minutes} minute(s).",
+            ])->onlyInput('numero_identifiant');
+        }
 
         // Un compte désactivé ne doit PAS pouvoir se connecter
         if (Auth::attempt($credentials + ['is_active' => true])) {
+            RateLimiter::clear($verrou);
             $request->session()->regenerate();
             \App\Models\AuditLog::record('auth.login', Auth::user(), 'Connexion réussie');
             return redirect()->intended('/dashboard');
         }
+
+        RateLimiter::hit($verrou, self::VERROU_SECONDES);
 
         // Identifiants corrects mais compte désactivé : on le dit clairement.
         // Aucune fuite d'information — il faut déjà connaître le bon mot de passe.
@@ -48,6 +76,14 @@ class AuthController extends Controller
                 'numero_identifiant' => "Ce compte a été désactivé. Rapprochez-vous de l'administration.",
             ])->onlyInput('numero_identifiant');
         }
+
+        /* Un échec laisse une trace. Sans elle, une attaque par essais
+           successifs ne se voit nulle part : le journal ne montrait que
+           les connexions réussies. Le mot de passe essayé n'est JAMAIS
+           consigné — c'est souvent le bon, à une faute de frappe près. */
+        \App\Models\AuditLog::record('auth.echec', $compte,
+            "Échec de connexion sur l'identifiant « {$credentials['numero_identifiant']} »"
+            . ($compte ? '' : ' (compte inexistant)'));
 
         return back()->withErrors([
             'numero_identifiant' => 'Identifiant ou mot de passe invalide.',
@@ -182,43 +218,69 @@ class AuthController extends Controller
         }
 
         $request->validate([
-            'email'    => 'required|email|unique:users,email',
-            'password' => 'required|min:8|confirmed',
+            'email'    => 'required|email|max:150|unique:users,email',
+            'password' => ['required', 'confirmed', \App\Support\MotDePasse::usager()],
         ]);
 
         $type        = session('reg_type');
         $identifiant = session('reg_identifiant');
 
-        // Création de l'utilisateur
-        $user = User::create([
-            'numero_identifiant' => $identifiant,
-            'email'              => $request->email,
-            'password'           => Hash::make($request->password),
-            'role'               => 'etudiant',
-            'type_etudiant'      => $type,
-            'is_active'          => true,
-        ]);
-        $user->assignRole('etudiant');
+        /* Tout ou rien, et une seule fois par fiche.
+           La fiche du référentiel est verrouillée le temps de l'opération,
+           puis RE-vérifiée : deux navigateurs ayant prouvé la même identité
+           créaient sinon deux comptes pour la même personne. Et si une
+           étape échouait à mi-chemin, il restait un compte sans fiche
+           étudiant, ou une fiche marquée inscrite sans compte. */
+        $cree = DB::transaction(function () use ($request, $type, $identifiant) {
+            $fiche = $type === 'nouveau'
+                ? Bachelier::whereKey(session('reg_bachelier_id'))->lockForUpdate()->first()
+                : AncienEtudiant::whereKey(session('reg_ancien_id'))->lockForUpdate()->first();
 
-        // Création du profil étudiant
-        $studentData = [
-            'user_id'        => $user->id,
-            'nom'            => session('reg_nom'),
-            'prenom'         => session('reg_prenom'),
-            'sexe'           => session('reg_sexe'),
-            'date_naissance' => session('reg_date_naissance'),
-            'lieu_naissance' => session('reg_lieu_naissance'),
-        ];
+            if (!$fiche || $fiche->is_registered) {
+                return false;
+            }
 
-        if ($type === 'nouveau') {
-            $studentData['bachelier_id'] = session('reg_bachelier_id');
-            Bachelier::find(session('reg_bachelier_id'))?->update(['is_registered' => true]);
-        } else {
-            $studentData['ancien_etudiant_id'] = session('reg_ancien_id');
-            AncienEtudiant::find(session('reg_ancien_id'))?->update(['is_registered' => true]);
+            // L'identifiant a pu être pris depuis l'étape 1
+            if (User::where('numero_identifiant', $identifiant)->exists()) {
+                $identifiant = $this->generateIdentifiant($fiche->nom, $fiche->prenom);
+            }
+
+            $user = User::create([
+                'numero_identifiant' => $identifiant,
+                'email'              => $request->email,
+                'password'           => Hash::make($request->password),
+                'role'               => 'etudiant',
+                'type_etudiant'      => $type,
+                'is_active'          => true,
+            ]);
+            $user->assignRole('etudiant');
+
+            Student::create([
+                'user_id'        => $user->id,
+                'nom'            => session('reg_nom'),
+                'prenom'         => session('reg_prenom'),
+                'sexe'           => session('reg_sexe'),
+                'date_naissance' => session('reg_date_naissance'),
+                'lieu_naissance' => session('reg_lieu_naissance'),
+                $type === 'nouveau' ? 'bachelier_id' : 'ancien_etudiant_id' => $fiche->id,
+            ]);
+
+            $fiche->update(['is_registered' => true]);
+
+            \App\Models\AuditLog::record('compte.cree', $user,
+                "Compte usager créé par inscription : {$identifiant}");
+
+            return $identifiant;
+        });
+
+        if ($cree === false) {
+            session()->forget(['reg_type', 'reg_bachelier_id', 'reg_ancien_id', 'reg_identifiant']);
+
+            return redirect()->route('register')->withErrors([
+                'general' => 'Un compte existe déjà pour cette identité. Connectez-vous, ou rapprochez-vous de la scolarité.',
+            ]);
         }
-
-        Student::create($studentData);
+        $identifiant = $cree;
 
         // Nettoyage session
         session()->forget([

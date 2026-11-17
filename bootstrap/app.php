@@ -11,15 +11,27 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Derrière le proxy de l'hébergeur (O2switch) : faire confiance aux
-        // en-têtes X-Forwarded-* pour que HTTPS/IP réelles soient détectés.
-        $middleware->trustProxies(at: '*');
+        /* Proxys de confiance : la liste vient de config/trustedproxy.php
+           (TRUSTED_PROXIES dans le .env). On ne la fige PAS ici : écrite en
+           dur à « * », elle faisait croire les en-têtes X-Forwarded-* de
+           n'importe qui, donc l'adresse IP que le visiteur voulait bien
+           déclarer. Voir le fichier de configuration. */
+
+        /* Hôtes de confiance : seul le domaine d'APP_URL (et ses
+           sous-domaines) est accepté. Sans cela, une requête forgée avec
+           un autre en-tête Host ferait fabriquer à l'application des liens
+           — dans un courriel, par exemple — pointant vers un site tiers.
+           Inactif en local et pendant les tests. */
+        $middleware->trustHosts();
 
         // En-têtes de sécurité sur toutes les réponses web + coupure
         // immédiate des sessions dont le compte vient d'être désactivé
+        // ou dont le mot de passe a changé + mot de passe provisoire
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeaders::class,
             \App\Http\Middleware\EnsureAccountActive::class,
+            \App\Http\Middleware\SessionLieeAuMotDePasse::class,
+            \App\Http\Middleware\ExigerChangementMotDePasse::class,
         ]);
 
         // Alias de rôles/permissions (Spatie)

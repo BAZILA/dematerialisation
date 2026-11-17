@@ -33,6 +33,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at'         => 'datetime',
         'is_active'                 => 'boolean',
+        'doit_changer_mot_de_passe' => 'boolean',   // mot de passe provisoire à remplacer
         'two_factor_secret'         => 'encrypted', // secret TOTP chiffré au repos
         'two_factor_recovery_codes' => 'array',     // codes de secours, hachés un à un
         'two_factor_confirmed_at'   => 'datetime',

@@ -47,10 +47,35 @@ class RolePermissionController extends Controller
             return back()->withErrors('Le rôle super_admin possède toujours toutes les permissions.');
         }
 
+        /* Les rôles des usagers sont portés par TOUS les étudiants. Y
+           cocher « acceder-backoffice » ouvrirait le back-office à des
+           milliers de comptes d'un seul clic : réservé au super-admin. */
+        if (in_array($role->name, ['etudiant', 'candidat'], true) && !$request->user()->isSuperAdmin()) {
+            return back()->withErrors(
+                'Les rôles des usagers (etudiant, candidat) ne sont modifiables que par un super-administrateur.');
+        }
+
         $avant = $role->permissions->pluck('name')->sort()->values();
 
         $perms = array_keys($request->input('perms', []));
         $valid = Permission::whereIn('name', $perms)->pluck('name')->toArray();
+
+        /* Nul ne met dans un rôle une permission qu'il n'a pas — sinon
+           il suffirait d'enrichir son propre rôle pour tout obtenir.
+           Seules les permissions AJOUTÉES sont contrôlées : on peut
+           retirer, ou laisser en place, ce qu'on ne détient pas. */
+        $interdites = \App\Support\Privileges::permissionsInterdites(
+            $request->user(), array_diff($valid, $avant->all()));
+        if ($interdites) {
+            \App\Models\AuditLog::record('role.escalade_refusee', null,
+                "Tentative d'ajout de permissions non détenues au rôle {$role->name} : " . implode(', ', $interdites),
+                ['role' => $role->name, 'refusees' => array_values($interdites)]);
+
+            return back()->withErrors(
+                "Vous ne pouvez pas accorder des permissions que vous n'avez pas vous-même : "
+                . implode(', ', $interdites) . '.');
+        }
+
         $role->syncPermissions($valid);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();

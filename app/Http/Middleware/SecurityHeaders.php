@@ -24,6 +24,10 @@ class SecurityHeaders
             'Referrer-Policy' => 'strict-origin-when-cross-origin',
             // Restreint les API navigateur sensibles
             'Permissions-Policy' => 'geolocation=(), microphone=(), camera=()',
+            // Une fenêtre ouverte depuis un autre site ne garde aucune prise sur celle-ci
+            'Cross-Origin-Opener-Policy' => 'same-origin',
+            // Flash / Acrobat : aucune politique inter-domaines
+            'X-Permitted-Cross-Domain-Policies' => 'none',
             // Content-Security-Policy : uniquement nos CDN déclarés.
             // 'unsafe-inline' est requis (scripts/styles inline des vues Blade),
             // mais la CSP bloque déjà tout script chargé depuis un domaine tiers.
@@ -49,6 +53,21 @@ class SecurityHeaders
                 $response->headers->set($k, $v);
             }
         }
+
+        /* Rien de ce que sert l'application ne doit être gardé en cache.
+
+           Deux raisons, toutes deux concrètes ici. Les étudiants se
+           connectent souvent depuis un poste partagé — cybercafé, salle
+           informatique : sans cet en-tête, le bouton « Précédent » du
+           navigateur réaffiche le dossier du précédent après sa
+           déconnexion. Et le site est derrière un proxy (Cloudflare) :
+           une page de suivi mise en cache par erreur serait servie à un
+           autre visiteur.
+
+           Les fichiers statiques (images, CSS) sont servis par Apache et
+           ne passent pas par ici : eux restent mis en cache normalement. */
+        $response->headers->set('Cache-Control', 'no-store, private');
+        $response->headers->set('Pragma', 'no-cache');
 
         return $response;
     }

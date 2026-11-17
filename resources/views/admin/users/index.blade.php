@@ -161,7 +161,9 @@
                         </div>
                         <div class="mt-3"><label class="form-label">Mot de passe <span id="u_pwd_req" class="text-danger">*</span>
                                 <small class="text-muted" id="u_pwd_hint" style="display:none;">(laisser vide = inchangé)</small></label>
-                            <input type="password" class="form-control" name="password" minlength="8"></div>
+                            <input type="password" class="form-control" name="password" minlength="10" autocomplete="new-password">
+                            <div class="form-text">Au moins 10 caractères, avec majuscules, minuscules et chiffres.
+                                Ce mot de passe est <strong>provisoire</strong> : le titulaire devra le changer à sa première connexion.</div></div>
                         <div class="mt-3"><label class="form-label">Signature <small class="text-muted">(image PNG/JPG, fond transparent conseillé)</small></label>
                             <input type="file" class="form-control" name="signature" accept=".png,.jpg,.jpeg"></div>
                         <div class="form-check form-switch mt-3" id="u_active_wrap" style="display:none;">

@@ -221,6 +221,8 @@
                     <div class="st-user-name">{{ auth()->user()->student->full_name ?? auth()->user()->numero_identifiant }}</div>
                     <div class="st-user-role"><code>{{ auth()->user()->numero_identifiant }}</code></div>
                 </div>
+                <a href="{{ route('compte.mot-de-passe') }}" class="st-logout" title="Changer mon mot de passe"
+                    style="text-decoration:none;"><i class="fas fa-key"></i></a>
                 <form method="POST" action="{{ route('logout') }}" data-no-loading>
                     @csrf
                     <button type="submit" class="st-logout" title="Se déconnecter"><i class="fas fa-arrow-right-from-bracket"></i></button>

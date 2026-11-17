@@ -33,6 +33,48 @@ class PublicCandidatureController extends Controller
         return app(\App\Services\Paiement\PaiementService::class);
     }
 
+    /* ── Essais sur la date de naissance ───────────────────────────
+     |  Modifier un dossier ne demande que sa référence et une date de
+     |  naissance. La référence circule (elle est imprimée, envoyée par
+     |  courriel) ; la date, elle, se devine : il n'y a que quelques
+     |  milliers de dates plausibles. La cadence par adresse IP posée
+     |  sur les routes ne suffit pas — il suffit d'en changer.
+     |  Ici, c'est le DOSSIER visé qui se ferme après quelques erreurs,
+     |  d'où que viennent les essais.
+     */
+    private const ESSAIS_PAR_DOSSIER = 6;
+    private const VERROU_SECONDES = 900;
+
+    private function cleEssais(string $reference): string
+    {
+        return 'candidature-acces:' . sha1(mb_strtoupper(trim($reference)));
+    }
+
+    /** Réponse de refus si ce dossier a subi trop d'essais, sinon null. */
+    private function tropDEssais(string $reference)
+    {
+        $cle = $this->cleEssais($reference);
+
+        if (!\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($cle, self::ESSAIS_PAR_DOSSIER)) {
+            return null;
+        }
+
+        $minutes = (int) ceil(\Illuminate\Support\Facades\RateLimiter::availableIn($cle) / 60);
+
+        return back()->withErrors(
+            "Trop de tentatives sur ce dossier. Réessayez dans {$minutes} minute(s).");
+    }
+
+    private function compterEchec(string $reference): void
+    {
+        \Illuminate\Support\Facades\RateLimiter::hit($this->cleEssais($reference), self::VERROU_SECONDES);
+    }
+
+    private function oublierEchecs(string $reference): void
+    {
+        \Illuminate\Support\Facades\RateLimiter::clear($this->cleEssais($reference));
+    }
+
     /**
      * Déclaration d'un versement par le candidat.
      * Authentification légère : référence + date de naissance, comme pour
@@ -53,10 +95,17 @@ class PublicCandidatureController extends Controller
             'section_id'     => 'parcours concerné',
         ]);
 
+        if ($refus = $this->tropDEssais($data['reference'])) {
+            return $refus;
+        }
+
         $cand = Candidature::where('reference', trim($data['reference']))->first();
         if (!$cand || $cand->date_naissance?->format('Y-m-d') !== $request->date('date_naissance')->format('Y-m-d')) {
+            $this->compterEchec($data['reference']);
+
             return back()->withErrors('Référence ou date de naissance incorrecte.');
         }
+        $this->oublierEchecs($data['reference']);
 
         $section = $cand->choix()->where('id', (int) $request->input('section_id'))->first();
         $paiement = $section ? $this->paiements()->pour($section) : null;
@@ -97,17 +146,20 @@ class PublicCandidatureController extends Controller
     /** Stocke une pièce sur le disque privé et l'enregistre. */
     private function rangerPiece(Candidature $cand, $file, int $rtId, ?\App\Models\CandidatureChoix $section): CandidatureFile
     {
-        // Nom de stockage assaini (le nom client brut ne va jamais dans un chemin)
-        $base = preg_replace('/[^A-Za-z0-9._-]+/', '_', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'document';
-        $ext  = preg_replace('/[^a-z0-9]/', '', strtolower($file->getClientOriginalExtension()));
-        $stored = time() . '_' . \Illuminate\Support\Str::random(6) . '_' . substr($base, 0, 90) . ($ext ? '.' . $ext : '');
+        // Le type est lu dans le CONTENU du fichier, pas dans son nom.
+        abort_if(\App\Support\FichierSur::type($file) === null, 422,
+            'Format non accepté : seuls les fichiers PDF, JPG et PNG sont admis.');
+
+        // Nom de stockage assaini, extension tirée du contenu (le nom
+        // client brut ne va jamais dans un chemin).
+        $stored = \App\Support\FichierSur::nomDeStockage($file);
         $path = $file->storeAs('candidatures/' . $cand->id, $stored, 'local');
 
         return CandidatureFile::create([
             'candidature_id'       => $cand->id,
             'candidature_choix_id' => $section?->id,
             'request_type_id'      => $rtId,
-            'original_filename'    => $file->getClientOriginalName(),
+            'original_filename'    => \App\Support\FichierSur::nomOriginal($file),
             'stored_filename'      => $stored,
             'file_path'            => $path,
             'mime_type'            => $file->getMimeType(),
@@ -168,10 +220,17 @@ class PublicCandidatureController extends Controller
             'files.*'        => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ], [], ['date_naissance' => 'date de naissance', 'parcours_id' => 'parcours']);
 
+        if ($refus = $this->tropDEssais($data['reference'])) {
+            return $refus;
+        }
+
         $cand = Candidature::with('choix', 'files')->where('reference', trim($data['reference']))->first();
         if (!$cand || $cand->date_naissance?->format('Y-m-d') !== $request->date('date_naissance')->format('Y-m-d')) {
+            $this->compterEchec($data['reference']);
+
             return back()->withErrors('Référence ou date de naissance incorrecte.');
         }
+        $this->oublierEchecs($data['reference']);
 
         $parcoursId = (int) $data['parcours_id'];
         if ($cand->choix->contains('parcours_id', $parcoursId)) {
@@ -461,11 +520,18 @@ class PublicCandidatureController extends Controller
             'files.*'        => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ], [], ['date_naissance' => 'date de naissance']);
 
+        if ($refus = $this->tropDEssais($data['reference'])) {
+            return $refus;
+        }
+
         $cand = Candidature::where('reference', trim($data['reference']))->first();
 
         if (!$cand || $cand->date_naissance?->format('Y-m-d') !== $request->date('date_naissance')->format('Y-m-d')) {
+            $this->compterEchec($data['reference']);
+
             return back()->withErrors('Référence ou date de naissance incorrecte.');
         }
+        $this->oublierEchecs($data['reference']);
         if ($cand->status !== 'en_correction') {
             return back()->withErrors('Ce dossier n\'est pas ouvert à la complétion actuellement.');
         }

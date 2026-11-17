@@ -180,6 +180,11 @@ class TwoFactorController extends Controller
         abort_if($user->isSuperAdmin() && !$request->user()->isSuperAdmin(), 403,
             'Seul un super-admin peut réinitialiser la 2FA d\'un super-admin.');
 
+        // Retirer la 2FA d'un compte plus puissant que le sien, c'est lui
+        // ôter sa seconde serrure : même règle que pour son mot de passe.
+        abort_unless(\App\Support\Privileges::peutAdministrer($request->user(), $user), 403,
+            "Ce compte détient des droits que vous n'avez pas : vous ne pouvez pas réinitialiser sa 2FA.");
+
         $user->two_factor_secret = null;
         $user->two_factor_confirmed_at = null;
         $user->two_factor_recovery_codes = null;

@@ -100,6 +100,16 @@ class StudentRequestController extends Controller
         }
 
         $type = RequestType::findOrFail($request->request_type_id);
+
+        /* La pièce doit être de celles que CE dossier attend. Sans ce
+           contrôle, un identifiant de pièce pris dans une autre procédure
+           ou un autre niveau était accepté : le fichier se rangeait dans
+           le dossier sous une étiquette qui n'a rien à y faire. */
+        if (!$sr->typesAAfficher()->contains('id', $type->id)) {
+            return $this->ajaxOrBack($request, false,
+                "Cette pièce n'est pas attendue pour ce dossier.", $tab);
+        }
+
         $existing = $sr->files()->where('request_type_id', $type->id)->first();
 
         if ($existing?->is_locked) {
@@ -112,17 +122,22 @@ class StudentRequestController extends Controller
         }
 
         $file = $request->file('file');
-        // Nom de stockage assaini : jamais le nom client brut dans un chemin.
-        // Le suffixe aléatoire évite qu'un même nom déposé dans la même
-        // seconde n'écrase la pièce précédente.
-        $storedName = time() . '_' . \Illuminate\Support\Str::random(6) . '_'
-            . $this->safeFilename($file->getClientOriginalName());
+
+        // Le type est lu dans le CONTENU du fichier, pas dans son nom.
+        if (\App\Support\FichierSur::type($file) === null) {
+            return $this->ajaxOrBack($request, false,
+                'Format non accepté : seuls les fichiers PDF, JPG et PNG sont admis.', $tab);
+        }
+
+        // Nom de stockage assaini, extension tirée du contenu : jamais le
+        // nom client brut dans un chemin, jamais son extension sur parole.
+        $storedName = \App\Support\FichierSur::nomDeStockage($file);
         $path = $file->storeAs('requests/' . $sr->id, $storedName, 'local');
 
         RequestFile::create([
             'student_request_id' => $sr->id,
             'request_type_id' => $type->id,
-            'original_filename' => $file->getClientOriginalName(),
+            'original_filename' => \App\Support\FichierSur::nomOriginal($file),
             'stored_filename' => $storedName,
             'file_path' => $path,
             'mime_type' => $file->getMimeType(),

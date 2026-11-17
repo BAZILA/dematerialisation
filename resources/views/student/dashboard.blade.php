@@ -1522,8 +1522,10 @@
                 const el = document.createElement('div');
                 el.className = 'toast-pill toast-' + (type || 'info');
                 el.innerHTML = '<div class="toast-dot"></div><div class="toast-text"><div class="toast-title">' +
-                    (type === 'danger' ? 'Erreur' : 'Succès') + '</div><div class="toast-msg">' + msg + '</div></div>' +
+                    (type === 'danger' ? 'Erreur' : 'Succès') + '</div><div class="toast-msg"></div></div>' +
                     '<button class="toast-x" onclick="this.closest(\'.toast-pill\').remove()"><i class="fas fa-xmark"></i></button>';
+                // Le message vient du serveur : posé en texte, il ne peut pas injecter de balise.
+                el.querySelector('.toast-msg').textContent = msg;
                 shelf.appendChild(el);
                 setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(10px)'; setTimeout(() => el.remove(), 360); }, 4000);
             }

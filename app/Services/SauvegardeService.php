@@ -188,7 +188,20 @@ class SauvegardeService
             );
         }
 
-        $tmp = tempnam(sys_get_temp_dir(), 'dump_') . '.sql';
+        /* Le dump contient toute la base — identités, mots de passe
+           hachés. Il transitait par le dossier temporaire du SYSTÈME,
+           partagé par tous les comptes de la machine, sous des droits
+           laissés au hasard. Il est désormais écrit dans un dossier privé
+           de l'application, lisible par elle seule, puis effacé. */
+        $prive = storage_path('app/tmp');
+        if (!is_dir($prive)) {
+            mkdir($prive, 0700, true);
+        }
+        @chmod($prive, 0700);
+
+        $tmp = $prive . DIRECTORY_SEPARATOR . 'dump_' . bin2hex(random_bytes(8)) . '.sql';
+        touch($tmp);
+        @chmod($tmp, 0600);
 
         $args = [
             $bin,

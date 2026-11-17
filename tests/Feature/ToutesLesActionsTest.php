@@ -162,7 +162,7 @@ class ToutesLesActionsTest extends TestCase
         $this->actingAs($this->admin())->post('/admin/utilisateurs', [
             'prenom' => 'Ama', 'nom' => 'KOSSI',
             'numero_identifiant' => 'DAAS20', 'email' => 'ama.kossi@test.local',
-            'roles' => ['agent_candidature'], 'password' => 'secret1234',
+            'roles' => ['agent_candidature'], 'password' => 'Secret12345',
         ]);
         $agent = User::where('numero_identifiant', 'DAAS20')->first();
         $this->assertNotNull($agent, "La création d'utilisateur ne passe pas.");
@@ -204,7 +204,7 @@ class ToutesLesActionsTest extends TestCase
         $this->actingAs($this->admin())->post('/admin/utilisateurs', [
             'prenom' => 'C', 'nom' => 'D',
             'numero_identifiant' => 'DAAS21', 'email' => 'c@test.local',
-            'roles' => ['agent_candidature'], 'password' => 'secret1234',
+            'roles' => ['agent_candidature'], 'password' => 'Secret12345',
         ])->assertSessionHasErrors();
 
         $this->assertSame(1, User::where('numero_identifiant', 'DAAS21')->count());
@@ -324,7 +324,7 @@ class ToutesLesActionsTest extends TestCase
         $this->actingAs($agent)->post('/admin/utilisateurs', [
             'prenom' => 'X', 'nom' => 'Y',
             'numero_identifiant' => 'DAAS99', 'email' => 'x@test.local',
-            'roles' => ['agent_candidature'], 'password' => 'secret1234',
+            'roles' => ['agent_candidature'], 'password' => 'Secret12345',
         ])->assertForbidden();
 
         $this->assertNull(User::where('numero_identifiant', 'DAAS99')->first());

@@ -266,6 +266,11 @@ class AdminRequestController extends Controller
     public function leverDerogation(Request $request, \App\Models\Derogation $derogation)
     {
         $sr = $derogation->studentRequest;
+        abort_unless($sr, 404);
+        // La procédure d'abord : le périmètre seul laissait un agent d'un
+        // autre service lever une dérogation sur un dépôt.
+        abort_unless($request->user()->canTreatCategory($sr->category), 403,
+            "Vous n'êtes pas autorisé à traiter cette catégorie.");
         abort_unless($request->user()->coversRequest($sr), 403,
             "Cette demande est hors de votre périmètre d'affectation.");
 
@@ -296,10 +301,8 @@ class AdminRequestController extends Controller
         $path = Storage::path($file->file_path);
         abort_unless(file_exists($path), 404, 'Fichier introuvable.');
 
-        return response()->file($path, [
-            'Content-Type' => $file->mime_type,
-            'Content-Disposition' => 'inline; filename="' . $file->original_filename . '"',
-        ]);
+        return response()->file($path,
+            \App\Support\FichierSur::entetesApercu($file->mime_type, $file->original_filename));
     }
 
     public function downloadFile(Request $request, $fileId)
@@ -550,7 +553,15 @@ class AdminRequestController extends Controller
         abort_unless($request->user()->coversRequest($studentRequest), 403,
             "Cette demande est hors de votre périmètre d'affectation.");
 
-        $request->validate(['rejection_message' => 'required|string|min:10']);
+        $request->validate(['rejection_message' => 'required|string|min:10|max:1000']);
+
+        /* Seul un dossier en attente de décision se rejette. Sans ce
+           garde, la même requête rejetait un dossier déjà VALIDÉ — pièces
+           tamponnées comprises — ou un brouillon jamais soumis. Revenir
+           sur une validation passe par « rouvrir », qui a sa permission. */
+        if (!in_array($studentRequest->status, ['soumis', 'en_correction'], true)) {
+            return back()->withErrors('Cette demande ne peut pas être rejetée dans son état actuel.');
+        }
 
         $studentRequest->update([
             'status' => 'rejeté',

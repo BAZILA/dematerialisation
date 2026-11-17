@@ -112,18 +112,34 @@
             overflow: hidden;
         }
 
+        /* Le logo est posé à même le décor : plus de pavé blanc. Ses
+           fichiers sont déjà transparents ; un liseré clair très léger le
+           détache du fond sombre sans l'encadrer. */
         .sb-logo {
             width: 40px; height: 40px;
-            background: #fff;
-            border-radius: 11px;
+            background: none;
             display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; overflow: hidden; padding: 3px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+            flex-shrink: 0;
+            filter: drop-shadow(0 0 1px rgba(255, 255, 255, .45)) drop-shadow(0 3px 8px rgba(0, 0, 0, .45));
         }
         .sb-logo img { width: 100%; height: 100%; object-fit: contain; }
         .sb-brand-link { display: flex; align-items: center; text-decoration: none; overflow: hidden; }
-        .sb-logo-full { display: flex; align-items: center; background: #fff; border-radius: 10px; padding: 5px 9px; height: 44px; box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
-        .sb-logo-full img { height: 100%; width: auto; max-width: 178px; object-fit: contain; }
+        .sb-logo-full { display: flex; align-items: center; gap: 11px; height: 44px; min-width: 0; }
+        .sb-logo-full img {
+            height: 40px; width: 40px; object-fit: contain; flex-shrink: 0;
+            filter: drop-shadow(0 0 1px rgba(255, 255, 255, .45)) drop-shadow(0 3px 8px rgba(0, 0, 0, .45));
+        }
+        /* Le nom est écrit en clair sur le fond sombre : celui du logo
+           d'origine, bleu foncé, y serait illisible sans pavé blanc. */
+        .sb-brand-text { display: flex; flex-direction: column; line-height: 1.12; min-width: 0; }
+        .sb-brand-text strong {
+            font-family: var(--font-head); font-size: 13.5px; font-weight: 800;
+            color: #fff; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap;
+        }
+        .sb-brand-text small {
+            font-size: 10.5px; font-weight: 600; color: var(--sb-text);
+            letter-spacing: .09em; text-transform: uppercase; white-space: nowrap;
+        }
         .sb-logo-mark { display: none; }
         body.sb-collapsed .sb-logo-full { display: none; }
         body.sb-collapsed .sb-logo-mark { display: flex; }
@@ -482,7 +498,10 @@
                 <a href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('student.dashboard') }}"
                     class="sb-brand-link" title="Accueil">
                     <span class="sb-logo sb-logo-mark"><img src="{{ asset('assets/uk/logo-bg.png') }}" alt="UK"></span>
-                    <span class="sb-logo-full"><img src="{{ asset('assets/uk/logo-sigle-bg.png') }}" alt="Université de Kara"></span>
+                    <span class="sb-logo-full">
+                        <img src="{{ asset('assets/uk/logo-bg.png') }}" alt="">
+                        <span class="sb-brand-text"><strong>Université de Kara</strong><small>Dématérialisation</small></span>
+                    </span>
                 </a>
             </div>
 
@@ -675,6 +694,9 @@
                     <div class="sb-section">Mon compte</div>
                     <a href="{{ route('admin.securite') }}" class="sb-link {{ request()->routeIs('admin.securite') ? 'active' : '' }}" title="Sécurité (2FA)">
                         <span class="sb-icon"><i class="fas fa-shield-halved"></i></span><span class="sb-label">Sécurité (2FA)</span>
+                    </a>
+                    <a href="{{ route('compte.mot-de-passe') }}" class="sb-link {{ request()->routeIs('compte.mot-de-passe') ? 'active' : '' }}" title="Mot de passe">
+                        <span class="sb-icon"><i class="fas fa-key"></i></span><span class="sb-label">Mot de passe</span>
                     </a>
                 @else
                     <div class="sb-section">Mon espace</div>

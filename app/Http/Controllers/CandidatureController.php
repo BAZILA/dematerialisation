@@ -568,10 +568,8 @@ class CandidatureController extends Controller
         $path = Storage::path($f->file_path);
         abort_unless(file_exists($path), 404, 'Fichier introuvable.');
 
-        return response()->file($path, [
-            'Content-Type'        => $f->mime_type,
-            'Content-Disposition' => 'inline; filename="' . $f->original_filename . '"',
-        ]);
+        return response()->file($path,
+            \App\Support\FichierSur::entetesApercu($f->mime_type, $f->original_filename));
     }
 
     public function downloadFile($file)

@@ -52,7 +52,10 @@ Route::prefix('candidature')->name('candidature.')->group(function () {
     Route::get('/', [PublicCandidatureController::class, 'create'])->name('create');
     // Anti-spam : plafonner les soumissions et le suivi anonymes
     Route::post('/', [PublicCandidatureController::class, 'store'])->middleware('throttle:6,1')->name('store');
-    Route::get('/confirmation/{reference}', [PublicCandidatureController::class, 'confirmation'])->name('confirmation');
+    // Plafonné : sans cadence, cette page permettait d'essayer des
+    // références à la chaîne — elle affiche l'adresse du candidat.
+    Route::get('/confirmation/{reference}', [PublicCandidatureController::class, 'confirmation'])
+        ->middleware('throttle:20,1')->name('confirmation');
     Route::get('/suivi', [PublicCandidatureController::class, 'suiviForm'])->name('suivi');
     Route::post('/suivi', [PublicCandidatureController::class, 'suivi'])->middleware('throttle:15,1')->name('suivi.post');
     // Complétion du dossier (statut « À compléter ») : référence + date de naissance
@@ -73,6 +76,14 @@ Route::middleware('auth')->group(function () {
             ? redirect()->route('admin.dashboard')
             : redirect()->route('student.dashboard');
     })->name('dashboard');
+
+    /* ─── Mon compte : chacun change son propre mot de passe ── */
+    Route::middleware(\App\Http\Middleware\EnsureTwoFactor::class)->group(function () {
+        Route::get('/compte/mot-de-passe', [\App\Http\Controllers\CompteController::class, 'motDePasse'])
+            ->name('compte.mot-de-passe');
+        Route::post('/compte/mot-de-passe', [\App\Http\Controllers\CompteController::class, 'changerMotDePasse'])
+            ->middleware('throttle:6,1')->name('compte.mot-de-passe.changer');
+    });
 
     /* ─── 2FA : challenge après login (hors du garde 2FA lui-même) ── */
     Route::get('/2fa/challenge', [\App\Http\Controllers\TwoFactorController::class, 'challenge'])->name('2fa.challenge');
