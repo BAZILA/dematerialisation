@@ -124,21 +124,13 @@
         }
         .sb-logo img { width: 100%; height: 100%; object-fit: contain; }
         .sb-brand-link { display: flex; align-items: center; text-decoration: none; overflow: hidden; }
-        .sb-logo-full { display: flex; align-items: center; gap: 11px; height: 44px; min-width: 0; }
+        /* Logo complet, version « claire » : même emblème, nom en blanc.
+           Celui d'origine, au nom bleu foncé, serait illisible sur ce fond
+           sans le pavé blanc qu'on vient de retirer. */
+        .sb-logo-full { display: flex; align-items: center; height: 46px; min-width: 0; }
         .sb-logo-full img {
-            height: 40px; width: 40px; object-fit: contain; flex-shrink: 0;
-            filter: drop-shadow(0 0 1px rgba(255, 255, 255, .45)) drop-shadow(0 3px 8px rgba(0, 0, 0, .45));
-        }
-        /* Le nom est écrit en clair sur le fond sombre : celui du logo
-           d'origine, bleu foncé, y serait illisible sans pavé blanc. */
-        .sb-brand-text { display: flex; flex-direction: column; line-height: 1.12; min-width: 0; }
-        .sb-brand-text strong {
-            font-family: var(--font-head); font-size: 13.5px; font-weight: 800;
-            color: #fff; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap;
-        }
-        .sb-brand-text small {
-            font-size: 10.5px; font-weight: 600; color: var(--sb-text);
-            letter-spacing: .09em; text-transform: uppercase; white-space: nowrap;
+            height: 100%; width: auto; max-width: 190px; object-fit: contain;
+            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .35));
         }
         .sb-logo-mark { display: none; }
         body.sb-collapsed .sb-logo-full { display: none; }
@@ -498,10 +490,7 @@
                 <a href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('student.dashboard') }}"
                     class="sb-brand-link" title="Accueil">
                     <span class="sb-logo sb-logo-mark"><img src="{{ asset('assets/uk/logo-bg.png') }}" alt="UK"></span>
-                    <span class="sb-logo-full">
-                        <img src="{{ asset('assets/uk/logo-bg.png') }}" alt="">
-                        <span class="sb-brand-text"><strong>Université de Kara</strong><small>Dématérialisation</small></span>
-                    </span>
+                    <span class="sb-logo-full"><img src="{{ asset('assets/uk/logo-sigle-clair.png') }}" alt="Université de Kara"></span>
                 </a>
             </div>
 

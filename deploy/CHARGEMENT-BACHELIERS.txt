@@ -1,0 +1,217 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Charger le fichier national des bacheliers
+  17 novembre 2026
+=======================================================================
+
+  Le fichier : bacheliers.csv — 173 890 lignes, toutes les promotions
+  de 1975 a 2026 (dont 61 697 pour 2026).
+
+  POURQUOI L'ECRAN D'IMPORT NE PASSAIT PAS
+    - Il lit tout le fichier en memoire puis interroge la base 3 a 4
+      fois PAR LIGNE : plus d'un demi-million de requetes dans une page
+      web limitee a deux minutes.
+    - Il attendait « sexe » et « serie_bac » ; le fichier porte
+      « code_sexe » et « code_serie » : chaque ligne etait rejetee.
+    - Il reconnaissait une fiche a son n° de table seul. Or ce numero est
+      reattribue a chaque session du bac : les promotions se seraient
+      ecrasees entre elles.
+
+  LA SOLUTION : une commande, en ligne de commande, sans limite de temps.
+  Elle lit le fichier ligne a ligne, reconnait les colonnes par leur NOM
+  (l'ordre n'importe pas), comprend le Windows-1252 et les « NULL »
+  ecrits en toutes lettres, et insere par paquets de 500.
+
+  Essai sur le vrai fichier, base jetable sur l'ordinateur :
+    analyse a blanc   :  7 s
+    chargement        : 32 s pour 173 876 fiches
+    relance           :  6 s, 0 fiche ajoutee (aucun doublon)
+    accents           : intacts, aucun caractere casse
+    connexion simulee : fiche retrouvee en 2,6 ms (index sur la date)
+
+
+=======================================================================
+  1. LE NUMERO DE SUIVI : c'est la colonne « id »
+=======================================================================
+
+  Ce n'est pas une supposition — l'erreur a deja ete faite une fois sur
+  les anciens etudiants. C'est verifie :
+
+    760 vrais numeros de suivi d'anciens etudiants (base.csv, « vrai »)
+    se retrouvent parmi les « id » du fichier des bacheliers.
+    Sur ces 760 paires : 760 meme nom ET meme date de naissance.
+
+    Temoin : avec les anciens numeros FAUX (colonne « test »), 336
+    paires se forment — et AUCUNE ne designe la meme personne.
+
+  Chacun garde donc son numero du bac a l'universite : l'« id » du
+  fichier EST le numero de suivi. D'ou l'option --id-est-le-suivi
+  ci-dessous. Sans elle, le numero de suivi reste vide.
+
+
+=======================================================================
+  2. CE QUE LE FICHIER CONTIENT DE DOUTEUX
+=======================================================================
+
+  Ecartees (14) — ces personnes ne pourront pas se connecter :
+     12  prenom vide
+      2  lieu de naissance vide
+     -> a ajouter a la main (Reference > Identites) si elles se
+        presentent. La liste est dans le fichier des rejets.
+
+  Chargees, mais signalees (128) :
+     86  meme nom, prenom, date, lieu et sexe qu'une autre ligne
+         (le plus souvent : bac passe deux fois). La connexion retient
+         la fiche la plus recente.
+     27  date de naissance invraisemblable : la personne ne pourra pas
+         prouver son identite tant qu'elle n'est pas corrigee.
+     15  annee de bac invraisemblable (« 20219 », « 80740 »…) :
+         l'annee est laissee vide.
+
+
+=======================================================================
+  3. MISE A JOUR DU CODE — par Git
+=======================================================================
+
+  Suivez MISE-A-JOUR-PAR-GIT.txt, partie B. Trois points propres a
+  cette mise a jour :
+
+  a) Si la mise a jour du 16 novembre (revue de securite) n'est PAS
+     encore en ligne, faites d'abord sa partie C : TRUSTED_PROXIES et
+     APP_URL dans le .env. Les deux mises a jour partent ensemble.
+
+  b) Migrations attendues (une seule si la revue est deja en ligne) :
+       2026_11_16_090000_changement_de_mot_de_passe_impose
+       2026_11_17_090000_bacheliers_import_en_masse
+     La seconde ajoute trois colonnes et des index a « bacheliers ».
+     Elle n'efface rien.
+
+  c) /!\ CETTE FOIS, public/ CHANGE : nouveau logo
+     (public/assets/uk/logo-sigle-clair.png). L'etape 9 de la routine
+     est OBLIGATOIRE, sinon le menu affichera une image cassee :
+
+rsync -a --exclude index.php --exclude .user.ini --exclude .htaccess $APP/public/ $WEB/
+ls -l $WEB/assets/uk/logo-sigle-clair.png
+
+
+=======================================================================
+  4. LE CHARGEMENT — sur le VPS, APRES la mise a jour du code
+=======================================================================
+
+  Variables (a chaque session SSH) :
+
+APP=/home/alpha/apps/demat
+PHP=/usr/bin/php
+ART="$PHP $APP/artisan"
+cd $APP
+
+  a) Deposer le fichier HORS de la racine web
+
+mkdir -p /home/alpha/import && chmod 700 /home/alpha/import
+     # Puis, avec le gestionnaire de fichiers CWP, deposer
+     # bacheliers.csv dans /home/alpha/import/
+     # JAMAIS dans dematerialisation.univkara.tg/ : il serait
+     # telechargeable par n'importe qui.
+
+ls -lh /home/alpha/import/bacheliers.csv
+     # environ 17,5 Mo
+
+  b) Sauvegarde
+
+$ART uk:sauvegarder
+
+  c) ANALYSE A BLANC — n'ecrit rien
+
+$ART uk:importer-bacheliers /home/alpha/import/bacheliers.csv --id-est-le-suivi
+
+     Attendu :
+       Lues dans le fichier            173890
+       Rejetees                            14
+       Deja en base                         0
+       Rattachees a une fiche existante     quelques-unes, ou 0
+       A charger                       ~173876
+     « Rattachees » : des bacheliers saisis a la main avant ce jour ;
+     ils recoivent le n° de suivi qui leur manquait, sans rien perdre
+     (compte, telephone…).
+
+     Verifiez la ligne « Colonnes » : id -> id_source, code_sexe -> sexe,
+     code_serie -> serie_bac. Et « N° de suivi : repris de la colonne id ».
+
+  d) CHARGEMENT
+
+$ART uk:importer-bacheliers /home/alpha/import/bacheliers.csv --id-est-le-suivi --importer
+
+     Une a trois minutes. Ne fermez pas la fenetre SSH.
+     S'il est interrompu, relancez la MEME commande : il reprend la ou
+     il en etait, sans doublon (ce qui est deja en base est saute).
+
+     POUR 2026 SEULEMENT, ajoutez : --annee=2026
+     (on peut charger le reste plus tard, avec la meme commande sans
+     --annee : ce qui est deja la est saute).
+
+  e) Controles
+
+$ART tinker --execute="echo 'bacheliers : ', \App\Models\Bachelier::count(), PHP_EOL, 'avec n° de suivi : ', \App\Models\Bachelier::whereNotNull('numero_suivi')->count(), PHP_EOL, 'promotion 2026 : ', \App\Models\Bachelier::where('annee_bac','2026')->count(), PHP_EOL;"
+
+     Une connexion avec un nom ACCENTUE (le seul point que l'essai sur
+     l'ordinateur n'a pas pu verifier : sa base d'essai ignore les
+     majuscules accentuees, MariaDB non) :
+
+$ART tinker --execute='$b = \App\Models\Bachelier::where("prenom", "like", "%é%")->first(); echo \App\Models\Bachelier::parIdentite(mb_strtoupper($b->nom), mb_strtoupper($b->prenom), $b->date_naissance->format("Y-m-d"), mb_strtoupper($b->lieu_naissance), $b->sexe)->exists() ? "connexion accentuee : OK" : "connexion accentuee : ECHEC", PHP_EOL;'
+
+     Puis dans le navigateur : Reference > Identites doit s'afficher en
+     quelques secondes au plus.
+
+  f) Lire puis SUPPRIMER le fichier et les deux rapports
+
+ls -l /home/alpha/import/
+     #   bacheliers.rejets.csv      les 14 lignes ecartees
+     #   bacheliers.a-verifier.csv  les 128 signalements
+     # Telechargez les rapports si besoin, puis :
+
+rm -rf /home/alpha/import
+
+     Le fichier contient l'identite, le telephone et l'adresse de
+     173 890 personnes : il n'a rien a faire sur le serveur une fois
+     charge.
+
+
+=======================================================================
+  5. CE QUI CHANGE AILLEURS
+=======================================================================
+
+  - LISTES PDF des demandes (Demandes > Exporter > PDF) : la premiere
+    colonne est desormais le N° de suivi, pour valider les dossiers
+    dans l'autre systeme.
+
+  - EXPORT EXCEL des bacheliers (Reference > Identites) : refuse
+    au-dela de 20 000 fiches, avec un message. Le generer dans une page
+    web epuiserait la memoire et l'ecran resterait blanc.
+
+  - IMPORT PAR L'ECRAN : toujours la pour les petits fichiers. Il
+    comprend maintenant aussi le format de l'extraction (code_sexe,
+    code_serie, NULL), et ne confond plus deux promotions au meme
+    numero de table.
+
+  - SAUVEGARDES : la base passe d'environ 1 Mo a plusieurs dizaines de
+    Mo. Avec 14 jours de retention, prevoir quelques centaines de Mo —
+    sans consequence avec l'espace du VPS.
+
+  - LOGO du menu : version complete, nom en blanc, sans pave blanc.
+
+
+=======================================================================
+  6. RETOUR ARRIERE
+=======================================================================
+
+  Retirer ce qu'a charge la commande. Sont epargnees : toute fiche qui
+  a deja un compte, et les fiches saisies a la main jamais rattachees
+  (elles n'ont pas d'id_source). /!\ Une fiche saisie a la main puis
+  RATTACHEE au fichier, sans compte, partirait aussi : relisez le
+  nombre « Rattachees » du chargement avant de lancer ceci.
+
+$ART tinker --execute="echo \App\Models\Bachelier::whereNotNull('id_source')->where('is_registered', false)->whereDoesntHave('student')->delete(), ' fiches retirees', PHP_EOL;"
+
+  En dernier recours, la sauvegarde de l'etape 4b.
+
+=======================================================================

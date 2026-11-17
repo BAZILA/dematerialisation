@@ -295,6 +295,17 @@ class IdentityController extends Controller
 
     public function exportBacheliers()
     {
+        /* Le fichier national fait plus de 170 000 lignes : le convertir en
+           Excel dans une page web épuiserait la mémoire et le temps
+           alloués, et l'écran resterait blanc. Au-delà d'un seuil, on le
+           dit au lieu d'échouer en silence. */
+        $total = Bachelier::count();
+        if ($total > 20000) {
+            return back()->withErrors(
+                "Le référentiel compte {$total} bacheliers : trop pour un export depuis cet écran. "
+                . "Demandez une extraction en ligne de commande à l'administrateur technique.");
+        }
+
         return Excel::download(new BacheliersExport(), 'bacheliers_' . date('Ymd_His') . '.xlsx');
     }
 

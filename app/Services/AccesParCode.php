@@ -183,12 +183,8 @@ class AccesParCode
             return null;
         }
 
-        return Bachelier::whereRaw('LOWER(nom) = ?', [mb_strtolower($i['nom'])])
-            ->whereRaw('LOWER(prenom) = ?', [mb_strtolower($i['prenom'])])
-            ->whereDate('date_naissance', $i['date_naissance'])
-            ->whereRaw('LOWER(lieu_naissance) = ?', [mb_strtolower($i['lieu_naissance'])])
-            ->where('sexe', $i['sexe'])
-            ->first();
+        return Bachelier::parIdentite($i['nom'], $i['prenom'], $i['date_naissance'],
+            $i['lieu_naissance'], $i['sexe'])->first();
     }
 
     private function chercherAncien(array $i): ?AncienEtudiant

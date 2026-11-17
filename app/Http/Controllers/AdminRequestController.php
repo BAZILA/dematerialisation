@@ -201,9 +201,14 @@ class AdminRequestController extends Controller
         ];
 
         if ($request->input('format') === 'pdf') {
-            $entetes = ['Étudiant', 'Identifiant', 'Catégorie', 'Parcours', 'Faculté',
+            /* Le n° de suivi ouvre la ligne : cette liste sert à valider
+               les dossiers dans le logiciel d'inscription, où l'étudiant
+               n'est retrouvé que par ce numéro — pas par l'identifiant de
+               connexion, qui n'existe qu'ici. */
+            $entetes = ['N° suivi', 'Étudiant', 'Identifiant', 'Catégorie', 'Parcours', 'Faculté',
                         'Année', 'Niveau', 'Statut', 'Soumis le'];
             $lignes = $rows->map(fn ($r) => [
+                $r->student?->numero_suivi ?: '—',
                 $r->student?->full_name ?? '—',
                 $r->student?->user?->numero_identifiant ?? '—',
                 $cats[$r->category] ?? $r->category,
@@ -220,7 +225,7 @@ class AdminRequestController extends Controller
                 'Demandes — ' . ($cats[$category] ?? 'Toutes catégories'),
                 $entetes, $lignes, $request->user()->staff_name,
                 'Année : ' . (\App\Models\AnneeAcademique::context()?->libelle ?? '—'),
-                [1.4, 1, 1, 1.3, 1, .8, 1, .8, .8]
+                [.75, 1.4, 1, 1, 1.3, .9, .8, 1, .8, .8]
             );
 
             $nom = \App\Support\NomExport::build('demandes-' . $category, $contexte, 'pdf');

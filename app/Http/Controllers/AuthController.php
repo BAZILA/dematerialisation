@@ -130,11 +130,8 @@ class AuthController extends Controller
                 'lieu_naissance' => 'required|string|max:150',
             ]);
 
-            $record = Bachelier::whereRaw('LOWER(nom) = ?', [mb_strtolower($request->nom)])
-                ->whereRaw('LOWER(prenom) = ?', [mb_strtolower($request->prenom)])
-                ->whereDate('date_naissance', $request->date_naissance)
-                ->whereRaw('LOWER(lieu_naissance) = ?', [mb_strtolower($request->lieu_naissance)])
-                ->where('sexe', $request->sexe)
+            $record = Bachelier::parIdentite($request->nom, $request->prenom, $request->date_naissance,
+                    $request->lieu_naissance, $request->sexe)
                 ->where('is_registered', false)
                 ->first();
 

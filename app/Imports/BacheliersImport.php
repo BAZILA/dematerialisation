@@ -21,7 +21,9 @@ class BacheliersImport implements ToCollection, WithHeadingRow
 
             $nom    = trim((string) ($row['nom'] ?? ''));
             $prenom = trim((string) ($row['prenom'] ?? ''));
-            $sexe   = strtoupper(trim((string) ($row['sexe'] ?? '')));
+            // Les deux formats : celui du modèle, et celui de l'extraction
+            // de l'autre système (« code_sexe », « code_serie »…).
+            $sexe   = strtoupper(trim((string) ($row['sexe'] ?? $row['code_sexe'] ?? '')));
             $date   = $this->parseDate($row['date_naissance'] ?? null);
             $lieu   = trim((string) ($row['lieu_naissance'] ?? ''));
 
@@ -35,20 +37,28 @@ class BacheliersImport implements ToCollection, WithHeadingRow
             }
 
             $data = [
+                'id_source'      => $this->s($row['id_source'] ?? $row['id'] ?? null),
                 'numero_suivi'   => $this->s($row['numero_suivi'] ?? $row['suivi'] ?? null),
                 'nom'            => $nom,
                 'prenom'         => $prenom,
                 'sexe'           => $sexe,
                 'date_naissance' => $date,
                 'lieu_naissance' => $lieu,
-                'serie_bac'      => $this->s($row['serie_bac'] ?? null),
+                'serie_bac'      => $this->s($row['serie_bac'] ?? $row['code_serie'] ?? null),
+                'mention_bac'    => $this->s($row['mention_bac'] ?? $row['code_mention_bac'] ?? null),
                 'annee_bac'      => $this->s($row['annee_bac'] ?? $row['annee'] ?? null),
                 'numero_releve'  => $this->s($row['numero_releve'] ?? null),
                 'numero_table'   => $this->s($row['numero_table'] ?? $row['n_table'] ?? null),
                 'academie'       => $this->s($row['academie'] ?? null),
                 'telephone'      => $this->s($row['telephone'] ?? $row['tel'] ?? null),
                 'email'          => $this->s($row['email'] ?? null),
+                'adresse'        => $this->s($row['adresse'] ?? null),
             ];
+            foreach ($data as $k => $v) {
+                if ($v !== null && strtoupper($v) === 'NULL') {
+                    $data[$k] = null;   // « NULL » écrit en toutes lettres par l'extraction
+                }
+            }
 
             /* Dédoublonnage.
                On interroge TOUS les identifiants présents, pas seulement le
@@ -56,13 +66,23 @@ class BacheliersImport implements ToCollection, WithHeadingRow
                une fiche déjà importée par n° de relevé aurait sinon créé un
                doublon, la recherche portant sur une clé encore vide en base. */
             $b = null;
-            foreach (['numero_suivi', 'numero_releve', 'numero_table'] as $k) {
+            foreach (['id_source', 'numero_suivi', 'numero_releve'] as $k) {
                 if ($data[$k]) {
                     $b = Bachelier::where($k, $data[$k])->first();
                     if ($b) {
                         break;
                     }
                 }
+            }
+
+            /* Le n° de TABLE n'identifie personne à lui seul : il est
+               réattribué à chaque session du bac. Depuis que le référentiel
+               porte toutes les promotions, le chercher seul retrouvait le
+               bachelier d'une autre année — et l'écrasait. Il ne sert
+               qu'accompagné de l'année. */
+            if (!$b && $data['numero_table'] && $data['annee_bac']) {
+                $b = Bachelier::where('numero_table', $data['numero_table'])
+                    ->where('annee_bac', $data['annee_bac'])->first();
             }
 
             /* Aucun identifiant sur la ligne : sans repli, réimporter le même
