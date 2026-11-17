@@ -13,7 +13,7 @@ return new class extends Migration {
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['admin', 'student'])->default('student');
+            $table->string('role')->default('etudiant'); // rôle principal ; Spatie fait foi pour les permissions
             $table->enum('type_etudiant', ['nouveau', 'ancien'])->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamp('last_login')->nullable();

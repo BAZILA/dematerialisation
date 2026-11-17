@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────
+#  Redirection vers le dossier /public de Laravel
+#  Permet de décompresser le projet complet directement dans
+#  public_html (ou le dossier d'un sous-domaine) SANS avoir à
+#  changer le "document root". Le contenu sensible (.env, app/,
+#  vendor/, storage/...) reste inaccessible depuis le web.
+# ─────────────────────────────────────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Empêche l'accès direct aux fichiers/dossiers sensibles
+    RewriteRule ^(\.env|composer\.(json|lock)|package\.json|artisan|\.git) - [F,L]
+    RewriteRule ^(app|bootstrap|config|database|docs|resources|routes|storage|tests|vendor)(/|$) - [F,L]
+
+    # Tout le reste passe par le dossier public/
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Sécurité : bloque l'accès aux fichiers cachés (.env, .git, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

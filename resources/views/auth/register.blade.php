@@ -12,7 +12,7 @@
                 <div class="text-center mb-4">
                     <div class="icon-box mx-auto mb-3"
                         style="width:72px;height:72px;font-size:1.8rem;
-                            background:var(--em-dim);border:1px solid rgba(27,58,107,.22);">
+                            background:var(--em-dim);border:1px solid rgba(79,70,229,.22);">
                         <i class="fas fa-user-check" style="color:var(--em);"></i>
                     </div>
                     <h2 style="font-family:var(--font-head);font-size:22px;color:var(--t1);margin-bottom:4px;">
@@ -65,18 +65,6 @@
                         @enderror
                     </div>
 
-                    {{-- Numéro carte (ancien uniquement) --}}
-                    <div id="field_carte" class="mb-3" style="display:none;">
-                        <label class="form-label">
-                            <i class="fas fa-id-badge"></i> Numéro de Carte Étudiant
-                        </label>
-                        <input type="text" class="form-control @error('numero_carte') is-invalid @enderror"
-                            name="numero_carte" value="{{ old('numero_carte') }}" placeholder="Ex : CARTE0000001">
-                        @error('numero_carte')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-
                     {{-- Nom & Prénom --}}
                     <div class="row mb-3 g-3">
                         <div class="col-md-6">
@@ -84,7 +72,7 @@
                                 <i class="fas fa-user"></i> Nom
                             </label>
                             <input type="text" class="form-control @error('nom') is-invalid @enderror" name="nom"
-                                value="{{ old('nom') }}" placeholder="MENSAH" required>
+                                value="{{ old('nom') }}" required>
                             @error('nom')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -94,7 +82,7 @@
                                 <i class="fas fa-user"></i> Prénom
                             </label>
                             <input type="text" class="form-control @error('prenom') is-invalid @enderror" name="prenom"
-                                value="{{ old('prenom') }}" placeholder="Kofi" required>
+                                value="{{ old('prenom') }}" required>
                             @error('prenom')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
@@ -113,13 +101,26 @@
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
+                        {{-- Même case, deux contenus : le bachelier y met son lieu
+                             de naissance, l'ancien son numéro de carte. La grille
+                             reste deux lignes de deux pour les deux profils. --}}
                         <div class="col-md-6" id="field_lieu">
                             <label class="form-label">
                                 <i class="fas fa-map-marker-alt"></i> Lieu de Naissance
                             </label>
                             <input type="text" class="form-control @error('lieu_naissance') is-invalid @enderror"
-                                name="lieu_naissance" value="{{ old('lieu_naissance') }}" placeholder="Lomé">
+                                name="lieu_naissance" value="{{ old('lieu_naissance') }}">
                             @error('lieu_naissance')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6" id="field_carte" style="display:none;">
+                            <label class="form-label">
+                                <i class="fas fa-id-badge"></i> Numéro de Carte Étudiant
+                            </label>
+                            <input type="text" class="form-control @error('numero_carte') is-invalid @enderror"
+                                name="numero_carte" value="{{ old('numero_carte') }}">
+                            @error('numero_carte')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>

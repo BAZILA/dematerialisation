@@ -4,7 +4,9 @@
 
 @section('content')
     @php
-        $cats = \App\Models\RequestType::$categories;
+        // Les candidatures ont leur propre table et leur propre écran :
+        // elles ne font pas partie des « demandes étudiantes ».
+        $cats = collect(\App\Models\RequestType::categories())->except('candidature')->all();
         $catColors = [
             'depot' => 'primary',
             'attestation' => 'success',
@@ -62,6 +64,16 @@
     </div>
 
     {{-- ════ Graphiques ════ --}}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="fas fa-chart-line"></i> Évolution des soumissions</span>
+            <small style="color:var(--t3);">Année {{ $annee?->libelle ?? '—' }} — par mois</small>
+        </div>
+        <div class="card-body">
+            <div style="position:relative;height:240px;"><canvas id="chartMois"></canvas></div>
+        </div>
+    </div>
+
     <div class="row g-4 mb-4">
         <div class="col-md-7">
             <div class="card h-100">
@@ -98,7 +110,7 @@
             @if ($key !== 'depot')
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="tab" href="#td-{{ $key }}" data-tab="{{ $key }}">
-                        <i class="fas {{ $catIcons[$key] }}"></i>
+                        <i class="fas {{ $catIcons[$key] ?? 'fa-file' }}"></i>
                         <span class="d-none d-md-inline ms-1">{{ $label }}</span>
                         @if (($stats["pending_{$key}"] ?? 0) > 0)
                             <span class="badge bg-warning ms-1">{{ $stats["pending_{$key}"] }}</span>
@@ -107,6 +119,17 @@
                 </li>
             @endif
         @endforeach
+        @if (auth()->user()->canAny(['candidature.traiter', 'dossiers.consulter']))
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#td-candidatures" data-tab="candidatures">
+                    <i class="fas fa-file-signature"></i>
+                    <span class="d-none d-md-inline ms-1">Candidatures</span>
+                    @if ($nbCandidatures > 0)
+                        <span class="badge bg-warning ms-1">{{ $nbCandidatures }}</span>
+                    @endif
+                </a>
+            </li>
+        @endif
     </ul>
 
     <div class="tab-content">
@@ -125,6 +148,52 @@
                 ])
             </div>
         </div>
+
+        {{-- Candidatures : table et écran distincts des demandes étudiantes --}}
+        @if (auth()->user()->canAny(['candidature.traiter', 'dossiers.consulter']))
+            <div class="tab-pane fade" id="td-candidatures">
+                <div class="card" style="border-top-left-radius:0;border-top-right-radius:0;">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span style="color:var(--t1);font-weight:600;">10 dernières candidatures</span>
+                        <a href="{{ route('admin.candidatures.index') }}" class="btn btn-sm btn-outline-secondary">
+                            Voir tout <i class="fas fa-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead>
+                                <tr><th>Candidat</th><th>Référence</th><th>Parcours visés</th>
+                                    <th>Soumise</th><th>Statut</th><th class="text-center">Action</th></tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($recentCandidatures as $c)
+                                    <tr @if (in_array($c->status, ['soumise', 'en_instruction'], true)) style="background:rgba(245,158,11,.09);box-shadow:inset 3px 0 0 var(--amber,#f59e0b);" @endif>
+                                        <td><strong style="color:var(--t1);">{{ $c->full_name }}</strong><br>
+                                            <small class="text-muted">{{ $c->email }}</small></td>
+                                        <td><code class="small">{{ $c->reference }}</code></td>
+                                        <td class="small">
+                                            {{ $c->choix->count() }} parcours
+                                            @php $adm = $c->choix->where('statut', 'admis')->count(); @endphp
+                                            @if ($adm)<span class="badge bg-success ms-1">{{ $adm }} admis</span>@endif
+                                        </td>
+                                        <td class="small">{{ $c->created_at->format('d/m/Y') }}</td>
+                                        <td><span class="badge bg-{{ $c->status_badge }}">{{ $c->statut_label }}</span></td>
+                                        <td class="text-center">
+                                            <a href="{{ route('admin.candidatures.show', $c) }}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox d-block fs-3 mb-2"></i>Aucune candidature</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         {{-- Autres catégories --}}
         @foreach ($cats as $key => $label)
@@ -154,6 +223,53 @@
     <script>
         const catData = @json($chartData['by_category']);
         const statusData = @json($chartData['by_status']);
+        const moisData = @json($chartData['by_month'] ?? []);
+
+        /* ── Courbe pro : soumissions par mois (dégradé sous la courbe) ── */
+        (function () {
+            const el = document.getElementById('chartMois');
+            if (!el) return;
+            const labels = Object.keys(moisData);
+            const values = Object.values(moisData);
+            const fmt = m => { // « 2026-07 » → « Juil. 2026 »
+                const noms = ['Janv.','Févr.','Mars','Avr.','Mai','Juin','Juil.','Août','Sept.','Oct.','Nov.','Déc.'];
+                const [y, mm] = m.split('-');
+                return (noms[parseInt(mm, 10) - 1] || m) + ' ' + y;
+            };
+            const ctx = el.getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 0, 240);
+            grad.addColorStop(0, 'rgba(26,86,168,.28)');
+            grad.addColorStop(1, 'rgba(26,86,168,0)');
+            new Chart(el, {
+                type: 'line',
+                data: {
+                    labels: labels.map(fmt),
+                    datasets: [{
+                        label: 'Soumissions',
+                        data: values,
+                        borderColor: '#1A56A8',
+                        backgroundColor: grad,
+                        fill: true,
+                        tension: .4,
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#1A56A8',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#51607A' }, grid: { color: 'rgba(16,32,64,.07)' } },
+                        x: { grid: { display: false }, ticks: { color: '#51607A' } }
+                    }
+                }
+            });
+        })();
         const catBg = {
             depot: 'rgba(27,58,107,.85)',
             attestation: 'rgba(21,136,90,.82)',

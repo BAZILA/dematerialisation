@@ -1,0 +1,178 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  « Action impossible » au depot d'une piece
+=======================================================================
+
+  Archive : correctif-envoi-20260914.zip   (42 Ko, 6 fichiers)
+  AUCUNE migration.
+
+  /!\ CETTE VERSION REMPLACE LA PRECEDENTE (2 fichiers).
+      Le fichier fait moins de 2 Mo : la piste de la taille est ecartee
+      comme cause principale. La vraie piste est ci-dessous.
+
+
+=======================================================================
+  1. CE QUE « ACTION IMPOSSIBLE » VEUT DIRE
+=======================================================================
+
+  Ce n'est pas un message d'erreur : c'est le texte de REPLI de l'ecran.
+  Il s'affiche quand le serveur repond une erreur SANS message.
+
+  Avec un fichier de moins de 2 Mo, deux causes restent possibles :
+
+  A. LE GARDE D'ACCES REFUSE LE PROPRIETAIRE LUI-MEME   (piste principale)
+
+     Avant d'accepter la piece, l'application verifie que le dossier
+     appartient bien a l'usager :
+
+         if ($sr->student_id !== Auth::user()->student->id)
+             abort(403);
+
+     Deux defauts dans ces deux lignes :
+
+     - « !== » compare aussi les TYPES. L'identifiant de l'usager est un
+       nombre ; celui du dossier est une cle etrangere, que MySQL peut
+       rendre sous forme de TEXTE selon la configuration du serveur.
+       « 12 » !== 12 est alors vrai : le proprietaire est refuse.
+
+     - abort(403) est lance SANS message. Le navigateur recoit
+       {"message": ""}, vide, d'ou « Action impossible ».
+
+     Pourquoi pas en local : les tests tournent sur SQLite, qui rend des
+     nombres ; les deux cotes sont alors du meme type et tout passe.
+
+     Honnetement : sur PHP 8.3 avec le pilote mysqlnd, les nombres sont
+     en principe rendus comme des nombres. Cette piste est donc probable,
+     pas certaine. La section 2 permet de trancher.
+
+  B. LE PARE-FEU D'O2SWITCH BLOQUE L'ENVOI
+
+     TigerProtect / ModSecurity renvoie sa propre page, sans message
+     exploitable. Il a deja bloque des requetes sur ce serveur.
+
+
+=======================================================================
+  2. TRANCHER ENTRE A ET B   (avant de deployer)
+=======================================================================
+
+  LA METHODE LA PLUS RAPIDE — dans le navigateur, sans rien toucher
+    1. Ouvrir la page de depot, touche F12, onglet « Reseau ».
+    2. Refaire l'envoi de la piece.
+    3. Cliquer sur la ligne « upload » qui apparait.
+    4. Lire le « Statut » :
+         403  -> cause A (ou pare-feu : voir l'onglet « Reponse »)
+         406  -> cause B, le pare-feu
+         413  -> la taille, malgre tout
+         419  -> session expiree
+         500  -> erreur serveur, voir le journal
+    5. Onglet « Reponse » :
+         {"message":""}        -> cause A, c'est l'application
+         une page HTML         -> cause B, c'est le pare-feu
+
+  SUR LE SERVEUR — le type reellement rendu par la base
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+$ART tinker --execute="\$sr = \App\Models\StudentRequest::latest('id')->first(); if (!\$sr) { echo 'aucun dossier'; return; } echo 'student_id brut : '; var_dump(\$sr->getRawOriginal('student_id'));"
+
+  « string(...) »  -> la base rend du TEXTE : cause A confirmee.
+  « int(...) »     -> les types concordent : la cause est ailleurs,
+                      probablement le pare-feu (B).
+
+  Le journal, pour une erreur 500 :
+tail -40 $SITE/storage/logs/laravel.log
+
+
+=======================================================================
+  3. CE QUE LE CORRECTIF CHANGE
+=======================================================================
+
+  Il corrige la cause A a la racine, et rend la cause B identifiable.
+  Deployez-le quel que soit le resultat de la section 2.
+
+  a) LA RACINE : les identifiants sont convertis en nombres
+     app/Models/StudentRequest.php
+     student_id, parcours_id et annee_academique_id sont desormais
+     toujours des entiers, quel que soit le pilote. Toute comparaison
+     tient, ici et partout ailleurs dans l'application.
+
+  b) LES GARDES : comparaison robuste, et un vrai message
+     StudentRequestController::authorizeRequest   (depot, suppression,
+                                                    soumission, annulation)
+     StudentDepotController::authorizeOwner       (assistant de depot)
+     Refus desormais : « Ce dossier n'est pas rattache a votre compte. »
+     Un refus de l'application ne ressemble plus a un blocage du
+     pare-feu.
+
+  c) UN DEFAUT VOISIN, CERTAIN CELUI-LA
+     CandidatureController, export d'un seul parcours.
+     L'identifiant du parcours arrive de l'URL, donc TOUJOURS en texte.
+     La comparaison stricte n'en reconnaissait aucun : l'archive d'un
+     parcours sortait VIDE. Corrige.
+
+  d) L'ECRAN NE SE TAIT PLUS
+     resources/views/student/dashboard.blade.php
+     Meme quand la reponse ne vient pas de l'application, l'ecran affiche
+     le code HTTP et une explication (413, 419, 429, 403, 406, autre).
+     Un usager qui signale un code designe precisement la cause.
+
+  e) LA TAILLE, AU CAS OU
+     bootstrap/app.php
+     Un envoi trop lourd renvoie un message qui cite la limite reelle du
+     serveur, au lieu d'un message vide.
+
+
+=======================================================================
+  4. DEPLOIEMENT
+=======================================================================
+
+cd $SITE
+unzip -l correctif-envoi-20260914.zip
+unzip -o correctif-envoi-20260914.zip
+rm -f correctif-envoi-20260914.zip
+
+$ART view:clear && $ART view:cache
+$ART config:clear && $ART config:cache
+
+find $SITE/app $SITE/bootstrap $SITE/resources -type f -name "*.php" -exec chmod 644 {} \;
+
+  Pas de migration, pas de nouvelle route.
+
+
+=======================================================================
+  5. APRES LE DEPLOIEMENT
+=======================================================================
+
+  Refaire l'envoi de la meme piece.
+
+  - La piece s'enregistre           -> c'etait la cause A. Resolu.
+  - « erreur 403 » ou « erreur 406 » -> le pare-feu (B) :
+        cPanel > Securite > ModSecurity : verifier s'il est actif pour
+        le sous-domaine et consulter les blocages. Sinon, ticket O2switch
+        avec l'URL /student/requests/file/upload et l'heure exacte.
+  - « erreur 413 »                   -> relever les limites du php.ini :
+        ajouter a la fin de $SITE/php.ini (apres une copie de sauvegarde)
+          upload_max_filesize = 8M
+          post_max_size = 10M
+  - « erreur 500 »                   -> tail -40 $SITE/storage/logs/laravel.log
+
+  Dans tous les cas, l'ecran donnera desormais un code : envoyez-le-moi.
+
+
+=======================================================================
+  6. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  212 tests, 497 assertions, tous verts.
+
+  IdentifiantsEnTexteTest reproduit le defaut : il force des
+  identifiants en texte, comme MySQL peut les rendre, et verifie que le
+  proprietaire depose bien sa piece, que l'intrus est refuse avec un
+  message explicite, et que l'export d'un parcours reconnait son
+  identifiant venu de l'URL.
+
+  EnvoiTropVolumineuxTest couvre la piste de la taille.
+
+=======================================================================

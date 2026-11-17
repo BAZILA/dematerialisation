@@ -12,7 +12,7 @@
                 <div class="text-center mb-4">
                     <div class="icon-box mx-auto mb-3"
                         style="width:72px;height:72px;font-size:1.8rem;
-                            background:var(--em-dim);border:1px solid rgba(27,58,107,.22);">
+                            background:var(--em-dim);border:1px solid rgba(79,70,229,.22);">
                         <i class="fas fa-check-circle" style="color:var(--em);"></i>
                     </div>
                     <h2 style="font-family:var(--font-head);font-size:22px;color:var(--t1);margin-bottom:4px;">
@@ -25,7 +25,7 @@
 
                 {{-- Identifiant généré --}}
                 <div
-                    style="background:var(--surface-2);border:1px solid rgba(27,58,107,.22);
+                    style="background:var(--surface-2);border:1px solid rgba(79,70,229,.22);
                         border-radius:12px;padding:16px 20px;margin-bottom:20px;">
                     <div class="d-flex align-items-center gap-3">
                         <i class="fas fa-id-card" style="font-size:1.8rem;color:var(--em);flex-shrink:0;"></i>
@@ -82,7 +82,7 @@
                             <i class="fas fa-envelope"></i> Adresse E-mail
                         </label>
                         <input type="email" class="form-control @error('email') is-invalid @enderror" name="email"
-                            value="{{ old('email') }}" placeholder="exemple@mail.com" required>
+                            value="{{ old('email') }}" required>
                         @error('email')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -94,7 +94,7 @@
                         </label>
                         <div class="input-group">
                             <input type="password" class="form-control @error('password') is-invalid @enderror"
-                                id="pwd" name="password" placeholder="Minimum 8 caractères" required>
+                                id="pwd" name="password" required>
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwd('pwd',this)">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -109,7 +109,7 @@
                             <i class="fas fa-lock"></i> Confirmer le Mot de Passe
                         </label>
                         <input type="password" class="form-control" name="password_confirmation"
-                            placeholder="Répétez le mot de passe" required>
+                            required>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100" style="height:44px;font-size:15px;"

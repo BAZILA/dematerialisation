@@ -1,0 +1,102 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Les pieces deposees n'apparaissent pas a l'agent
+=======================================================================
+
+  Archive : correctif-pieces-visibles-20260914.zip   (29 Ko, 3 fichiers)
+  AUCUNE migration. AUCUNE donnee touchee.
+
+  Les 11 pieces du dossier #1 sont bien enregistrees. Elles etaient
+  seulement invisibles a l'ecran. Rien n'est a redeposer.
+
+
+=======================================================================
+  1. CE QUI S'EST PASSE
+=======================================================================
+
+  L'ecran de traitement n'affichait les fichiers qu'au travers de la
+  liste des pieces ATTENDUES pour le dossier.
+
+  Lors du passage aux « pieces propres a chaque niveau », la fonction
+  qui fournit cette liste a ete modifiee : sans niveau, elle renvoie une
+  liste vide — volontairement, pour ne jamais reclamer les pieces d'un
+  autre cursus. Les appels cote etudiant ont ete mis a jour. CELUI DE
+  L'ECRAN DE TRAITEMENT A ETE OUBLIE : il appelait encore la fonction
+  sans niveau, recevait une liste vide, et n'affichait donc rien.
+
+  C'est une erreur de ma part lors de cette modification.
+
+  Pourquoi les tests ne l'ont pas vue : ils verifiaient qu'une piece
+  s'enregistre, se tamponne, qu'un dossier se valide — jamais que
+  l'agent VOIT les pieces qu'il doit examiner.
+
+
+=======================================================================
+  2. CE QUE LE CORRECTIF CHANGE
+=======================================================================
+
+  Plus qu'un rebranchement : un principe.
+
+  CE QUI A ETE DEPOSE NE DISPARAIT JAMAIS DE L'ECRAN.
+
+  L'ecran affiche desormais les pieces attendues PLUS toute piece
+  reellement deposee. Un fichier deja fourni reste donc visible meme si,
+  apres le depot :
+    - la piece a ete desactivee,
+    - elle a ete rattachee a un autre niveau,
+    - le dossier a perdu son parcours.
+
+  Chaque piece n'apparait qu'une fois, et une piece attendue mais non
+  deposee reste listee : l'agent voit aussi ce qui MANQUE.
+
+  La soumission, elle, n'exige toujours que ce que le niveau reclame
+  aujourd'hui : une piece desactivee reste visible, mais n'est plus
+  exigee.
+
+  Meme principe applique a l'espace etudiant : l'usager voit toujours
+  ce qu'il a fourni.
+
+  NON TOUCHES, verifies : le tamponnage, les archives et les exports
+  parcouraient deja les fichiers reellement deposes. Ils n'etaient pas
+  concernes.
+
+
+=======================================================================
+  3. DEPLOIEMENT
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+cd $SITE
+unzip -l correctif-pieces-visibles-20260914.zip
+unzip -o correctif-pieces-visibles-20260914.zip
+rm -f correctif-pieces-visibles-20260914.zip
+
+$ART view:clear && $ART view:cache
+
+find $SITE/app $SITE/resources -type f -name "*.php" -exec chmod 644 {} \;
+
+
+=======================================================================
+  4. VERIFICATION
+=======================================================================
+
+  Ouvrir  /admin/requests/detail/1
+  « Documents soumis » doit lister les 11 pieces d'Akua TETTEH, avec
+  pour chacune l'apercu et le telechargement.
+
+
+=======================================================================
+  5. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  219 tests, 510 assertions, tous verts.
+
+  PiecesVisiblesAuTraitementTest (7 controles).
+  Il a ete verifie qu'il ECHOUE sur l'ancien code : en remettant l'appel
+  fautif, 4 de ses controles tombent. Il attrape donc bien ce defaut, et
+  le retiendra s'il revenait.
+
+=======================================================================

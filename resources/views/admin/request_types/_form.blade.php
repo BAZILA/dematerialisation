@@ -27,7 +27,7 @@
         </label>
         <select class="form-select @error('category') is-invalid @enderror" name="category"
             id="cat-{{ $item?->id ?? 'new' }}" onchange="toggleProfile(this)" required>
-            @foreach (\App\Models\RequestType::$categories as $key => $label)
+            @foreach (\App\Models\RequestType::categories() as $key => $label)
                 <option value="{{ $key }}" {{ old('category', $item?->category) === $key ? 'selected' : '' }}>
                     {{ $label }}
                 </option>
@@ -70,6 +70,93 @@
         </small>
     </div>
 
+    {{-- Portée de la pièce, À L'INTÉRIEUR de son niveau --}}
+    @php
+        $uid = $item?->id ?? 'new';
+
+        /* Le niveau vient de l'écran d'où l'on édite : une pièce appartient
+           à un niveau et à un seul. Les niveaux partagent les procédures,
+           jamais les pièces. */
+        $niveauCourant = $niveauCourant ?? $item?->grade ?? array_key_first($grades ?? []);
+        $niveauLabel = \App\Models\Parcours::$grades[$niveauCourant]['label'] ?? $niveauCourant;
+
+        $porteeActuelle = old('portee', $item && $item->parcours->isNotEmpty() ? 'specifique' : 'commune');
+        $parcoursCoches = collect(old('parcours_ids', $item?->parcours->pluck('id')->all() ?? []))
+            ->map(fn($v) => (int) $v)
+            ->all();
+
+        // Seuls les parcours de CE niveau ont un sens ici : en désigner un
+        // d'ailleurs rendrait la pièce invisible pour tout le monde.
+        $parcoursDuNiveau = collect($parcoursParFaculte ?? [])
+            ->map(fn($liste) => collect($liste)->where('grade', $niveauCourant)->values())
+            ->filter(fn($liste) => $liste->isNotEmpty());
+    @endphp
+
+    <input type="hidden" name="grade" value="{{ $niveauCourant }}">
+
+    <div class="col-12">
+        <label class="form-label">
+            Qui doit fournir cette pièce ? <span class="text-danger">*</span>
+        </label>
+
+        <div class="alert alert-light border py-2 px-3 mb-2" style="font-size:12.5px;">
+            <i class="fas fa-graduation-cap"></i>
+            Cette pièce appartient au niveau <strong>{{ $niveauLabel }}</strong>.
+            Elle ne sera <strong>jamais</strong> réclamée à un autre niveau.
+        </div>
+
+        <div class="d-flex flex-column gap-2 mb-2">
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="portee" value="commune"
+                    id="portee-com-{{ $uid }}" {{ $porteeActuelle === 'commune' ? 'checked' : '' }}
+                    onchange="togglePortee(this)">
+                <label class="form-check-label" for="portee-com-{{ $uid }}">
+                    <strong>Tout le niveau {{ $niveauLabel }}</strong>
+                    <span class="d-block small" style="color:var(--t2);">
+                        Chaque parcours de ce niveau la fournit, y compris ceux créés plus tard.
+                    </span>
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="portee" value="specifique"
+                    id="portee-spe-{{ $uid }}" {{ $porteeActuelle === 'specifique' ? 'checked' : '' }}
+                    onchange="togglePortee(this)">
+                <label class="form-check-label" for="portee-spe-{{ $uid }}">
+                    <strong>Certains parcours seulement</strong>
+                    <span class="d-block small" style="color:var(--t2);">
+                        Les autres parcours de {{ $niveauLabel }} ne la verront pas.
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <div id="portee-list-{{ $uid }}" style="display: {{ $porteeActuelle === 'specifique' ? '' : 'none' }};">
+            <div class="border rounded p-2" style="max-height:220px;overflow-y:auto;">
+                @forelse ($parcoursDuNiveau as $facNom => $liste)
+                    <div class="small fw-semibold mt-2 mb-1" style="color:var(--t2);">{{ $facNom }}</div>
+                    @foreach ($liste as $p)
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="parcours_ids[]"
+                                value="{{ $p->id }}" id="pp-{{ $uid }}-{{ $p->id }}"
+                                {{ in_array($p->id, $parcoursCoches, true) ? 'checked' : '' }}>
+                            <label class="form-check-label small" for="pp-{{ $uid }}-{{ $p->id }}">
+                                {{ $p->nom }}
+                            </label>
+                        </div>
+                    @endforeach
+                @empty
+                    <div class="small text-muted">
+                        Aucun parcours actif en {{ $niveauLabel }}. Sans parcours, la pièce
+                        reste commune au niveau.
+                    </div>
+                @endforelse
+            </div>
+            <small class="text-muted d-block mt-1">
+                Ne cocher aucun parcours revient à la rendre commune à tout le niveau.
+            </small>
+        </div>
+    </div>
+
     {{-- Description --}}
     <div class="col-12">
         <label class="form-label">Description / consigne <small class="text-muted ">(optionnel)</small></label>
@@ -86,10 +173,23 @@
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" name="is_required" value="1"
                     id="req-{{ $item?->id ?? 'new' }}"
-                    {{ old('is_required', $item?->is_required ?? true) ? 'checked' : '' }}>
+                    {{ old('is_required', $item?->is_required ?? true) ? 'checked' : '' }}
+                    onchange="ukMajDerogation('{{ $item?->id ?? 'new' }}');">
                 <label class="form-check-label" for="req-{{ $item?->id ?? 'new' }}">
                     <strong>Obligatoire</strong>
                     <br><small class="text-muted ">Bloque la soumission si absent</small>
+                </label>
+            </div>
+
+            {{-- Report possible : seule une pièce obligatoire a quelque chose à différer --}}
+            <div class="form-check form-switch" id="blocDerog-{{ $item?->id ?? 'new' }}">
+                <input class="form-check-input" type="checkbox" name="derogation_possible" value="1"
+                    id="derog-{{ $item?->id ?? 'new' }}"
+                    {{ old('derogation_possible', $item?->derogation_possible ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="derog-{{ $item?->id ?? 'new' }}">
+                    <strong>Report autorisé</strong>
+                    <br><small class="text-muted ">L'usager peut soumettre sans elle en s'engageant à la
+                        fournir. La pièce reste due.</small>
                 </label>
             </div>
 
@@ -102,6 +202,18 @@
                     <strong>Tamponné à la validation</strong>
                     <br><small class="text-muted ">Cachet officiel apposé automatiquement (PDF
                         uniquement)</small>
+                </label>
+            </div>
+
+            {{-- Remplit le verso (la fiche) --}}
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="fills_verso" value="1"
+                    id="verso-{{ $item?->id ?? 'new' }}"
+                    {{ old('fills_verso', $item?->fills_verso ?? false) ? 'checked' : '' }}>
+                <label class="form-check-label" for="verso-{{ $item?->id ?? 'new' }}">
+                    <strong>Remplit le verso auto.</strong>
+                    <br><small class="text-muted ">La fiche : verso rempli (études antérieures +
+                        cachet + signature agent). Nécessite « Tamponné ».</small>
                 </label>
             </div>
 
@@ -130,5 +242,33 @@
         if (profileRow) {
             profileRow.style.display = selectEl.value === 'depot' ? '' : 'none';
         }
+        // La portée vaut désormais pour TOUTES les procédures : un dépôt de
+        // licence peut n'exiger un certificat médical que du parcours STAPS.
     }
+
+    function togglePortee(radioEl) {
+        const modal = radioEl.closest('.modal-body, .card-body, form');
+        const list = modal?.querySelector('[id^="portee-list"]');
+        if (list) {
+            list.style.display = radioEl.value === 'specifique' ? '' : 'none';
+        }
+    }
+
+    /* Une pièce facultative n'a rien à différer : le report ne s'offre
+       que sur une pièce obligatoire, et se retire avec elle. */
+    function ukMajDerogation(suffixe) {
+        const requis = document.getElementById('req-' + suffixe);
+        const bloc = document.getElementById('blocDerog-' + suffixe);
+        const cible = document.getElementById('derog-' + suffixe);
+        if (!requis || !bloc || !cible) return;
+
+        bloc.style.display = requis.checked ? '' : 'none';
+        if (!requis.checked) cible.checked = false;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[id^="blocDerog-"]').forEach(function(bloc) {
+            ukMajDerogation(bloc.id.substring('blocDerog-'.length));
+        });
+    });
 </script>

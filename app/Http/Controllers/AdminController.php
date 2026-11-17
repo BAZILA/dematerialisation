@@ -2,65 +2,111 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AnneeAcademique;
 use App\Models\RequestType;
 use App\Models\StudentRequest;
 use App\Models\Student;
+use Illuminate\Http\Request;
 
 class AdminController extends Controller
 {
+    /** Change l'année académique de contexte (consultation). */
+    public function switchAnnee(Request $request)
+    {
+        $request->validate(['annee_id' => 'required|exists:annees_academiques,id']);
+        session(['annee_contexte_id' => (int) $request->annee_id]);
+
+        return back();
+    }
+
     public function dashboard()
     {
-        $cats = array_keys(RequestType::$categories);
+        $user = auth()->user();
+
+        // Un agent ne voit que les catégories qu'il peut traiter ;
+        // un superviseur (contrôle / consultation des dossiers) voit tout.
+        $toutes = array_keys(RequestType::categories());
+        $traitables = $user->treatableCategories();
+        $cats = $traitables
+            ? array_values(array_intersect($toutes, $traitables))
+            : ($user->canAny(['demandes.controler', 'dossiers.consulter']) ? $toutes : []);
+
+        // Les candidatures ne sont PAS des demandes étudiantes : elles ont
+        // leur propre table et leur propre écran. On les sort des onglets
+        // « demandes » et on leur consacre un bloc à part.
+        $cats = array_values(array_diff($cats, ['candidature']));
+
+        // ── Tout le tableau de bord est borné à l'ANNÉE DE CONTEXTE
+        //    ET au PÉRIMÈTRE de l'agent connecté ──
+        $annee = AnneeAcademique::context();
+        $base = function () use ($annee, $user, $cats) {
+            $q = StudentRequest::query()
+                ->when($annee, fn ($qq) => $qq->where('annee_academique_id', $annee->id))
+                ->whereIn('category', $cats ?: ['__aucune__']);
+            $user->applyPerimeterFilter($q);
+
+            return $q;
+        };
 
         /* ── Stats ── toutes les clés utilisées par la vue ─── */
         $stats = [
-            // Globaux
-            'total' => StudentRequest::count(),
+            'total' => $base()->count(),
             'students' => Student::count(),
-            'validated_today' => StudentRequest::where('status', 'validé')
+            'validated_today' => $base()->where('status', 'validé')
                 ->whereDate('validated_at', today())->count(),
-            'in_correction' => StudentRequest::where('status', 'en_correction')->count(),
+            'in_correction' => $base()->where('status', 'en_correction')->count(),
 
             // Clés attendues par admin/dashboard.blade.php
-            'depot_pending' => StudentRequest::where('category', 'depot')
+            'depot_pending' => $base()->where('category', 'depot')
                 ->where('status', 'soumis')->count(),
-            'requests_pending' => StudentRequest::where('category', '!=', 'depot')
+            'requests_pending' => $base()->where('category', '!=', 'depot')
                 ->where('status', 'soumis')->count(),
         ];
 
         // Badge par catégorie dans les onglets : pending_depot, pending_attestation …
+        $pendings = $base()->where('status', 'soumis')
+            ->selectRaw('category, COUNT(*) as n')->groupBy('category')->pluck('n', 'category');
         foreach ($cats as $cat) {
-            $stats["pending_{$cat}"] = StudentRequest::where('category', $cat)
-                ->where('status', 'soumis')->count();
+            $stats["pending_{$cat}"] = (int) ($pendings[$cat] ?? 0);
         }
 
         /* ── Données graphiques ─────────────────────────────── */
+        $parCategorie = $base()->selectRaw('category, COUNT(*) as n')->groupBy('category')->pluck('n', 'category');
+        $parStatut = $base()->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+
         $chartData = [
-            'by_category' => collect($cats)->map(fn($c) => [
+            'by_category' => collect($cats)->map(fn ($c) => [
                 'key' => $c,
-                'label' => RequestType::$categories[$c],
-                'total' => StudentRequest::where('category', $c)->count(),
+                'label' => RequestType::categories()[$c],
+                'total' => (int) ($parCategorie[$c] ?? 0),
             ])->values()->toArray(),
 
             'by_status' => [
-                ['label' => 'Brouillon', 'count' => StudentRequest::where('status', 'brouillon')->count()],
-                ['label' => 'En attente', 'count' => StudentRequest::where('status', 'soumis')->count()],
-                ['label' => 'En correction', 'count' => StudentRequest::where('status', 'en_correction')->count()],
-                ['label' => 'Validé', 'count' => StudentRequest::where('status', 'validé')->count()],
-                ['label' => 'Rejeté', 'count' => StudentRequest::where('status', 'rejeté')->count()],
+                ['label' => 'Brouillon', 'count' => (int) ($parStatut['brouillon'] ?? 0)],
+                ['label' => 'En attente', 'count' => (int) ($parStatut['soumis'] ?? 0)],
+                ['label' => 'En correction', 'count' => (int) ($parStatut['en_correction'] ?? 0)],
+                ['label' => 'Validé', 'count' => (int) ($parStatut['validé'] ?? 0)],
+                ['label' => 'Rejeté', 'count' => (int) ($parStatut['rejeté'] ?? 0)],
             ],
+
+            // Courbe : soumissions par mois de l'année consultée
+            'by_month' => $base()->whereNotNull('submitted_at')
+                ->selectRaw(\App\Support\SqlPortable::mois('submitted_at') . ' as mois, COUNT(*) as n')
+                ->groupBy('mois')->orderBy('mois')->pluck('n', 'mois')->toArray(),
         ];
 
         /* ── Listes récentes pour les onglets du dashboard ──── */
-        $recentDeposits = StudentRequest::with('student.user', 'files')
-            ->where('category', 'depot')
-            ->orderByRaw("CASE status
+        $ordreStatuts = "CASE status
                 WHEN 'soumis'        THEN 0
                 WHEN 'en_correction' THEN 1
                 WHEN 'brouillon'     THEN 2
                 WHEN 'validé'        THEN 3
                 WHEN 'rejeté'        THEN 4
-                ELSE 5 END")
+                ELSE 5 END";
+
+        $recentDeposits = $base()->with('student.user', 'files')
+            ->where('category', 'depot')
+            ->orderByRaw($ordreStatuts)
             ->orderBy('submitted_at', 'desc')
             ->take(10)->get();
 
@@ -68,24 +114,33 @@ class AdminController extends Controller
         foreach ($cats as $cat) {
             if ($cat === 'depot')
                 continue;
-            $recentRequests[$cat] = StudentRequest::with('student.user', 'files')
+            $recentRequests[$cat] = $base()->with('student.user', 'files')
                 ->where('category', $cat)
-                ->orderByRaw("CASE status
-                    WHEN 'soumis'        THEN 0
-                    WHEN 'en_correction' THEN 1
-                    WHEN 'brouillon'     THEN 2
-                    WHEN 'validé'        THEN 3
-                    WHEN 'rejeté'        THEN 4
-                    ELSE 5 END")
+                ->orderByRaw($ordreStatuts)
                 ->orderBy('submitted_at', 'desc')
                 ->take(10)->get();
+        }
+
+        // Candidatures récentes, bornées au périmètre (par parcours)
+        $recentCandidatures = collect();
+        $nbCandidatures = 0;
+        if ($user->canAny(['candidature.traiter', 'dossiers.consulter'])) {
+            $qc = \App\Models\Candidature::with('choix.parcours')
+                ->when($annee, fn ($q) => $q->where('annee_academique_id', $annee->id));
+            $user->applyCandidaturePerimeter($qc);
+
+            $nbCandidatures = (clone $qc)->whereIn('status', ['soumise', 'en_instruction'])->count();
+            $recentCandidatures = $qc->latest('created_at')->limit(10)->get();
         }
 
         return view('admin.dashboard', compact(
             'stats',
             'chartData',
             'recentDeposits',
-            'recentRequests'
+            'recentRequests',
+            'recentCandidatures',
+            'nbCandidatures',
+            'annee'
         ));
     }
 }

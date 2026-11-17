@@ -1,0 +1,260 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Mise en ligne du 10 septembre 2026
+=======================================================================
+
+  Archive : correctif-20260910.zip   (118 Ko, 25 fichiers)
+
+  AUCUNE MIGRATION.  AUCUN NOUVEAU REGLAGE.  AUCUNE NOUVELLE ROUTE.
+  La base de donnees n'est pas touchee : c'est du code seulement.
+  vendor/ ne bouge pas (composer.lock inchange).
+
+  L'archive porte les chemins RELATIFS depuis la racine du site.
+  L'extraire a la racine repose chaque fichier exactement a sa place :
+  rien a deplacer a la main. Le seul fichier nouveau, SqlPortable.php,
+  cree son dossier app/Support/ tout seul.
+
+
+=======================================================================
+  1. SAUVEGARDE PREALABLE   (2 minutes, ne pas sauter)
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+cd /home/gysj7444
+tar czf sauvegarde-avant-20260910.tgz \
+    dematerialisation.univ-kara.org/app \
+    dematerialisation.univ-kara.org/resources
+
+  # Verifier que l'archive existe et n'est pas vide
+ls -lh sauvegarde-avant-20260910.tgz
+
+  Cette archive suffit a revenir en arriere : les 25 fichiers vivent
+  tous dans app/ ou resources/.
+
+
+=======================================================================
+  2. DEPOSER ET EXTRAIRE
+=======================================================================
+
+  Deposez correctif-20260910.zip a la RACINE du site, c'est-a-dire
+  dans /home/gysj7444/dematerialisation.univ-kara.org/
+  (le dossier qui contient artisan, app/, resources/).
+
+cd $SITE
+
+  # Voir ce qui va etre ecrit, SANS rien ecrire
+unzip -l correctif-20260910.zip
+
+  # Extraire en ecrasant les fichiers existants
+unzip -o correctif-20260910.zip
+
+  # Retirer l'archive une fois extraite
+rm -f correctif-20260910.zip
+
+  -o ecrase sans poser de question. C'est voulu : les 25 fichiers
+  doivent tous etre remplaces.
+
+
+=======================================================================
+  3. NE PAS TOUCHER
+=======================================================================
+
+  L'archive ne les contient pas — c'est verifie. Ne les ajoutez pas.
+
+  .htaccess    porte le basculement en PHP 8.3. L'ecraser fait
+               retomber le site en PHP 8.0 : panne immediate,
+               Laravel 12 exigeant PHP 8.2 au minimum.
+  .env         reglages du serveur (SMTP, base de donnees).
+  php.ini      configuration PHP propre au dossier.
+  vendor/      inchange.
+  storage/     donnees et pieces deja deposees par les usagers.
+
+
+=======================================================================
+  4. APRES L'EXTRACTION
+=======================================================================
+
+cd $SITE
+
+  # Les vues ont change : le cache Blade doit etre reconstruit.
+$ART view:clear
+$ART view:cache
+
+  # Droits suPHP : 755 dossiers, 644 fichiers. JAMAIS 775.
+find $SITE/app $SITE/resources -type d -exec chmod 755 {} \;
+find $SITE/app $SITE/resources -type f -exec chmod 644 {} \;
+
+  # Controle : aucune migration ne doit apparaitre
+$ART migrate:status --no-ansi | grep -ci pending      # doit afficher 0
+
+  # Controle : le site repond toujours en PHP 8.3
+$ART about | head -8
+
+
+=======================================================================
+  5. VERIFICATION APRES MISE EN LIGNE
+=======================================================================
+
+  a) Page de connexion — les champs sont VIDES.
+     Plus de « Ex : ADMIN001 » ni de points dans le mot de passe.
+     Les libelles « Identifiant » et « Mot de passe » restent.
+
+  b) Menu lateral — quatre volets repliables :
+     Dossiers · Donnees de reference · Personnel et acces · Systeme
+     Le volet contenant la page ouverte se deploie tout seul.
+
+  c) Types de documents > un niveau > une piece :
+     - le bouton en forme d'oeil DESACTIVE reellement la piece
+       (c'est ce qui ne marchait pas)
+     - le bouton corbeille supprime, et REFUSE avec un message clair
+       si des fichiers sont deja rattaches a la piece
+
+  d) Utilisateurs > Nouvel utilisateur, avec un courriel invalide :
+     la fenetre reste ouverte, affiche le motif, et la saisie est
+     conservee.
+
+  e) Candidature en ligne (hors periode) et Suivi de candidature :
+     la carte est resserree et centree, plus etalee sur toute la
+     largeur.
+
+  f) Tableau de bord et Statistiques : les courbes s'affichent.
+
+
+=======================================================================
+  6. CE QUE CETTE MISE A JOUR APPORTE
+=======================================================================
+
+  PLACEHOLDERS RETIRES DES FORMULAIRES DE CONNEXION
+    Les six ecrans d'entree (connexion, acces par code, double
+    authentification, inscription, finalisation) n'affichent plus
+    d'exemple dans leurs champs. « Ex : ADMIN001 » et
+    « Ex : CARTE0000001 » revelaient en outre le format reel des
+    identifiants a un visiteur non connecte.
+    Chaque champ concerne garde son libelle, et les libelles qui
+    n'etaient pas rattaches a leur champ le sont desormais (le code
+    d'acces, l'identifiant et le mot de passe). Le champ de la double
+    authentification, qui n'avait aucun libelle, recoit un aria-label
+    pour rester lisible par un lecteur d'ecran.
+
+  DESACTIVATION DES PIECES — ne fonctionnait pas          [ IMPORTANT ]
+    Un navigateur n'envoie pas une case decochee. Le controleur
+    appliquait alors une valeur de repli « vrai » : decocher revenait
+    a cocher. « Actif » et « Obligatoire » se remettaient tout seuls,
+    sans aucun message. Tout le code a ete balaye : c'etait le seul
+    endroit atteint.
+
+  SUPPRESSION D'UNE PIECE — impossible
+    L'ecran des niveaux n'offrait que « Modifier ». Les boutons
+    d'activation et de suppression ont ete ajoutes. La suppression est
+    refusee, avec explication, quand des fichiers sont rattaches ou
+    qu'un dossier s'est engage a fournir la piece plus tard.
+
+  IMPORT — dupliquait et effacait
+    1. Un second fichier ajoutant le numero de suivi a une fiche deja
+       importee par numero de releve creait un DOUBLON : la recherche
+       portait sur une cle encore vide en base.
+    2. Une ligne sans aucun numero etait recreee a chaque import :
+       reimporter le meme fichier dupliquait toute la promotion.
+    3. Une colonne absente du fichier EFFACAIT la valeur enregistree
+       (telephone, courriel, adresse, specialite).
+    Les trois sont corriges. Le texte d'aide, qui decrivait une regle
+    inexacte, a ete recrit.
+
+  SAISIE PERDUE DANS LES FORMULAIRES
+    A l'ajout d'un utilisateur, une validation refusee refermait la
+    fenetre : ni motif affiche, ni saisie conservee. Corrige, avec un
+    temoin qui empeche qu'une modification refusee rouvre la fenetre
+    en creation — ce qui aurait ecrase la mauvaise ligne.
+
+  DEROGATION — les ecrans
+    La logique existait depuis le 1er septembre mais rien ne
+    l'exposait. Sont ajoutes : la case d'engagement au depot, le bloc
+    de levee cote agent, le reglage piece par piece, et la mention qui
+    remonte dans la liste de traitement, les archives et les colonnes
+    d'export. Un dossier differe ne peut plus passer pour complet.
+
+  MENU LATERAL
+    Onze entrees a plat sous « Configuration » : on n'y trouvait plus
+    rien. Elles sont rangees sous quatre volets repliables.
+
+  PAGES PUBLIQUES TROP LARGES
+    « Candidatures fermees » et « Suivi de candidature » s'etalaient
+    sur 1280 px pour un message et un champ. Resserrees et centrees.
+
+  SQL PORTABLE  (app/Support/SqlPortable.php, fichier nouveau)
+    DATE_FORMAT et TIMESTAMPDIFF sont propres a MySQL : le tableau de
+    bord et les statistiques ne pouvaient donc pas etre testes. Sur
+    MySQL le SQL produit est identique au precedent, au caractere
+    pres : la production ne change pas de comportement.
+
+
+=======================================================================
+  7. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  156 tests, 396 assertions, tous verts.  (77 avant cette serie.)
+
+    CycleCompletTest ............ un dossier de la creation a la
+                                  validation, pour CHAQUE procedure
+    TousLesEcransTest ........... ouvre CHAQUE ecran, refuse tout 500
+    ToutesLesActionsTest ........ creer / modifier / activer /
+                                  supprimer, et l'effet verifie en base
+    PiecesActivationTest ........ la desactivation et la suppression
+    ImportDedoublonnageTest ..... doublons et effacements
+    SaisieConserveeTest ......... la saisie survit a un refus
+    DerogationInterfaceTest ..... les ecrans de la derogation
+
+  Lancer :  php artisan test
+  (Les tests ne sont PAS dans l'archive : ils ne servent qu'en local.)
+
+
+=======================================================================
+  8. RETOUR ARRIERE
+=======================================================================
+
+cd $SITE && $ART down
+
+cd /home/gysj7444
+tar xzf sauvegarde-avant-20260910.tgz
+
+cd $SITE
+$ART view:clear && $ART view:cache
+$ART up
+
+  Aucune migration n'ayant tourne, la base n'a pas a etre restauree.
+
+
+=======================================================================
+  9. CE QUI RESTE OUVERT
+=======================================================================
+
+  - Le compte ADMIN001 (mot de passe ayant circule publiquement).
+  - Allumer notifications.enabled dans Parametres : le SMTP fonctionne,
+    mais sans ce module aucun message ne part.
+  - Les perimetres des agents n'ont jamais ete verifies en ligne.
+  - Le JavaScript n'est pas execute par les tests : le menu repliable,
+    le verrouillage du bouton de soumission et la reouverture de la
+    fenetre apres erreur sont verifies dans le HTML produit, pas dans
+    un navigateur. A cliquer une fois apres la mise en ligne.
+  - Le tamponnage PDF n'est pas exerce par les tests, faute de vrai
+    document a tamponner.
+  - Les 5 procedures sont jouees de bout en bout par les tests, mais
+    n'ont jamais servi a un usager reel.
+
+
+=======================================================================
+  LES QUATRE INTERDITS
+=======================================================================
+
+  1. Ne JAMAIS ecraser .htaccess avec la version locale
+     -> le site retombe en PHP 8.0 et casse immediatement.
+  2. Ne JAMAIS lancer migrate:fresh ni migrate:reset.
+  3. Ne JAMAIS lancer db:seed --class=RoleSeeder
+     -> reinitialiserait les 17 roles systeme.
+  4. Ne JAMAIS mettre 775 ou 777
+     -> suPHP refuse. 755 pour les dossiers, 644 pour les fichiers.
+
+=======================================================================

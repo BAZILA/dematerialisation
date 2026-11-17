@@ -56,6 +56,18 @@ class Student extends Model
         return $this->prenom . ' ' . $this->nom;
     }
 
+    /** N° de suivi (issu du bachelier ou de l'ancien étudiant). */
+    public function getNumeroSuiviAttribute(): ?string
+    {
+        return $this->bachelier?->numero_suivi ?? $this->ancienEtudiant?->numero_suivi;
+    }
+
+    /** N° de carte (anciens) ou N° de table (bacheliers), pour l'export. */
+    public function getNumeroReferenceAttribute(): ?string
+    {
+        return $this->ancienEtudiant?->numero_carte ?? $this->bachelier?->numero_table;
+    }
+
     /** Type d'étudiant (délégué au User). */
     public function getTypeEtudiantAttribute(): string
     {

@@ -1,0 +1,150 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Refonte de l'ecran des parametres
+=======================================================================
+
+  Archive : correctif-parametres-20260911.zip   (8 Ko, 2 fichiers)
+  AUCUNE migration. AUCUNE nouvelle route. AUCUN nouveau reglage.
+  La base n'est pas touchee.
+
+
+=======================================================================
+  1. LE DEFAUT TROUVE EN CHEMIN
+=======================================================================
+
+  L'ecran retirait de la liste TOUS les reglages d'un module eteint.
+  Le commentaire du code disait : « seul l'interrupteur general, range
+  dans Modules, reste visible ». Sauf que « payments.enabled »
+  appartient au groupe « paiement », pas au groupe « modules ».
+
+  Il disparaissait donc avec les reglages qu'il commande. Consequence :
+  UNE FOIS LE PAIEMENT ETEINT, ON NE POUVAIT PLUS LE RALLUMER depuis
+  l'application. Il fallait passer par la base de donnees.
+
+  Second effet du meme masquage : impossible de preparer une
+  configuration avant de l'allumer. Saisir les cles d'API SMS exigeait
+  d'activer les notifications d'abord — donc de les laisser partir a
+  moitie reglees.
+
+  Plus rien n'est masque. L'ecran signale desormais, reglage par
+  reglage, ce qui reste sans effet tant que son interrupteur est
+  eteint.
+
+
+=======================================================================
+  2. CE QUI CHANGE A L'USAGE
+=======================================================================
+
+  UN RAIL DE RUBRIQUES, au lieu des cartes en maconnerie
+    Les 38 reglages etaient repartis en 9 cartes disposees en colonnes :
+    l'ordre de lecture sautait d'une colonne a l'autre selon la hauteur
+    des cartes, et retrouver un reglage relevait de la chasse.
+    Une rubrique a la fois, choisie dans un rail a gauche. La derniere
+    rubrique consultee est retenue d'une visite a l'autre.
+
+  UNE RECHERCHE
+    Tapez « relance », « SMS », « sauvegarde » : les reglages
+    correspondants apparaissent, toutes rubriques confondues, et les
+    rubriques concernees sont reperees dans le rail.
+
+  LES DEPENDANCES SONT DITES
+    C'est le point le plus utile, et celui que vous avez vecu : le SMTP
+    fonctionne, les relances sont allumees, et rien ne part — parce que
+    le module de notifications est eteint.
+
+    Un reglage commande par un interrupteur eteint est desormais
+    grise, avec la phrase qui explique pourquoi. Il reste modifiable :
+    le masquer ferait croire qu'il n'existe pas.
+
+    Relations signalees :
+      notifications.enabled  commande  les 9 reglages de notifications
+      relances.enabled       commande  les 3 delais de relance
+      payments.enabled       commande  les 8 reglages de paiement
+      acces.code_enabled     commande  duree et envoi du code
+      recyclage.enabled      commande  les 3 reglages de recyclage
+      sauvegarde.auto        commande  heure et retention
+    Et, au travers des rubriques :
+      relances.enabled          exige   notifications.enabled
+      acces.code_email          exige   notifications.enabled
+      candidature.fees.enabled  exige   payments.enabled
+
+  UN COMPTEUR DE MODIFICATIONS
+    Chaque ligne modifiee est marquee, et la barre du bas annonce
+    « N modifications non enregistrees ». Quitter la page sans
+    enregistrer declenche un avertissement du navigateur.
+
+  LES NOMS TECHNIQUES SONT MASQUES
+    Les cles du type « notifications.email.enabled » encombraient
+    l'ecran. Un bouton « Noms techniques » les affiche quand vous en
+    avez besoin ; le choix est retenu.
+
+
+=======================================================================
+  3. DEPLOIEMENT
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+cd $SITE
+unzip -l correctif-parametres-20260911.zip
+unzip -o correctif-parametres-20260911.zip
+rm -f correctif-parametres-20260911.zip
+
+$ART view:clear && $ART view:cache
+
+find $SITE/app $SITE/resources -type f -exec chmod 644 {} \;
+
+  Pas de migration, pas de route:cache : rien d'autre a faire.
+
+
+=======================================================================
+  4. VERIFICATION
+=======================================================================
+
+  a) Parametres : le rail s'affiche a gauche, une rubrique a la fois.
+
+  b) Rubrique « Paiement » : l'interrupteur « Paiement en ligne » est
+     VISIBLE meme eteint — c'est le defaut corrige.
+
+  c) Rubrique « Relances » : les trois delais sont grises, avec la
+     mention expliquant que rien ne partira sans le module de
+     notifications.
+
+  d) Allumez « Module de notifications » : les reglages grises
+     reprennent immediatement leur aspect normal, sans recharger.
+
+  e) Modifiez un reglage : la ligne se marque, la barre du bas compte.
+     Tentez de quitter : le navigateur previent.
+
+  f) Cherchez « sms » : les reglages Togocom et Moov apparaissent.
+
+
+=======================================================================
+  5. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  202 tests, 473 assertions, tous verts.   (77 au depart)
+
+  EcranDesParametresTest (11 controles) verifie notamment :
+    - que CHAQUE reglage existant est present a l'ecran — une refonte
+      par rubriques peut en faire disparaitre un sans que personne ne
+      s'en apercoive : il resterait applique, mais introuvable ;
+    - que le module de paiement reste rallumable une fois eteint ;
+    - qu'on peut preparer les cles SMS sans allumer les notifications ;
+    - que decocher un interrupteur l'eteint vraiment.
+
+  Lancer :  php artisan test
+
+
+=======================================================================
+  6. RETOUR ARRIERE
+=======================================================================
+
+  Restaurer les 2 fichiers depuis le depot git, puis :
+$ART view:clear && $ART view:cache
+
+  Aucune donnee n'etant touchee, il n'y a rien d'autre a defaire.
+
+=======================================================================

@@ -1,0 +1,130 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Avant la presentation aux etudiants
+=======================================================================
+
+  Archive : correctif-presentation-20260914.zip   (51 Ko, 9 fichiers)
+  AUCUNE migration. UN reglage ajoute (commande en section 2).
+
+
+=======================================================================
+  1. CE QUE CE PAQUET CORRIGE
+=======================================================================
+
+  A. LE VERSO : LA DERNIERE PAGE, PLUS LA DEUXIEME
+     Le verso etait code en dur a la page 2. Une fiche de trois pages
+     aurait recu son remplissage au milieu, sur une page sans case.
+     C'est desormais la DERNIERE page, quelle que soit la longueur.
+     Verifie sur une vraie fiche de 3 pages : page 3 remplie, page 2
+     intacte, aucune page perdue.
+
+  B. LE VERSO : LA DATE ET LE NOM SOUS LEURS TRAITS
+     Le tableau des etudes, en haut, tombait juste. Mais sur la fiche que
+     les etudiants telechargent reellement, le texte d'engagement qui
+     precede la zone de signature est plus court que sur le gabarit qui
+     a servi au calage : tout le bloc du bas remonte d'environ 4,5 mm.
+
+     Le bloc du bas — « Kara, le », cachet « Lu et approuve »,
+     « Fiche verifiee par », date de verification, signature — est
+     remonte de 4,5 mm. Le tableau n'est pas touche.
+
+     /!\ HONNETEMENT : ce decalage a ete mesure sur votre capture d'ecran,
+         pas sur le fichier lui-meme. Precision attendue : ± 1 mm.
+         Il est donc REGLABLE sans redeployer :
+           Parametres > Fiche (verso) > « Decalage du bas de la fiche »
+             valeur plus NEGATIVE  -> le texte remonte
+             valeur plus POSITIVE  -> le texte descend
+             -4,5 convient a la fiche actuelle.
+         La valeur est bornee a ±30 mm : une faute de frappe ne peut pas
+         envoyer le texte hors de la page.
+
+  C. « UniversitÃ© » AU LIEU DE « Université »
+     Les fiches generees par le systeme de l'universite arrivent DEJA
+     nommees avec les accents abimes, avant meme d'etre telechargees.
+     L'application les repare desormais a l'affichage — ecrans,
+     telechargements, archives — y compris pour les fichiers deja
+     deposes. Un nom sain, accents compris, n'est jamais modifie.
+
+  D. MOBILE : LES NOMS DE FICHIERS DEBORDAIENT
+     Le code utilisait la classe « min-w-0 » sans qu'elle soit jamais
+     definie : c'est une classe Tailwind, Bootstrap 5 l'ignore. Une
+     colonne ne pouvait donc pas retrecir sous la longueur du nom : la
+     taille et le bouton de depot sortaient de l'ecran.
+     Le nom se tronque desormais avec des points de suspension (le nom
+     complet reste visible en maintenant le doigt dessus), la taille et
+     les boutons restent visibles, et les marges sont reduites sur
+     telephone.
+
+  E. RENVOI EN CORRECTION : PLUS DE 10 CARACTERES OBLIGATOIRES
+     La contrainte etait imposee a TROIS niveaux — serveur, champ HTML
+     et bouton — : les trois sont levees. Le message devient facultatif,
+     le detail se donnant deja piece par piece.
+     Sans message, l'etudiant n'est pas laisse sans indication : il
+     recoit « Certaines pieces sont a corriger : consultez le
+     commentaire indique sur chacune. »
+
+     Le REJET DEFINITIF garde son exigence : il engage l'etudiant, il doit
+     rester motive.
+
+
+=======================================================================
+  2. DEPLOIEMENT
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+
+cd $SITE
+unzip -l correctif-presentation-20260914.zip
+unzip -o correctif-presentation-20260914.zip
+rm -f correctif-presentation-20260914.zip
+
+  # Le reglage du decalage (firstOrCreate : ne touche a aucun reglage existant)
+$ART db:seed --class=SettingSeeder --force
+
+$ART view:clear && $ART view:cache
+$ART config:clear && $ART config:cache
+
+find $SITE/app $SITE/database $SITE/resources -type d -exec chmod 755 {} \;
+find $SITE/app $SITE/database $SITE/resources -type f -exec chmod 644 {} \;
+
+  Le dossier app/Models/Concerns/ est cree par l'extraction.
+  Sans le db:seed, le decalage de -4,5 mm s'applique quand meme ; il
+  n'apparait simplement pas dans les Parametres.
+
+
+=======================================================================
+  3. VERIFICATION AVANT LA PRESENTATION
+=======================================================================
+
+  a) LE VERSO — le point a controler en priorite
+     Valider un nouveau depot test, telecharger la fiche tamponnee.
+     « 14/09/2026 » doit etre SUR le trait de « Kara, le » ;
+     le nom du verificateur SUR le trait de « Fiche verifiee par » ;
+     la date SUR le trait de « le ».
+     Si le texte est encore un peu haut ou bas : Parametres > Fiche
+     (verso), ajuster par pas de 1 mm, revalider un depot test.
+
+  b) Sur telephone, espace etudiant : un nom de fichier long se termine
+     par « … », la taille et le bouton restent visibles a droite.
+
+  c) Les noms de fichiers affichent « Université », plus « UniversitÃ© ».
+
+  d) Renvoyer un dossier pour correction sans rien ecrire : ca passe.
+
+
+=======================================================================
+  4. VERIFICATION AUTOMATIQUE
+=======================================================================
+
+  236 tests, 545 assertions, tous verts.
+
+  RetoursPresentationTest (17 controles) : verso sur la derniere page
+  pour des fiches de 1 a 4 pages, decalage par defaut, reglable, borne
+  et robuste a une valeur illisible ; reparation des noms (abime,
+  sain, deja en base, idempotente) ; renvoi sans message, message court,
+  indication de repli, rejet definitif toujours motive ; classe
+  mobile definie.
+
+=======================================================================

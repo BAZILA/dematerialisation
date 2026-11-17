@@ -1,0 +1,277 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Mettre le VPS a jour par Git (code + migrations)
+  17 novembre 2026
+=======================================================================
+
+  LE PRINCIPE
+    Votre ordinateur  --push-->  GitHub  --pull-->  le VPS
+
+    Une migration n'est qu'un fichier du depot. Elle arrive sur le
+    serveur avec le reste du code par « git pull », puis
+    « artisan migrate » l'execute. Laravel retient celles qui sont deja
+    passees : seules les nouvelles tournent, une seule fois.
+
+    Plus de zip a extraire. Le serveur ne recoit que ce qui a ete
+    commite ET pousse.
+
+  PARTIES
+    A. Une seule fois : donner au VPS le droit de lire le depot
+    B. A chaque mise a jour : la routine
+    C. Propre a CETTE mise a jour (revue de securite + logo)
+    D. Retour arriere
+
+
+=======================================================================
+  A. UNE SEULE FOIS — l'acces du VPS au depot
+=======================================================================
+
+  Le depot est repasse en PRIVE (c'est bien). Le VPS ne peut donc plus
+  le lire sans s'identifier. On lui donne une « clef de deploiement » :
+  une clef SSH propre a ce serveur, en LECTURE SEULE, valable pour ce
+  seul depot. Rien de personnel n'est pose sur le serveur — ni votre mot
+  de passe GitHub, ni un jeton qui ouvrirait vos autres depots.
+
+  1. Sur le VPS, fabriquer la clef
+
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/demat_deploy -N "" -C "vps-demat-lecture-seule"
+cat ~/.ssh/demat_deploy.pub
+
+  2. Sur GitHub : depot dematerialisation > Settings > Deploy keys >
+     Add deploy key. Collez la ligne affichee (elle commence par
+     « ssh-ed25519 »). Titre : « VPS ». NE COCHEZ PAS « Allow write
+     access ».
+
+     C'est la clef PUBLIQUE : elle peut etre montree. La clef privee
+     (~/.ssh/demat_deploy, sans .pub) ne quitte jamais le serveur.
+
+  3. Sur le VPS, dire a Git d'utiliser cette clef pour ce depot
+
+cat >> ~/.ssh/config <<'FIN'
+
+Host github-demat
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/demat_deploy
+    IdentitiesOnly yes
+FIN
+chmod 600 ~/.ssh/config
+
+cd /home/alpha/apps/demat
+git remote set-url origin git@github-demat:BAZILA/dematerialisation.git
+
+  4. Verifier
+
+ssh -T git@github-demat
+     # Reponse attendue : « Hi BAZILA/dematerialisation! You've
+     # successfully authenticated, but GitHub does not provide shell
+     # access. » A la premiere connexion, repondez « yes » a la question
+     # sur l'empreinte de github.com.
+
+git fetch origin && echo "LECTURE DU DEPOT : OK"
+
+     Si la connexion reste sans reponse (port 22 ferme en sortie),
+     remplacez dans ~/.ssh/config :
+         HostName ssh.github.com
+         Port 443
+
+  5. Les droits des fichiers ne sont pas des modifications
+
+     La migration vers le VPS a pose des droits 644/755 sur tous les
+     fichiers. Sans ce reglage, Git peut les prendre pour des
+     changements locaux et refuser le « pull ».
+
+cd /home/alpha/apps/demat
+git config core.fileMode false
+git status --short
+     # Doit ne rien afficher (le .env est ignore par Git, c'est normal).
+     # S'il liste des fichiers « M » : ARRETEZ et envoyez-moi la liste —
+     # quelque chose a ete modifie directement sur le serveur.
+
+
+=======================================================================
+  B. A CHAQUE MISE A JOUR — la routine
+=======================================================================
+
+  ── Sur votre ordinateur ──────────────────────────────────────────
+
+  1. Les tests doivent passer
+
+php artisan test
+
+  2. Commit, puis push (c'est vous qui commitez)
+
+git add -A
+git status --short          # relire : ni .env, ni dump, ni fichier de donnees
+git commit
+git push origin phase-1-socle
+
+  ── Sur le VPS ────────────────────────────────────────────────────
+
+  3. Les variables — a redefinir a chaque session SSH
+
+APP=/home/alpha/apps/demat
+WEB=/home/alpha/dematerialisation.univkara.tg
+PHP=/usr/bin/php
+ART="$PHP $APP/artisan"
+export PATH="$HOME/bin:$PATH"
+cd $APP && echo "APP=$APP" && git log --oneline -1
+
+  4. Sauvegarde — avant toute migration
+
+$ART uk:sauvegarder && ls -lht $APP/storage/app/sauvegardes | head -3
+     # « Base : incluse » doit apparaitre.
+
+  5. Voir ce qui va arriver, SANS rien appliquer
+
+git fetch origin
+git log --oneline HEAD..origin/phase-1-socle          # les commits a recevoir
+git diff --stat HEAD origin/phase-1-socle | tail -5    # les fichiers touches
+git diff --name-only HEAD origin/phase-1-socle -- database/migrations public
+     # Les migrations nouvelles s'affichent ici. Si un fichier de public/
+     # apparait, voir l'etape 9.
+
+  6. Page de maintenance, puis reception du code
+
+$ART down
+git pull --ff-only origin phase-1-socle
+composer install --no-dev --optimize-autoloader --no-interaction
+
+     « --ff-only » : Git refuse plutot que de fusionner si le serveur a
+     diverge. S'il refuse, relancez « $ART up » et envoyez-moi le message.
+
+  7. Les migrations
+
+$ART migrate:status | grep -i pending      # celles qui vont tourner
+$ART migrate --pretend                     # le SQL, sans l'executer
+$ART migrate --force                       # pour de vrai
+
+  8. Caches, puis reouverture
+
+$ART optimize:clear && $ART config:cache && $ART route:cache && $ART view:cache
+$ART up
+
+  9. SEULEMENT si l'etape 5 a liste un fichier de public/
+
+     La racine web est une COPIE de public/ (l'application vit hors du
+     web). Il faut la recopier, sans ecraser le pont index.php ni les
+     limites PHP :
+
+rsync -a --exclude index.php --exclude .user.ini --exclude .htaccess $APP/public/ $WEB/
+
+ 10. Controle
+
+git log --oneline -1
+for u in / /login /.env; do printf "%-8s %s\n" "$u" "$(curl -s -o /dev/null -w '%{http_code}' https://dematerialisation.univkara.tg$u)"; done
+     # Attendu : 302, 200, 404.
+tail -5 $APP/storage/logs/laravel.log 2>/dev/null
+
+
+=======================================================================
+  C. PROPRE A CETTE MISE A JOUR — revue de securite et logo
+=======================================================================
+
+  Ce qu'elle apporte au serveur
+    1 migration : 2026_11_16_090000_changement_de_mot_de_passe_impose
+                  (ajoute une colonne a « users », n'efface rien, les
+                  comptes existants ne sont pas touches)
+    2 fichiers de configuration nouveaux (proxys, exports Excel)
+    aucun fichier de public/ : l'etape 9 ne s'applique pas
+
+  ── AVANT le « git pull » : deux reglages du .env ─────────────────
+
+  a) Les proxys de confiance. Le VPS est derriere Cloudflare :
+
+grep -q '^TRUSTED_PROXIES=' $APP/.env || echo 'TRUSTED_PROXIES=cloudflare' >> $APP/.env
+grep '^TRUSTED_PROXIES=' $APP/.env
+     # Doit afficher : TRUSTED_PROXIES=cloudflare
+
+     Sans cette ligne l'application garde l'ancien comportement (elle
+     croit l'adresse IP declaree par n'importe qui). Rien ne casse,
+     mais la protection n'est pas active.
+
+  b) L'adresse du site. A partir de cette version, l'application
+     REFUSE toute requete adressee a un autre nom de domaine que celui
+     d'APP_URL. Si APP_URL est faux, le site entier repondra en
+     erreur 400.
+
+grep '^APP_URL=' $APP/.env
+     # Doit afficher exactement : APP_URL=https://dematerialisation.univkara.tg
+
+  ── Puis la routine B, etapes 3 a 10 ──────────────────────────────
+
+  ── APRES : trois controles propres a cette version ───────────────
+
+  c) Le site repond toujours (c'est le test de l'etape b)
+
+curl -s -o /dev/null -w "%{http_code}\n" https://dematerialisation.univkara.tg/login
+     # 200. Si 400 : APP_URL est faux — corrigez-le, puis
+     # $ART config:clear && $ART config:cache
+
+  d) Plus rien n'est garde en cache
+
+curl -sI https://dematerialisation.univkara.tg/login | grep -i '^cache-control'
+     # Doit contenir : no-store
+
+  e) L'adresse IP vue est bien la votre, pas celle de Cloudflare.
+     Faites un essai de connexion volontairement faux dans le
+     navigateur, puis :
+
+$ART tinker --execute="echo \App\Models\AuditLog::where('action','auth.echec')->latest('id')->value('ip_address'), PHP_EOL;"
+     # Doit afficher l'adresse publique de votre connexion Internet,
+     # pas une adresse en 172.6x / 104.x (celles de Cloudflare).
+
+  ── Ce qui change pour les utilisateurs ───────────────────────────
+
+  - Un lien « Mot de passe » apparait dans le menu : chacun peut
+    desormais changer le sien.
+  - Un mot de passe pose ou remis par l'administration est PROVISOIRE :
+    a sa premiere connexion, le titulaire doit en choisir un nouveau
+    avant d'acceder a quoi que ce soit. Prevenez les agents.
+  - Nouveaux mots de passe du personnel : 10 caracteres au moins, avec
+    majuscules, minuscules et chiffres. Etudiants : 8, lettres et
+    chiffres. Les mots de passe existants restent valables.
+  - Huit echecs de connexion sur un meme compte le ferment 15 minutes.
+  - Un gestionnaire de comptes ne peut plus creer ni modifier un
+    super-administrateur, ni s'attribuer ce role.
+  - Le logo du menu n'a plus de fond blanc.
+
+  ── Ce qui n'a pas pu etre essaye avant la mise en ligne ──────────
+
+  Les 272 tests passent, mais ils tournent sans Cloudflare et sans le
+  controle du nom de domaine (inactif pendant les tests). Les controles
+  c, d et e ci-dessus sont donc les premiers essais reels de ces
+  points : faites-les tout de suite apres la mise a jour.
+
+
+=======================================================================
+  D. RETOUR ARRIERE
+=======================================================================
+
+  Notez le commit en place AVANT la mise a jour (etape B.3 l'affiche).
+
+  1. Revenir au code precedent
+
+$ART down
+$ART migrate:rollback --step=1 --force     # defait la derniere serie de migrations
+git checkout <commit-precedent>
+composer install --no-dev --optimize-autoloader --no-interaction
+$ART optimize:clear && $ART config:cache && $ART route:cache && $ART view:cache
+$ART up
+
+     L'ordre compte : la migration se defait AVANT de changer de code,
+     car le fichier qui sait la defaire n'existe plus dans l'ancien.
+
+     Pour repartir ensuite sur la branche :  git checkout phase-1-socle
+
+  2. Si la base a ete abimee : restaurer la sauvegarde de l'etape B.4
+     (Parametres > Sauvegardes, ou l'archive de
+     storage/app/sauvegardes : base/alpha_demat.sql).
+
+  /!\ Toutes les migrations ne se defont pas. Celle qui a retire les
+      dossiers de test, par exemple, est irreversible. Avant une
+      migration qui SUPPRIME des donnees, la sauvegarde est le seul
+      retour arriere.
+
+=======================================================================

@@ -69,14 +69,20 @@ class RequestTypeSeeder extends Seeder
             ['category'=>'duplicat','type_etudiant'=>'ancien','label'=>"Reçu de paiement des frais de duplicata",'is_required'=>true,'has_stamp'=>false,'order'=>4],
         ];
 
+        /* Chaque piece appartient a un niveau. Les niveaux partagent les
+           procedures, jamais les pieces : ce jeu de depart s'installe en
+           licence, qui porte l'essentiel des effectifs. Les autres niveaux
+           se montent depuis l'interface, ou par recopie. */
         foreach ($types as $t) {
             RequestType::firstOrCreate(
                 [
                     'label'         => $t['label'],
                     'category'      => $t['category'],
+                    'grade'         => 'licence',
                     'type_etudiant' => $t['type_etudiant'],
                 ],
                 array_merge($t, [
+                    'grade'       => 'licence',
                     'is_active'   => true,
                     'description' => $t['description'] ?? null,
                 ])

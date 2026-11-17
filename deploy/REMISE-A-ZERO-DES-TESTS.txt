@@ -1,0 +1,248 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Remettre la production dans l'etat d'avant les tests
+=======================================================================
+
+  Archive : remise-a-zero-des-tests.zip   (4 fichiers)
+
+    remise-a-zero-APERCU.sql          montre, n'efface RIEN
+    remise-a-zero-des-tests.sql       efface les donnees de test
+    nettoyer-fichiers-orphelins.php   efface les fichiers devenus orphelins
+    nettoyer-fichiers-orphelins.lib.php   (sa logique, a deposer avec lui)
+
+
+=======================================================================
+  0. AVANT TOUT : NE PAS RESTAURER LE DUMP DU 12 SEPTEMBRE
+=======================================================================
+
+  Le fichier gysj7444_dematerialisation.sql date du 12 septembre, 3 h 27.
+  Il ne contient AUCUN des tests faits depuis : le depot d'Akua TETTEH
+  et ses 11 pieces datent du 14.
+
+  Le recharger ne vous ramenerait pas « avant les tests » : il effacerait
+  tout ce qui a ete fait depuis le 12, configuration comprise, sans
+  retirer les tests qu'il contient deja (5 comptes de test, 1 candidature,
+  4 codes d'acces).
+
+  Ce qu'il faut, c'est RETIRER LES TESTS de la base actuelle, en gardant
+  la configuration. C'est ce que font ces scripts.
+
+
+=======================================================================
+  1. CE QUE LA PROCEDURE FAIT
+=======================================================================
+
+  EFFACE
+    - les comptes etudiants et candidats crees avant la limite @avant,
+      et avec eux : fiche etudiant, dossiers, pieces deposees, etudes
+      anterieures, derogations, codes d'acces, roles, sessions ;
+    - les candidatures deposees avant la limite, voeux et pieces compris ;
+    - les paiements rattaches a ces dossiers et candidatures ;
+    - les fichiers correspondants sur le disque.
+
+  CONSERVE
+    - le personnel : les super-administrateurs « admin » et « webmaster »,
+      et tout agent ;
+    - toute la configuration : parametres, pieces attendues par niveau
+      (101), procedures, periodes, annees, facultes, departements,
+      domaines, parcours, roles et permissions ;
+    - le referentiel : les 1165 anciens etudiants et les bacheliers ;
+    - le journal d'audit (voir section 6) ;
+    - le cachet, les signatures, les sauvegardes.
+
+  LE PIEGE CORRIGE
+    Creer un compte marque la fiche du referentiel « inscrite ». Supprimer
+    le compte NE retire PAS cette marque : la vraie personne ne pourrait
+    plus jamais s'inscrire. Dans votre base, 3 anciens etudiants REELS
+    sont concernes, car des comptes de test ont ete crees a leur nom :
+
+        carte 9089    ADJO
+        carte 88189   ABA
+        carte 26627   ABALO
+
+    Le script leur rend la possibilite de s'inscrire.
+
+
+=======================================================================
+  2. LA LIMITE DANS LE TEMPS — A REGLER AVANT TOUT
+=======================================================================
+
+  Le script ne supprime que ce qui a ete cree AVANT un moment donne.
+
+  /!\ POURQUOI C'EST CRUCIAL AUJOURD'HUI
+      Si de vrais etudiants creent leur compte pendant ou apres la
+      presentation, un script qui effacerait TOUS les comptes etudiants
+      les effacerait aussi. La limite les protege.
+
+  Quelle heure mettre ?
+    - Vous lancez le script AVANT que quiconque de reel ne s'inscrive :
+      mettez l'heure actuelle.
+    - Des etudiants reels se sont DEJA inscrits : mettez l'heure a laquelle
+      l'usage reel a commence (le debut de la presentation, par exemple).
+    Heure du SERVEUR, en UTC — le Togo est en UTC, c'est donc votre heure.
+
+  Le reglage se pose UNE fois, dans les deux fichiers a la fois
+  (commande en section 4, etape c).
+
+
+=======================================================================
+  3. SAUVEGARDE — OBLIGATOIRE
+=======================================================================
+
+  Ces scripts effacent. Sauvegardez la base ET les fichiers deposes
+  JUSTE AVANT, pas la veille.
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+DB_NAME=$(grep '^DB_DATABASE=' $SITE/.env | cut -d= -f2 | tr -d '"')
+DB_USER=$(grep '^DB_USERNAME=' $SITE/.env | cut -d= -f2 | tr -d '"')
+STAMP=$(date +%Y%m%d-%H%M)
+
+cd /home/gysj7444
+
+  # La base (le mot de passe est demande : il ne reste pas dans l'historique)
+mysqldump -u "$DB_USER" -p --single-transaction --routines "$DB_NAME" > avant-remise-a-zero-$STAMP.sql
+
+  # Les fichiers deposes
+tar czf avant-remise-a-zero-fichiers-$STAMP.tgz -C $SITE/storage/app/private requests candidatures
+
+  # Controle : les deux doivent exister et ne pas etre vides
+ls -lh avant-remise-a-zero-*$STAMP*
+grep -c "INSERT INTO" avant-remise-a-zero-$STAMP.sql     # doit etre superieur a 0
+
+
+=======================================================================
+  4. LA PROCEDURE — dans cet ordre, sans en sauter
+=======================================================================
+
+  a) Deposer remise-a-zero-des-tests.zip dans /home/gysj7444/ et extraire
+cd /home/gysj7444
+unzip -o remise-a-zero-des-tests.zip -d remise-a-zero
+cd remise-a-zero
+
+  b) Placer les deux scripts PHP a la RACINE du site (ils en ont besoin)
+cp nettoyer-fichiers-orphelins.php nettoyer-fichiers-orphelins.lib.php $SITE/
+
+  c) Poser la limite — UNE seule fois, dans les deux fichiers SQL
+LIMITE='2026-09-14 08:00:00'          # <-- a adapter, voir section 2
+sed -i "s/^SET @avant = .*/SET @avant = '$LIMITE';/" remise-a-zero-APERCU.sql remise-a-zero-des-tests.sql
+grep "^SET @avant" remise-a-zero-APERCU.sql remise-a-zero-des-tests.sql
+  # Les deux lignes affichees doivent etre IDENTIQUES.
+
+  d) APERCU — n'efface rien
+mysql -u "$DB_USER" -p -t "$DB_NAME" < remise-a-zero-APERCU.sql
+
+     Relisez attentivement :
+       « COMPTES QUI SERONT SUPPRIMES »  -> uniquement des comptes de test.
+       « COMPTES CONSERVES »             -> admin, webmaster, et tout
+                                            compte reel.
+     /!\ SI UN COMPTE REEL FIGURE DANS LES SUPPRIMES : ARRETEZ.
+         Avancez LIMITE (etape c) et relancez l'apercu.
+
+  e) SUPPRESSION EN BASE — en une seule transaction, tout ou rien
+mysql -u "$DB_USER" -p -t "$DB_NAME" < remise-a-zero-des-tests.sql
+
+     Le tableau final doit afficher :
+       fiches_inscrites_orphelines = 0
+       roles_orphelins             = 0
+       referentiel_anciens         = 1165
+       pieces_configurees          = 101  (ou votre nombre actuel)
+
+  f) FICHIERS — a blanc d'abord
+cd $SITE
+$PHP nettoyer-fichiers-orphelins.php
+
+     Il liste les fichiers qu'il effacerait, sans rien effacer. Seuls des
+     fichiers de dossiers de test doivent y figurer.
+
+  g) FICHIERS — pour de vrai
+$PHP nettoyer-fichiers-orphelins.php --supprimer
+
+  h) Retirer les outils — ils n'ont pas a rester sur le serveur
+rm -f $SITE/nettoyer-fichiers-orphelins.php $SITE/nettoyer-fichiers-orphelins.lib.php
+$ART optimize:clear && $ART config:cache && $ART route:cache && $ART view:cache
+
+
+=======================================================================
+  5. VERIFICATION
+=======================================================================
+
+$ART tinker --execute="echo 'etudiants : ', \App\Models\User::whereIn('role',['etudiant','candidat'])->count(), PHP_EOL, 'personnel : ', \App\Models\User::whereNotIn('role',['etudiant','candidat'])->count(), PHP_EOL, 'dossiers  : ', \App\Models\StudentRequest::count(), PHP_EOL, 'pieces    : ', \App\Models\RequestType::count(), PHP_EOL, 'anciens   : ', \App\Models\AncienEtudiant::count(), PHP_EOL, 'inscrits sans compte : ', \App\Models\AncienEtudiant::where('is_registered',1)->whereDoesntHave('student')->count(), PHP_EOL;"
+
+  Puis dans le navigateur :
+    - connexion avec votre compte super-administrateur : OK ;
+    - Types de documents : vos pieces par niveau sont toujours la ;
+    - Reference > Identites : les 1165 fiches, aucune « Compte cree »
+      pour les comptes de test.
+
+
+=======================================================================
+  6. LE JOURNAL D'AUDIT
+=======================================================================
+
+  Il est CONSERVE par defaut. Un journal d'audit sert a ne rien perdre,
+  et le votre contient aussi les reglages faits par le personnel.
+
+  Pour repartir d'un journal vierge, tests compris : dans
+  remise-a-zero-des-tests.sql, section 8, decommentez les deux lignes
+  « DELETE FROM audit_logs » et « DELETE FROM notifications_envoyees »
+  AVANT l'etape e.
+
+
+=======================================================================
+  7. RETOUR ARRIERE
+=======================================================================
+
+  Base :
+mysql -u "$DB_USER" -p "$DB_NAME" < /home/gysj7444/avant-remise-a-zero-AAAAMMJJ-HHMM.sql
+
+  Fichiers :
+tar xzf /home/gysj7444/avant-remise-a-zero-fichiers-AAAAMMJJ-HHMM.tgz -C $SITE/storage/app/private
+
+  Remplacez AAAAMMJJ-HHMM par l'horodatage de votre sauvegarde (section 3).
+
+  Si l'etape e echoue en cours de route, rien n'est applique : la
+  transaction est annulee d'elle-meme a la deconnexion.
+
+
+=======================================================================
+  8. COMMENT CES SCRIPTS ONT ETE EPROUVES
+=======================================================================
+
+  Rien de ceci n'a ete lance sur votre production. Tout a ete verifie sur
+  une COPIE de votre dump, dans une base MariaDB isolee, sur un autre port.
+
+  A la copie du dump ont ete ajoutes :
+    - un dossier de test avec pieces, etudes, derogation et paiements,
+      pour reproduire l'etat actuel de la production ;
+    - un VRAI etudiant, inscrit APRES la limite, avec son dossier et son
+      paiement — pour prouver que la limite le protege.
+
+  Resultat, 27 controles :
+    efface  : dossiers, pieces, etudes, derogations, paiements de test,
+              candidatures et leurs pieces, codes d'acces, comptes et
+              roles de test ;
+    garde   : le vrai etudiant, son dossier, SON PAIEMENT, son role, sa
+              fiche du referentiel toujours inscrite ; les 2 super-
+              administrateurs ; 1165 anciens, 101 pieces, 38 parametres,
+              82 entrees du journal ;
+    libere  : les cartes 9089, 88189 et 26627.
+  Relance une seconde fois : aucune erreur, rien de plus efface.
+
+  Un defaut a ete trouve et ecarte en chemin : le premier essai laissait
+  2 paiements. En cause, les donnees d'essai elles-memes — le shell avait
+  mange les antislashs de « App\Models\StudentRequest ». Refait depuis un
+  fichier, avec les vraies valeurs : les paiements de test partent, celui
+  du vrai etudiant reste.
+
+  Nettoyage des fichiers, sur un stockage temporaire :
+    a blanc    : 3 orphelins listes, rien d'efface ;
+    pour de vrai : 3 orphelins effaces, dossiers vides retires ; le
+               fichier du vrai etudiant, sa version tamponnee, la
+               signature et la sauvegarde intacts ;
+    base coupee : ARRET immediat, aucun fichier touche — sans ce garde,
+               une base injoignable ferait prendre TOUS les fichiers pour
+               des orphelins.
+
+=======================================================================

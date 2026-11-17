@@ -1,0 +1,215 @@
+=======================================================================
+  DEMATERIALISATION — UNIVERSITE DE KARA
+  Retirer les dossiers deposes pendant les tests des etudiants
+  3 novembre 2026
+=======================================================================
+
+  Archive : retrait-dossiers-de-test-20261103.zip   (1 fichier)
+      database/migrations/2026_11_03_090000_retirer_les_dossiers_de_test.php
+
+
+=======================================================================
+  1. CE QUE FAIT CETTE MIGRATION
+=======================================================================
+
+  EFFACE
+    - les dossiers (student_requests), tous statuts confondus ;
+    - en cascade : les pieces deposees, les etudes anterieures saisies,
+      les derogations ;
+    - les paiements declares sur ces dossiers ;
+    - les notifications envoyees au sujet de ces dossiers ;
+    - les FICHIERS de ces pieces sur le disque, originaux ET versions
+      tamponnees.
+
+  NE TOUCHE PAS
+    - les COMPTES : etudiants, agents, administrateurs. Personne n'a a
+      se reinscrire, les codes d'acces restent valables ;
+    - les fiches du referentiel et leur marque « inscrit » — le compte
+      existe toujours, la marque reste donc juste ;
+    - la CONFIGURATION : pieces attendues par grade, procedures,
+      periodes, annees, facultes, parcours, parametres, roles ;
+    - le cachet, les signatures, les gabarits, les sauvegardes ;
+    - le journal d'audit ;
+    - les candidatures publiques (voir le reglage en section 3).
+
+  RESULTAT
+    A sa prochaine connexion, chaque etudiant retrouve l'ecran de
+    depart et le bouton « Creer mon dossier ».
+
+
+=======================================================================
+  2. COMMENT LES FICHIERS SONT CHOISIS
+=======================================================================
+
+  La migration releve le chemin de chaque piece AVANT de supprimer la
+  ligne, puis efface ces fichiers un par un. Elle ne balaye PAS le
+  stockage : un fichier qu'aucun dossier supprime ne reference pas ne
+  peut pas etre touche, meme par accident.
+
+  C'est la difference avec le script de nettoyage des orphelins utilise
+  en septembre : celui-la partait du disque et demandait a la base ce
+  qu'il fallait garder. Si la base avait ete injoignable, il aurait pris
+  tout le stockage pour des orphelins (d'ou son garde-fou). Ici le
+  raisonnement est inverse, et le risque n'existe pas.
+
+
+=======================================================================
+  3. LES DEUX REGLAGES — a relire AVANT de deployer
+=======================================================================
+
+  Ils sont en haut du fichier de migration, bien commentes.
+
+  a) LIMITE   (ligne « private const LIMITE »)
+
+       null                    tous les dossiers. C'est le reglage
+                               livre, et le bon cas si aucun dossier
+                               REEL n'a encore ete depose.
+
+       '2026-11-03 08:00:00'   seulement les dossiers crees avant ce
+                               moment. A utiliser si de vrais dossiers
+                               sont deja arrives : ceux-la seront
+                               epargnes. Heure du SERVEUR, en UTC — le
+                               Togo est en UTC, c'est donc votre heure.
+
+  b) AVEC_LES_CANDIDATURES   (ligne « private const AVEC_LES_CANDIDATURES »)
+
+       false                   livre ainsi. Les candidatures publiques
+                               (admissions deposees sans compte) ne sont
+                               pas touchees.
+
+       true                    les retire aussi, avec leurs voeux, leurs
+                               pieces et leurs fichiers.
+
+  /!\ Modifiez le fichier AVANT de l'envoyer sur le serveur, ou
+      modifiez-le sur le serveur AVANT de lancer migrate. Une fois la
+      migration passee, elle ne repassera plus.
+
+
+=======================================================================
+  4. COMBIEN DE DOSSIERS SONT CONCERNES — a verifier d'abord
+=======================================================================
+
+SITE=/home/gysj7444/dematerialisation.univ-kara.org
+PHP="/opt/alt/php83/usr/bin/php -c $SITE/php.ini"
+ART="$PHP $SITE/artisan"
+DB_NAME=$(grep '^DB_DATABASE=' $SITE/.env | cut -d= -f2 | tr -d '"')
+DB_USER=$(grep '^DB_USERNAME=' $SITE/.env | cut -d= -f2 | tr -d '"')
+STAMP=$(date +%Y%m%d-%H%M)
+echo "SITE=$SITE DB=$DB_NAME USER=$DB_USER STAMP=$STAMP"
+
+  # Aucune des quatre valeurs ne doit etre vide.
+
+mysql -u "$DB_USER" -p -t "$DB_NAME" -e "
+SELECT sr.id, sr.category, sr.status, sr.created_at,
+       s.nom, s.prenom, u.numero_identifiant,
+       (SELECT COUNT(*) FROM request_files rf WHERE rf.student_request_id = sr.id) AS pieces
+FROM student_requests sr
+JOIN students s ON s.id = sr.student_id
+JOIN users u    ON u.id = s.user_id
+ORDER BY sr.created_at;"
+
+  Relisez la liste. Si un dossier REEL y figure, reglez LIMITE
+  (section 3a) pour l'epargner.
+
+
+=======================================================================
+  5. SAUVEGARDE — OBLIGATOIRE, juste avant
+=======================================================================
+
+cd /home/gysj7444
+mysqldump -u "$DB_USER" -p --single-transaction --routines "$DB_NAME" > avant-retrait-$STAMP.sql
+tar czf avant-retrait-fichiers-$STAMP.tgz -C $SITE/storage/app/private requests candidatures
+
+  # Controle : les deux doivent exister et ne pas etre vides
+ls -lh avant-retrait-*$STAMP*
+grep -c "INSERT INTO" avant-retrait-$STAMP.sql          # > 0
+tar tzf avant-retrait-fichiers-$STAMP.tgz > /dev/null && echo "archive lisible"
+
+
+=======================================================================
+  6. DEPLOIEMENT
+=======================================================================
+
+  a) Deposer retrait-dossiers-de-test-20261103.zip a la RACINE du site
+     avec le gestionnaire de fichiers de cPanel, puis l'extraire sur
+     place (clic droit > Extract). Le fichier va se ranger tout seul
+     dans database/migrations/.
+
+  b) Verifier qu'il est bien arrive
+ls -l $SITE/database/migrations/2026_11_03_090000_retirer_les_dossiers_de_test.php
+
+  c) Relire les reglages de la section 3 tels qu'ils sont SUR LE SERVEUR
+grep -n "const LIMITE\|const AVEC_LES_CANDIDATURES" $SITE/database/migrations/2026_11_03_090000_retirer_les_dossiers_de_test.php
+
+  d) Voir ce que migrate va faire, SANS rien appliquer
+$ART migrate --pretend
+
+  e) Lancer
+$ART migrate --force
+
+     La migration affiche son compte rendu :
+       dossiers supprimes, etudiants concernes, pieces, paiements,
+       fichiers effaces.
+     « etudiants concernes » compte les comptes dont le dossier part :
+     ces comptes sont CONSERVES.
+
+  f) Reconstruire les caches
+$ART optimize:clear && $ART config:cache && $ART route:cache && $ART view:cache
+
+  g) Retirer le zip de la racine du site
+rm -f $SITE/retrait-dossiers-de-test-20261103.zip
+
+
+=======================================================================
+  7. VERIFICATION
+=======================================================================
+
+$ART tinker --execute="echo 'dossiers  : ', \App\Models\StudentRequest::count(), PHP_EOL, 'pieces deposees : ', \App\Models\RequestFile::count(), PHP_EOL, 'comptes etudiants : ', \App\Models\User::whereIn('role',['etudiant','candidat'])->count(), PHP_EOL, 'personnel : ', \App\Models\User::whereNotIn('role',['etudiant','candidat'])->count(), PHP_EOL, 'pieces configurees : ', \App\Models\RequestType::count(), PHP_EOL, 'anciens : ', \App\Models\AncienEtudiant::count(), PHP_EOL;"
+
+  Attendu : dossiers et pieces deposees a 0 (ou le nombre des dossiers
+  reels epargnes), les comptes et la configuration inchanges.
+
+  Puis dans le navigateur, avec un compte etudiant de test :
+    - l'ecran de depot affiche « Commencer mon depot de dossier »
+      et le bouton « Creer mon dossier » ;
+    - le bouton n'apparait que si la periode de depot est OUVERTE.
+      Sinon vous verrez « Depots actuellement fermes » : c'est un
+      reglage de periode, pas un effet de cette migration.
+
+
+=======================================================================
+  8. RETOUR ARRIERE
+=======================================================================
+
+  La migration ne sait pas se defaire : un dossier supprime ne se
+  reconstruit pas. Le retour arriere passe par la sauvegarde.
+
+mysql -u "$DB_USER" -p "$DB_NAME" < /home/gysj7444/avant-retrait-AAAAMMJJ-HHMM.sql
+tar xzf /home/gysj7444/avant-retrait-fichiers-AAAAMMJJ-HHMM.tgz -C $SITE/storage/app/private
+
+  Remplacez AAAAMMJJ-HHMM par l'horodatage de la section 5.
+
+
+=======================================================================
+  9. CE QUI A ETE VERIFIE
+=======================================================================
+
+  5 tests ajoutes (tests/Feature/RetraitDesDossiersDeTestTest.php),
+  suite complete : 243 tests, 573 assertions, tout passe.
+
+    - le dossier part avec ses pieces, ses etudes, ses derogations, son
+      paiement polymorphe et ses deux fichiers (original + tamponne) ;
+    - le compte de l'etudiant, sa fiche et son role survivent, et son
+      ecran retombe sur « Commencer mon depot de dossier » ;
+    - temoins hors perimetre intacts : le super-administrateur, les
+      pieces configurees, le parcours, l'annee, les parametres, et deux
+      fichiers poses hors des dossiers de pieces (une signature, une
+      sauvegarde) ;
+    - les candidatures publiques et leurs voeux restent, reglage par
+      defaut ;
+    - relancee une seconde fois : aucune erreur, rien de plus efface.
+
+  Rien n'a ete lance sur la production. Les tests tournent sur une base
+  SQLite en memoire et un stockage simule.
+
+=======================================================================
